@@ -3,16 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from ..models import CheckStatus, Recorder
+from ..health import HEALTH_SEVERITY, HealthStatus, worst_status
+from ..models import Recorder
+from ..state_store import RecorderMetricsRow
 
 SortMode = Literal["name", "status"]
-
-SEVERITY: dict[CheckStatus, int] = {
-    CheckStatus.OFFLINE: 4,
-    CheckStatus.UNKNOWN: 2,
-    CheckStatus.ONLINE: 1,
-    CheckStatus.DISABLED: 0,
-}
 
 STATUS_LABELS: dict[str, str] = {
     "online": "Доступен",
@@ -20,6 +15,9 @@ STATUS_LABELS: dict[str, str] = {
     "unknown": "Не проверялся",
     "disabled": "Выключен",
     "checking": "Проверка…",
+    "ok": "Исправно",
+    "warn": "Деградация",
+    "error": "Неисправно",
 }
 
 
@@ -30,40 +28,58 @@ class ObjectGroup:
     aggregate_status: str
 
 
-def effective_status(recorder: Recorder) -> str:
+def effective_status(
+    recorder: Recorder,
+    metrics: RecorderMetricsRow | None = None,
+) -> str:
     if not recorder.enabled:
         return "disabled"
+    if metrics and metrics.last_polled_at:
+        return metrics.health_status
     if recorder.last_status is None:
         return "unknown"
-    return recorder.last_status.value
+    legacy = recorder.last_status.value
+    if legacy == "online":
+        return "ok"
+    if legacy == "offline":
+        return "error"
+    return legacy
 
 
-def aggregate_status(recorders: list[Recorder]) -> str:
+def aggregate_status(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow] | None = None,
+) -> str:
     if not recorders:
         return "unknown"
-    statuses = [effective_status(r) for r in recorders]
+    metrics_map = metrics_map or {}
+    statuses = [
+        effective_status(r, metrics_map.get(r.id)) for r in recorders
+    ]
     if all(s == "disabled" for s in statuses):
         return "disabled"
-    worst = "disabled"
-    worst_score = -1
-    for s in statuses:
-        if s == "disabled":
-            continue
-        score = SEVERITY.get(CheckStatus(s), 0)
-        if score > worst_score:
-            worst_score = score
-            worst = s
-    return worst if worst_score >= 0 else "unknown"
+    active = [s for s in statuses if s != "disabled"]
+    return worst_status(*active) if active else "unknown"
 
 
-def offline_count(recorders: list[Recorder]) -> int:
-    return sum(1 for r in recorders if effective_status(r) == "offline")
+def problem_count(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow] | None = None,
+) -> int:
+    metrics_map = metrics_map or {}
+    return sum(
+        1
+        for r in recorders
+        if effective_status(r, metrics_map.get(r.id))
+        in ("offline", "error", "warn")
+    )
 
 
 def group_by_object(
     recorders: list[Recorder],
     search: str = "",
     sort: SortMode = "status",
+    metrics_map: dict[str, RecorderMetricsRow] | None = None,
 ) -> list[ObjectGroup]:
     q = search.strip().lower()
     filtered = recorders
@@ -84,7 +100,7 @@ def group_by_object(
         ObjectGroup(
             object_name=name,
             recorders=recs,
-            aggregate_status=aggregate_status(recs),
+            aggregate_status=aggregate_status(recs, metrics_map),
         )
         for name, recs in groups_map.items()
     ]
@@ -103,5 +119,22 @@ def group_by_object(
 
 
 def _status_sort_key(status: str) -> int:
-    order = {"offline": 4, "checking": 3, "unknown": 2, "online": 1, "disabled": 0}
+    try:
+        return HEALTH_SEVERITY[HealthStatus(status)]
+    except ValueError:
+        pass
+    order = {
+        "error": 5,
+        "offline": 5,
+        "warn": 4,
+        "checking": 3,
+        "unknown": 2,
+        "ok": 1,
+        "online": 1,
+        "disabled": 0,
+    }
     return order.get(status, 0)
+
+
+def metrics_map_from_list(rows: list[RecorderMetricsRow]) -> dict[str, RecorderMetricsRow]:
+    return {r.recorder_id: r for r in rows}

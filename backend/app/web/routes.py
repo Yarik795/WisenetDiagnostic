@@ -12,9 +12,16 @@ from pydantic import ValidationError
 from ..config_store import ConfigStore
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
-from ..sunapi import check_recorder
-from ..ui.dependencies import get_store
-from ..ui.grouping import SortMode, effective_status, group_by_object
+from ..monitoring import poll_single_recorder, run_inventory_cycle, run_poll_cycle
+from ..state_store import StateStore
+from ..ui.dependencies import get_state_store, get_store
+from ..ui.grouping import (
+    SortMode,
+    effective_status,
+    group_by_object,
+    metrics_map_from_list,
+    problem_count,
+)
 from ..ui.helpers import display_recorder_name
 from .templates_env import templates
 from .validation import parse_recorder_form
@@ -36,6 +43,14 @@ def _object_names(store: ConfigStore) -> list[str]:
     return sorted({r.object_name for r in store.list_recorders()})
 
 
+def _metrics_map(state: StateStore):
+    return metrics_map_from_list(state.list_recorder_metrics())
+
+
+def _recorders_by_id(store: ConfigStore) -> dict[str, object]:
+    return {r.id: r for r in store.list_recorders()}
+
+
 @router.get("/", include_in_schema=False)
 def root() -> RedirectResponse:
     return RedirectResponse(url="/objects", status_code=302)
@@ -51,9 +66,11 @@ def objects_page(
     request: Request,
     sort: SortMode = "status",
     store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     recorders = store.list_recorders()
-    groups = group_by_object(recorders, "", sort)
+    metrics = _metrics_map(state)
+    groups = group_by_object(recorders, "", sort, metrics)
     toast = _toast_from_query(request)
     return templates.TemplateResponse(
         request,
@@ -62,6 +79,7 @@ def objects_page(
             "active_nav": "objects",
             "groups": groups,
             "recorders": recorders,
+            "metrics_map": metrics,
             "sort": sort,
             "toast": toast,
         },
@@ -74,13 +92,15 @@ def objects_groups_partial(
     search: str = "",
     sort: SortMode = "status",
     store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     recorders = store.list_recorders()
-    groups = group_by_object(recorders, search, sort)
+    metrics = _metrics_map(state)
+    groups = group_by_object(recorders, search, sort, metrics)
     return templates.TemplateResponse(
         request,
         "partials/object_groups.html",
-        {"groups": groups, "recorders": recorders},
+        {"groups": groups, "recorders": recorders, "metrics_map": metrics},
     )
 
 
@@ -88,6 +108,7 @@ def objects_groups_partial(
 def recorders_page(
     request: Request,
     store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     recorders = sorted(
         store.list_recorders(),
@@ -96,7 +117,12 @@ def recorders_page(
     return templates.TemplateResponse(
         request,
         "recorders.html",
-        {"active_nav": "recorders", "recorders": recorders, "toast": _toast_from_query(request)},
+        {
+            "active_nav": "recorders",
+            "recorders": recorders,
+            "metrics_map": _metrics_map(state),
+            "toast": _toast_from_query(request),
+        },
     )
 
 
@@ -292,9 +318,11 @@ def recorder_delete(
     request: Request,
     recorder_id: str,
     store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
 ) -> Response:
     if not store.delete_recorder(recorder_id):
         return HTMLResponse("Не найден", status_code=404)
+    state.delete_recorder_data(recorder_id)
     referer = request.headers.get("HX-Current-URL", "")
     if "/recorders" in referer and "/objects" not in referer:
         return _redirect("/recorders", "success", "Регистратор удалён")
@@ -306,6 +334,7 @@ async def recorder_check(
     request: Request,
     recorder_id: str,
     store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     start = time.perf_counter()
     referer = request.headers.get("HX-Current-URL", "")
@@ -344,21 +373,13 @@ async def recorder_check(
         },
     )
 
-    outcome = await check_recorder(recorder, credentials)
-    updated = store.update_recorder_status(
-        recorder_id,
-        outcome.status,
-        outcome.checked_at,
-        outcome.error,
-    )
+    await poll_single_recorder(store, state, recorder, include_inventory=True)
+    updated = store.get_recorder(recorder_id)
     if not updated:
-        check_logger.warning(
-            "recorder missing after check",
-            extra={"event": "check_not_found", "extra_recorder_id": recorder_id},
-        )
         return HTMLResponse("Не найден", status_code=404)
-
-    status = effective_status(updated)
+    outcome_status = updated.last_status
+    metrics = state.get_recorder_metrics(recorder_id)
+    status = effective_status(updated, metrics)
     template = (
         "partials/recorder_table_row.html"
         if "/recorders" in referer and "/objects" not in referer
@@ -370,9 +391,9 @@ async def recorder_check(
         extra={
             "event": "check_done",
             "extra_recorder_id": recorder_id,
-            "extra_status": outcome.status.value,
+            "extra_status": outcome_status.value if outcome_status else None,
             "extra_effective_status": status,
-            "extra_error": outcome.error,
+            "extra_error": updated.last_error,
             "extra_duration_ms": duration_ms,
             "extra_template": template,
         },
@@ -381,9 +402,9 @@ async def recorder_check(
     response = templates.TemplateResponse(
         request,
         template,
-        {"recorder": updated, "status": status},
+        {"recorder": updated, "status": status, "metrics": metrics},
     )
-    if outcome.status.value == "online":
+    if outcome_status and outcome_status.value == "online":
         payload = {
             "showToast": {
                 "type": "success",
@@ -391,11 +412,11 @@ async def recorder_check(
             }
         }
         response.headers["HX-Trigger"] = json.dumps(payload, ensure_ascii=True)
-    elif outcome.status.value == "offline":
+    elif outcome_status and outcome_status.value == "offline":
         payload = {
             "showToast": {
                 "type": "error",
-                "message": outcome.error or "Недоступен",
+                "message": updated.last_error or "Недоступен",
             }
         }
         response.headers["HX-Trigger"] = json.dumps(payload, ensure_ascii=True)
@@ -430,3 +451,96 @@ def _toast_from_query(request: Request) -> Optional[dict[str, str]]:
     if t in ("success", "error") and msg:
         return {"type": t, "message": msg}
     return None
+
+
+@router.get("/channels", response_class=HTMLResponse)
+def channels_page(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    health: str = "",
+    recorder_id: str = "",
+) -> HTMLResponse:
+    recorders = store.list_recorders()
+    metrics = _metrics_map(state)
+    channels = state.list_channels(
+        recorder_id=recorder_id or None,
+        health=health or None,
+    )
+    return templates.TemplateResponse(
+        request,
+        "channels.html",
+        {
+            "active_nav": "channels",
+            "channels": channels,
+            "recorders": recorders,
+            "recorders_by_id": _recorders_by_id(store),
+            "metrics_map": metrics,
+            "filter_health": health,
+            "filter_recorder": recorder_id,
+            "toast": _toast_from_query(request),
+        },
+    )
+
+
+@router.get("/history", response_class=HTMLResponse)
+def history_page(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+    store: ConfigStore = Depends(get_store),
+    entity_type: str = "",
+    entity_id: str = "",
+) -> HTMLResponse:
+    history = state.list_history(
+        entity_type=entity_type or None,
+        entity_id=entity_id or None,
+        limit=300,
+    )
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        {
+            "active_nav": "history",
+            "history": history,
+            "recorders": store.list_recorders(),
+            "filter_entity_type": entity_type,
+            "filter_entity_id": entity_id,
+        },
+    )
+
+
+@router.post("/monitoring/poll-all", response_class=HTMLResponse)
+async def monitoring_poll_all(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    await run_poll_cycle(store, state, include_inventory=False)
+    return _redirect("/objects", "success", "Опрос регистраторов запущен")
+
+
+@router.post("/monitoring/inventory-all", response_class=HTMLResponse)
+async def monitoring_inventory_all(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    await run_inventory_cycle(store, state)
+    return _redirect("/channels", "success", "Инвентаризация каналов завершена")
+
+
+@router.post("/recorders/{recorder_id}/inventory", response_class=HTMLResponse)
+async def recorder_inventory(
+    request: Request,
+    recorder_id: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    recorder = store.get_recorder(recorder_id)
+    if not recorder:
+        return HTMLResponse("Не найден", status_code=404)
+    await poll_single_recorder(store, state, recorder, include_inventory=True)
+    referer = request.headers.get("HX-Current-URL", "")
+    if "/channels" in referer:
+        return _redirect("/channels", "success", "Каналы обновлены")
+    return _redirect("/objects", "success", "Каналы обновлены")

@@ -5,7 +5,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from .config_store import ConfigStore
 from .logging_config import get_log_file_path, get_logger, setup_logging
+from .scheduler import MonitoringScheduler
+from .state_store import StateStore
+from .ui.dependencies import get_state_store
 from .web.routes import router as web_router
 
 APP_DIR = Path(__file__).resolve().parent
@@ -17,17 +21,22 @@ logger = get_logger("http")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log_path = get_log_file_path()
+    state_store = get_state_store()
+    scheduler = MonitoringScheduler(ConfigStore(), state_store)
+    app.state.scheduler = scheduler
+    scheduler.start()
     logger.info(
         "application startup",
         extra={"event": "app_startup", "extra_log_file": str(log_path)},
     )
     yield
+    await scheduler.stop()
 
 
 app = FastAPI(
     title="Wisenet Диагностика",
-    version="0.2.0",
-    description="Этап 0: реестр регистраторов и проверка SUNAPI",
+    version="0.3.0",
+    description="Этап 1: мониторинг регистраторов и каналов (SUNAPI)",
     lifespan=lifespan,
 )
 

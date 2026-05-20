@@ -1,0 +1,82 @@
+{% extends "layout.html" %}
+{% block title %}Каналы — Wisenet Диагностика{% endblock %}
+{% block page_title %}Каналы{% endblock %}
+{% block page_actions %}
+<button type="button" class="btn btn-outline"
+  hx-post="/monitoring/inventory-all"
+  hx-swap="none"
+>Инвентаризация всех</button>
+{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <form method="get" action="/channels" class="toolbar" style="gap:12px;flex-wrap:wrap;">
+    <select name="recorder_id" class="select" style="max-width:280px;">
+      <option value="">Все регистраторы</option>
+      {% for r in recorders %}
+      <option value="{{ r.id }}" {% if filter_recorder == r.id %}selected{% endif %}>
+        {{ r.object_name }} — {{ display_recorder_name(r) }}
+      </option>
+      {% endfor %}
+    </select>
+    <select name="health" class="select" style="max-width:200px;">
+      <option value="">Все статусы</option>
+      <option value="error" {% if filter_health == 'error' %}selected{% endif %}>Неисправно</option>
+      <option value="warn" {% if filter_health == 'warn' %}selected{% endif %}>Деградация</option>
+      <option value="ok" {% if filter_health == 'ok' %}selected{% endif %}>Исправно</option>
+      <option value="unknown" {% if filter_health == 'unknown' %}selected{% endif %}>Неизвестно</option>
+    </select>
+    <button type="submit" class="btn btn-outline">Фильтр</button>
+  </form>
+</div>
+
+{% if not channels %}
+<div class="empty-state">
+  <h2>Нет данных по каналам</h2>
+  <p>Запустите инвентаризацию или дождитесь автоматического опроса (каждые 24 ч).</p>
+  <button type="button" class="btn btn-primary" style="margin-top:16px;"
+    hx-post="/monitoring/inventory-all" hx-swap="none"
+  >Инвентаризация всех</button>
+</div>
+{% else %}
+<div class="table-wrap card">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Объект / NVR</th>
+        <th>Канал</th>
+        <th>Имя</th>
+        <th>IP камеры</th>
+        <th>Модель</th>
+        <th>Состояние</th>
+        <th>Статус</th>
+        <th>Опрос</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ch in channels %}
+      {% set rec = recorders_by_id.get(ch.recorder_id) %}
+      <tr>
+        <td>
+          {% if rec %}
+          <div>{{ rec.object_name }}</div>
+          <div class="recorder-row-host">{{ display_recorder_name(rec) }}</div>
+          {% else %}{{ ch.recorder_id }}{% endif %}
+        </td>
+        <td>{{ ch.channel_no }}</td>
+        <td>{{ ch.name or '—' }}</td>
+        <td class="recorder-row-host">{{ ch.camera_ip or '—' }}</td>
+        <td>{{ ch.camera_model or '—' }}</td>
+        <td>{{ ch.source_state or '—' }}</td>
+        <td>
+          {% set status = ch.health_status %}
+          {% set error = ch.health_reason %}
+          {% include "partials/status_badge.html" %}
+        </td>
+        <td style="font-size:12px;color:var(--text-secondary);">{{ format_time(ch.last_polled_at) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

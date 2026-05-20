@@ -3,7 +3,7 @@ from app.ui.grouping import (
     aggregate_status,
     effective_status,
     group_by_object,
-    offline_count,
+    problem_count,
 )
 
 
@@ -36,7 +36,7 @@ def test_effective_status_unknown() -> None:
 def test_aggregate_worst_offline() -> None:
     a = _rec(last_status=CheckStatus.ONLINE)
     b = _rec(last_status=CheckStatus.OFFLINE)
-    assert aggregate_status([a, b]) == "offline"
+    assert aggregate_status([a, b]) == "error"
 
 
 def test_group_by_object_search() -> None:
@@ -63,7 +63,7 @@ def test_group_by_object_search() -> None:
     assert groups[0].object_name == "Москва"
 
 
-def test_offline_count() -> None:
+def test_problem_count() -> None:
     a = _rec(last_status=CheckStatus.ONLINE)
     b = _rec(last_status=CheckStatus.OFFLINE)
-    assert offline_count([a, b]) == 1
+    assert problem_count([a, b]) == 1

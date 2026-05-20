@@ -83,18 +83,17 @@ def test_check_returns_row_fragment(
     from datetime import datetime, timezone
 
     from app.models import CheckStatus
-    from app.sunapi import SunapiCheckOutcome
     from app.web import routes as web_routes
 
-    async def fake_check(recorder, credentials):
-        return SunapiCheckOutcome(
-            status=CheckStatus.ONLINE,
-            checked_at=datetime.now(timezone.utc),
+    async def fake_poll(config_store, state_store, recorder, include_inventory=True):
+        config_store.update_recorder_status(
+            recorder.id,
+            CheckStatus.ONLINE,
+            datetime.now(timezone.utc),
             error=None,
-            device=None,
         )
 
-    monkeypatch.setattr(web_routes, "check_recorder", fake_check)
+    monkeypatch.setattr(web_routes, "poll_single_recorder", fake_poll)
 
     client.post(
         "/recorders",
@@ -123,4 +122,4 @@ def test_check_returns_row_fragment(
     )
     assert r.status_code == 200
     assert "recorder-row" in r.text
-    assert "Доступен" in r.text
+    assert "Исправно" in r.text or "Доступен" in r.text

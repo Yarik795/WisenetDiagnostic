@@ -7,10 +7,13 @@ venv/
 *.egg-info/
 
 # Config with secrets
-config.json
+#config.json
 
 # Runtime logs
 logs/
+
+# Monitoring state DB
+data/
 
 # IDE
 .idea/

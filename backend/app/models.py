@@ -53,9 +53,21 @@ class RecorderUpdate(RecorderBase):
     pass
 
 
+class MonitoringSettings(BaseModel):
+    poll_interval_minutes: int = Field(default=5, ge=1, le=1440)
+    full_poll_interval_minutes: int = Field(default=15, ge=1, le=1440)
+    max_concurrent_polls: int = Field(default=5, ge=1, le=50)
+    archive_days_required: int = Field(default=30, ge=1, le=365)
+    time_skew_warn_seconds: int = Field(default=60, ge=1)
+    time_skew_error_seconds: int = Field(default=300, ge=1)
+    disk_usage_warn_percent: int = Field(default=85, ge=1, le=100)
+    disk_usage_error_percent: int = Field(default=95, ge=1, le=100)
+
+
 class AppConfig(BaseModel):
     credentials: Credentials = Field(default_factory=Credentials)
     recorders: list[Recorder] = Field(default_factory=list)
+    monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
 
 
 class CheckResult(BaseModel):

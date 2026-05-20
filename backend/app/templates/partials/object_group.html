@@ -5,16 +5,18 @@
     <span class="object-group-meta">{{ group.recorders|length }} NVR</span>
     {% set status = group.aggregate_status %}
     {% include "partials/status_badge.html" %}
-    {% set oc = offline_count(group.recorders) %}
-    {% if oc > 0 %}
+    {% set pc = problem_count(group.recorders, metrics_map) %}
+    {% if pc > 0 %}
     <span class="object-group-meta" style="color:var(--status-error);">
-      {{ oc }} из {{ group.recorders|length }} недоступен
+      {{ pc }} из {{ group.recorders|length }} с проблемами
     </span>
     {% endif %}
   </div>
   <div class="object-group-body">
     {% for recorder in group.recorders %}
-    {% set status = effective_status(recorder) %}
+    {% set metrics = metrics_map.get(recorder.id) %}
+    {% set status = effective_status(recorder, metrics) %}
+    {% set error = metrics.health_reason if metrics else recorder.last_error %}
     {% include "partials/recorder_row.html" %}
     {% endfor %}
   </div>

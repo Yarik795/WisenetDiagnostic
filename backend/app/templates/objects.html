@@ -2,6 +2,10 @@
 {% block title %}Объекты — Wisenet Диагностика{% endblock %}
 {% block page_title %}Объекты{% endblock %}
 {% block page_actions %}
+<button type="button" class="btn btn-outline"
+  hx-post="/monitoring/poll-all"
+  hx-swap="none"
+>Опросить все</button>
 <button type="button" class="btn btn-primary"
   hx-get="/recorders/new"
   hx-target="#drawer-root"

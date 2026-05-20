@@ -3,6 +3,16 @@
     "username": "admin",
     "password": "CHANGE_ME"
   },
+  "monitoring": {
+    "poll_interval_minutes": 5,
+    "full_poll_interval_minutes": 15,
+    "max_concurrent_polls": 5,
+    "archive_days_required": 30,
+    "time_skew_warn_seconds": 60,
+    "time_skew_error_seconds": 300,
+    "disk_usage_warn_percent": 85,
+    "disk_usage_error_percent": 95
+  },
   "recorders": [
     {
       "id": "nvr-001",

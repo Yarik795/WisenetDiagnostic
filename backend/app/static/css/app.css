@@ -287,8 +287,11 @@ a:hover {
   flex-shrink: 0;
 }
 
-.status-dot.online { background: var(--status-ok); }
-.status-dot.offline { background: var(--status-error); }
+.status-dot.online,
+.status-dot.ok { background: var(--status-ok); }
+.status-dot.offline,
+.status-dot.error { background: var(--status-error); }
+.status-dot.warn { background: var(--status-warn); }
 .status-dot.unknown { background: var(--status-unknown); }
 .status-dot.disabled { background: var(--text-muted); }
 .status-dot.checking {

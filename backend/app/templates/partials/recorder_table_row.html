@@ -5,7 +5,12 @@
   <td>{{ display_recorder_name(recorder) }}</td>
   <td class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</td>
   <td>{{ recorder.port }}</td>
-  <td>{% set status = effective_status(recorder) %}{% include "partials/status_badge.html" %}</td>
+  <td>
+    {% set metrics = metrics_map.get(recorder.id) if metrics_map is defined else none %}
+    {% set status = effective_status(recorder, metrics) %}
+    {% set error = metrics.health_reason if metrics else recorder.last_error %}
+    {% include "partials/status_badge.html" %}
+  </td>
   <td style="font-size:12px;color:var(--text-secondary);">{{ format_time(recorder.last_check_at) }}</td>
   <td>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">

@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block title %}История — Wisenet Диагностика{% endblock %}
+{% block page_title %}История статусов{% endblock %}
+{% block content %}
+<form method="get" action="/history" class="toolbar" style="margin-bottom:16px;">
+  <select name="entity_type" class="select" style="max-width:180px;">
+    <option value="">Все типы</option>
+    <option value="recorder" {% if filter_entity_type == 'recorder' %}selected{% endif %}>Регистратор</option>
+    <option value="channel" {% if filter_entity_type == 'channel' %}selected{% endif %}>Канал</option>
+  </select>
+  <select name="entity_id" class="select" style="max-width:320px;">
+    <option value="">Все сущности</option>
+    {% for r in recorders %}
+    <option value="{{ r.id }}" {% if filter_entity_id == r.id %}selected{% endif %}>
+      NVR: {{ display_recorder_name(r) }}
+    </option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-outline">Фильтр</button>
+</form>
+
+{% if not history %}
+<p class="empty-state">История пуста. Записи появятся после первого опроса.</p>
+{% else %}
+<div class="table-wrap card">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Время</th>
+        <th>Тип</th>
+        <th>ID</th>
+        <th>Статус</th>
+        <th>Причина</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in history %}
+      <tr>
+        <td style="font-size:12px;white-space:nowrap;">{{ row.recorded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ row.entity_type }}</td>
+        <td class="recorder-row-host">{{ row.entity_id }}</td>
+        <td>{% set status = row.status %}{% include "partials/status_badge.html" %}</td>
+        <td style="font-size:12px;color:var(--text-secondary);">{{ row.reason or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

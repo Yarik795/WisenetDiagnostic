@@ -7,6 +7,13 @@
   <div class="recorder-row-info">
     <div class="recorder-row-name">{{ display_recorder_name(recorder) }}</div>
     <div class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</div>
+    {% if metrics %}
+    <div class="recorder-row-host" style="font-size:12px;">
+      {% if metrics.model %}{{ metrics.model }}{% endif %}
+      {% if metrics.channel_count %} · {{ metrics.channel_count }} кан.{% endif %}
+      {% if metrics.storage_used_percent is not none %} · диск {{ metrics.storage_used_percent }}%{% endif %}
+    </div>
+    {% endif %}
   </div>
   <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
     {% include "partials/status_badge.html" %}
@@ -27,6 +34,12 @@
       <details>
         <summary class="btn btn-ghost" style="min-width:40px;padding:0;" aria-label="Действия">⋯</summary>
         <div class="menu-panel">
+          <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="text-decoration:none;">Каналы</a>
+          <button
+            type="button"
+            hx-post="/recorders/{{ recorder.id }}/inventory"
+            hx-swap="none"
+          >↻ Каналы</button>
           <button
             type="button"
             hx-get="/recorders/{{ recorder.id }}/edit"
