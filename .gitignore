@@ -9,6 +9,9 @@ venv/
 # Config with secrets
 config.json
 
+# Runtime logs
+logs/
+
 # IDE
 .idea/
 .vscode/

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Literal, Optional
 from urllib.parse import urlencode
 
@@ -9,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from ..config_store import ConfigStore
+from ..logging_config import get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..sunapi import check_recorder
 from ..ui.dependencies import get_store
@@ -18,6 +20,7 @@ from .templates_env import templates
 from .validation import parse_recorder_form
 
 router = APIRouter(tags=["web"])
+check_logger = get_logger("check")
 
 
 def _redirect(url: str, toast_type: str | None = None, message: str | None = None) -> Response:
@@ -304,11 +307,43 @@ async def recorder_check(
     recorder_id: str,
     store: ConfigStore = Depends(get_store),
 ) -> HTMLResponse:
+    start = time.perf_counter()
+    referer = request.headers.get("HX-Current-URL", "")
+    is_htmx = request.headers.get("HX-Request") == "true"
+
+    check_logger.info(
+        "check requested",
+        extra={
+            "event": "check_start",
+            "extra_recorder_id": recorder_id,
+            "extra_htmx": is_htmx,
+            "extra_htmx_url": referer or None,
+        },
+    )
+
     recorder = store.get_recorder(recorder_id)
     if not recorder:
+        check_logger.warning(
+            "recorder not found",
+            extra={"event": "check_not_found", "extra_recorder_id": recorder_id},
+        )
         return HTMLResponse("Не найден", status_code=404)
 
     credentials = store.get_credentials()
+    has_credentials = bool(credentials.username and credentials.password)
+    check_logger.info(
+        "check running",
+        extra={
+            "event": "check_running",
+            "extra_recorder_id": recorder.id,
+            "extra_object_name": recorder.object_name,
+            "extra_host": recorder.host,
+            "extra_port": recorder.port,
+            "extra_enabled": recorder.enabled,
+            "extra_has_credentials": has_credentials,
+        },
+    )
+
     outcome = await check_recorder(recorder, credentials)
     updated = store.update_recorder_status(
         recorder_id,
@@ -317,15 +352,32 @@ async def recorder_check(
         outcome.error,
     )
     if not updated:
+        check_logger.warning(
+            "recorder missing after check",
+            extra={"event": "check_not_found", "extra_recorder_id": recorder_id},
+        )
         return HTMLResponse("Не найден", status_code=404)
 
     status = effective_status(updated)
-    referer = request.headers.get("HX-Current-URL", "")
     template = (
         "partials/recorder_table_row.html"
         if "/recorders" in referer and "/objects" not in referer
         else "partials/recorder_row.html"
     )
+    duration_ms = round((time.perf_counter() - start) * 1000)
+    check_logger.info(
+        "check finished",
+        extra={
+            "event": "check_done",
+            "extra_recorder_id": recorder_id,
+            "extra_status": outcome.status.value,
+            "extra_effective_status": status,
+            "extra_error": outcome.error,
+            "extra_duration_ms": duration_ms,
+            "extra_template": template,
+        },
+    )
+
     response = templates.TemplateResponse(
         request,
         template,

@@ -123,3 +123,21 @@ document.body.addEventListener("showToast", (e) => {
     showToast(detail.type, detail.message);
   }
 });
+
+function logHtmxClient(eventName, detail) {
+  const payload = {
+    ts: new Date().toISOString(),
+    source: "browser",
+    event: eventName,
+    path: detail?.pathInfo?.requestPath || detail?.requestConfig?.path,
+    status: detail?.xhr?.status,
+    error: detail?.error,
+  };
+  console.info("[wisenet]", JSON.stringify(payload));
+}
+
+document.body.addEventListener("htmx:sendError", (e) => logHtmxClient("htmx_send_error", e.detail));
+document.body.addEventListener("htmx:responseError", (e) =>
+  logHtmxClient("htmx_response_error", e.detail)
+);
+document.body.addEventListener("htmx:swapError", (e) => logHtmxClient("htmx_swap_error", e.detail));

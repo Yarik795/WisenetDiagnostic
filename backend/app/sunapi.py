@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -8,7 +10,10 @@ from urllib.parse import urlencode
 
 import httpx
 
+from .logging_config import get_logger
 from .models import CheckStatus, Credentials, Recorder
+
+logger = get_logger("sunapi")
 
 
 @dataclass
@@ -47,28 +52,76 @@ def parse_deviceinfo_response(text: str) -> DeviceInfo:
     )
 
 
+def _log_check_result(
+    recorder: Recorder,
+    outcome: SunapiCheckOutcome,
+    *,
+    duration_ms: int,
+    url: str | None = None,
+    http_status: int | None = None,
+) -> None:
+    extra: dict = {
+        "event": "sunapi_check_done",
+        "extra_recorder_id": recorder.id,
+        "extra_host": recorder.host,
+        "extra_port": recorder.port,
+        "extra_use_https": recorder.use_https,
+        "extra_enabled": recorder.enabled,
+        "extra_status": outcome.status.value,
+        "extra_duration_ms": duration_ms,
+        "extra_error": outcome.error,
+    }
+    if url:
+        extra["extra_url"] = url
+    if http_status is not None:
+        extra["extra_http_status"] = http_status
+    if outcome.device and outcome.device.model:
+        extra["extra_model"] = outcome.device.model
+    level = logging.INFO if outcome.status == CheckStatus.ONLINE else logging.WARNING
+    logger.log(level, "sunapi check finished", extra=extra)
+
+
 async def check_recorder(
     recorder: Recorder,
     credentials: Credentials,
     timeout: float = 15.0,
 ) -> SunapiCheckOutcome:
     checked_at = datetime.now(timezone.utc)
+    start = time.perf_counter()
+
+    def finish(outcome: SunapiCheckOutcome, **kwargs) -> SunapiCheckOutcome:
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        _log_check_result(recorder, outcome, duration_ms=duration_ms, **kwargs)
+        return outcome
 
     if not recorder.enabled:
-        return SunapiCheckOutcome(
-            status=CheckStatus.DISABLED,
-            checked_at=checked_at,
-            error=None,
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.DISABLED,
+                checked_at=checked_at,
+                error=None,
+            )
         )
 
     if not credentials.username or not credentials.password:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error="Не заданы учётные данные API. Укажите логин и пароль в настройках.",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Не заданы учётные данные API. Укажите логин и пароль в настройках.",
+            )
         )
 
     url = build_deviceinfo_url(recorder)
+    logger.info(
+        "sunapi request",
+        extra={
+            "event": "sunapi_request",
+            "extra_recorder_id": recorder.id,
+            "extra_url": url,
+            "extra_timeout_s": timeout,
+        },
+    )
 
     try:
         async with httpx.AsyncClient(
@@ -81,63 +134,96 @@ async def check_recorder(
                 auth=httpx.DigestAuth(credentials.username, credentials.password),
             )
     except httpx.TimeoutException:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error="Превышено время ожидания ответа устройства",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Превышено время ожидания ответа устройства",
+            ),
+            url=url,
         )
     except httpx.ConnectError:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error="Не удалось установить соединение с устройством",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Не удалось установить соединение с устройством",
+            ),
+            url=url,
         )
     except httpx.RequestError as exc:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error=f"Ошибка сети: {exc}",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error=f"Ошибка сети: {exc}",
+            ),
+            url=url,
         )
 
     if response.status_code == 401:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error="Ошибка аутентификации (401). Проверьте логин и пароль.",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Ошибка аутентификации (401). Проверьте логин и пароль.",
+            ),
+            url=url,
+            http_status=response.status_code,
         )
 
     if response.status_code >= 400:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error=f"HTTP {response.status_code}: устройство вернуло ошибку",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error=f"HTTP {response.status_code}: устройство вернуло ошибку",
+            ),
+            url=url,
+            http_status=response.status_code,
         )
 
     body = response.text
     if not body.strip():
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error="Пустой ответ от SUNAPI",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Пустой ответ от SUNAPI",
+            ),
+            url=url,
+            http_status=response.status_code,
         )
 
     if re.search(r"(?i)(error|fail|denied)", body) and "Model=" not in body:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error=body.strip()[:500],
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error=body.strip()[:500],
+            ),
+            url=url,
+            http_status=response.status_code,
         )
 
     device = parse_deviceinfo_response(body)
     if not device.model and not device.device_type:
-        return SunapiCheckOutcome(
-            status=CheckStatus.OFFLINE,
-            checked_at=checked_at,
-            error="Ответ получен, но не распознан как deviceinfo",
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Ответ получен, но не распознан как deviceinfo",
+            ),
+            url=url,
+            http_status=response.status_code,
         )
 
-    return SunapiCheckOutcome(
-        status=CheckStatus.ONLINE,
-        checked_at=checked_at,
-        device=device,
+    return finish(
+        SunapiCheckOutcome(
+            status=CheckStatus.ONLINE,
+            checked_at=checked_at,
+            device=device,
+        ),
+        url=url,
+        http_status=response.status_code,
     )
