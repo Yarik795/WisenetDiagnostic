@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="app-shell">
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-brand">Wisenet Диагностика</div>
+    <nav class="sidebar-nav">
+      <a href="/objects" class="{% if active_nav == 'objects' %}active{% endif %}">Объекты</a>
+      <a href="/recorders" class="{% if active_nav == 'recorders' %}active{% endif %}">Регистраторы</a>
+      <a href="/settings" class="{% if active_nav == 'settings' %}active{% endif %}">Настройки</a>
+    </nav>
+  </aside>
+  <div class="main-area">
+    <header class="page-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button type="button" id="mobile-menu-btn" class="btn btn-ghost mobile-menu-btn" aria-label="Меню">☰</button>
+        <h1>{% block page_title %}{% endblock %}</h1>
+      </div>
+      <div class="page-actions">
+        {% block page_actions %}{% endblock %}
+      </div>
+    </header>
+    <main class="page-content">
+      {% if error_banner %}
+      <div class="banner-error">{{ error_banner }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<div id="drawer-root"></div>
+{% endblock %}

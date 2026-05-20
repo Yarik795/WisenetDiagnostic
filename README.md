@@ -5,21 +5,18 @@
 ## Требования
 
 - Python 3.11+
-- Node.js 20+
 
 ## Быстрый старт
 
 Подробная инструкция (любая папка проекта, Windows/Linux): **[docs/ЗАПУСК.md](docs/ЗАПУСК.md)**
 
-Кратко: из **корня проекта** — `config.json` → backend на `:8000` → frontend на `:5173`.
+Кратко: из **корня проекта** — `config.json` → `uvicorn` на `:8000` → браузер [http://127.0.0.1:8000/objects](http://127.0.0.1:8000/objects).
 
 ## Тесты
 
 ```bash
 cd backend
 pytest
-cd ../frontend
-npm test
 ```
 
 ## Документация

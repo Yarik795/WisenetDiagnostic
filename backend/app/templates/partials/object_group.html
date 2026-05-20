@@ -1,0 +1,21 @@
+<div class="object-group" data-object-group="{{ group.object_name }}">
+  <div class="object-group-header" data-toggle-group role="button" tabindex="0">
+    <span aria-hidden="true">▼</span>
+    <h2 class="object-group-title">{{ group.object_name }}</h2>
+    <span class="object-group-meta">{{ group.recorders|length }} NVR</span>
+    {% set status = group.aggregate_status %}
+    {% include "partials/status_badge.html" %}
+    {% set oc = offline_count(group.recorders) %}
+    {% if oc > 0 %}
+    <span class="object-group-meta" style="color:var(--status-error);">
+      {{ oc }} из {{ group.recorders|length }} недоступен
+    </span>
+    {% endif %}
+  </div>
+  <div class="object-group-body">
+    {% for recorder in group.recorders %}
+    {% set status = effective_status(recorder) %}
+    {% include "partials/recorder_row.html" %}
+    {% endfor %}
+  </div>
+</div>

@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block title %}Настройки — Wisenet Диагностика{% endblock %}
+{% block page_title %}Настройки{% endblock %}
+{% block content %}
+<div class="warning-box">
+  <span aria-hidden="true">⚠</span>
+  <p>Пароль хранится в локальном <code>config.json</code> на сервере. Не размещайте конфиг в публичных репозиториях.</p>
+</div>
+<div class="card" style="max-width:480px;padding:24px;">
+  <form method="post" action="/settings">
+    <div class="field">
+      <label class="label" for="username">Логин SUNAPI</label>
+      <input class="input" id="username" name="username" value="{{ credentials.username }}" required autocomplete="username">
+      {% if errors and errors.username %}<div class="field-error">{{ errors.username }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label class="label" for="password">Пароль</label>
+      <input class="input" id="password" name="password" type="password" value="{{ credentials.password }}" required autocomplete="current-password">
+      {% if errors and errors.password %}<div class="field-error">{{ errors.password }}</div>{% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary">Сохранить</button>
+  </form>
+</div>
+{% endblock %}

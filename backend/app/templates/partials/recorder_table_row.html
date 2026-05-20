@@ -1,0 +1,34 @@
+<tr id="recorder-row-{{ recorder.id }}" data-recorder-row>
+  <td>
+    <a href="/objects?object={{ recorder.object_name|urlencode }}">{{ recorder.object_name }}</a>
+  </td>
+  <td>{{ display_recorder_name(recorder) }}</td>
+  <td class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</td>
+  <td>{{ recorder.port }}</td>
+  <td>{% set status = effective_status(recorder) %}{% include "partials/status_badge.html" %}</td>
+  <td style="font-size:12px;color:var(--text-secondary);">{{ format_time(recorder.last_check_at) }}</td>
+  <td>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button
+        type="button"
+        class="btn btn-outline"
+        style="min-height:36px;padding:0 12px;"
+        {% if not recorder.enabled %}disabled{% endif %}
+        hx-post="/recorders/{{ recorder.id }}/check"
+        hx-target="#recorder-row-{{ recorder.id }}"
+        hx-swap="outerHTML"
+      >Проверить</button>
+      <button type="button" class="btn btn-ghost" style="min-height:36px;"
+        hx-get="/recorders/{{ recorder.id }}/edit"
+        hx-target="#drawer-root"
+        hx-swap="innerHTML"
+      >Изменить</button>
+      <button type="button" class="btn btn-ghost btn-danger" style="min-height:36px;"
+        hx-post="/recorders/{{ recorder.id }}/delete"
+        hx-confirm="Удалить {{ display_recorder_name(recorder) }}?"
+        hx-target="body"
+        hx-swap="none"
+      >Удалить</button>
+    </div>
+  </td>
+</tr>

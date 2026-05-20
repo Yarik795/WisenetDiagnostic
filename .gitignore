@@ -9,10 +9,6 @@ venv/
 # Config with secrets
 config.json
 
-# Node
-node_modules/
-*.local
-
 # IDE
 .idea/
 .vscode/

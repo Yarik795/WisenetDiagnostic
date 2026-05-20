@@ -1,0 +1,23 @@
+{% if groups %}
+  {% for group in groups %}
+  {% include "partials/object_group.html" %}
+  {% endfor %}
+{% else %}
+  {% if recorders %}
+  <p class="empty-state">Ничего не найдено по запросу</p>
+  {% else %}
+  <div class="empty-state">
+    <p style="font-size:48px;margin:0;">📹</p>
+    <h2>Нет регистраторов</h2>
+    <p>Добавьте первый регистратор для начала мониторинга</p>
+    <button
+      type="button"
+      class="btn btn-primary"
+      style="margin-top:16px;"
+      hx-get="/recorders/new"
+      hx-target="#drawer-root"
+      hx-swap="innerHTML"
+    >+ Добавить регистратор</button>
+  </div>
+  {% endif %}
+{% endif %}

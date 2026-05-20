@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block title %}Объекты — Wisenet Диагностика{% endblock %}
+{% block page_title %}Объекты{% endblock %}
+{% block page_actions %}
+<button type="button" class="btn btn-primary"
+  hx-get="/recorders/new"
+  hx-target="#drawer-root"
+  hx-swap="innerHTML"
+>+ Добавить регистратор</button>
+{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <input type="search" id="objects-search" class="input" placeholder="Поиск по объекту, IP, имени…" aria-label="Поиск">
+  <select class="select" style="max-width:200px;"
+    name="sort"
+    hx-get="/objects/partials/groups"
+    hx-target="#object-groups"
+    hx-include="#objects-search"
+    hx-trigger="change"
+  >
+    <option value="status" {% if sort == 'status' %}selected{% endif %}>Сначала проблемные</option>
+    <option value="name" {% if sort == 'name' %}selected{% endif %}>По имени (А–Я)</option>
+  </select>
+</div>
+<div id="object-groups">
+  {% include "partials/object_groups.html" %}
+</div>
+{% endblock %}

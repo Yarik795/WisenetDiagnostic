@@ -1,22 +1,17 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 
-from .routers import health, recorders, settings
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from .web.routes import router as web_router
+
+APP_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(
-    title="Wisenet Диагностика API",
-    version="0.1.0",
+    title="Wisenet Диагностика",
+    version="0.2.0",
     description="Этап 0: реестр регистраторов и проверка SUNAPI",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(health.router, prefix="/api")
-app.include_router(recorders.router, prefix="/api")
-app.include_router(settings.router, prefix="/api")
+app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
+app.include_router(web_router)

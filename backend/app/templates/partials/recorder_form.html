@@ -1,0 +1,60 @@
+<div class="drawer-backdrop" onclick="document.getElementById('drawer-root').innerHTML=''"></div>
+<aside class="drawer" role="dialog" aria-labelledby="drawer-title">
+  <div class="drawer-header">
+    <h2 id="drawer-title">{% if recorder %}Изменить регистратор{% else %}Добавить регистратор{% endif %}</h2>
+    <button type="button" class="btn btn-ghost" onclick="document.getElementById('drawer-root').innerHTML=''" aria-label="Закрыть">✕</button>
+  </div>
+  <form
+    hx-post="{% if recorder %}/recorders/{{ recorder.id }}{% else %}/recorders{% endif %}"
+    hx-target="#drawer-root"
+    hx-swap="innerHTML"
+  >
+    <div class="field">
+      <label class="label" for="object_name">Название объекта *</label>
+      <input class="input" id="object_name" name="object_name" list="object-names"
+        value="{{ form.object_name if form else (recorder.object_name if recorder else '') }}"
+        placeholder="Отделение №12" required>
+      <datalist id="object-names">
+        {% for n in object_names %}
+        <option value="{{ n }}">
+        {% endfor %}
+      </datalist>
+      {% if errors and errors.object_name %}<div class="field-error">{{ errors.object_name }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label class="label" for="name">Имя регистратора</label>
+      <input class="input" id="name" name="name"
+        value="{{ form.name if form else (recorder.name or '' if recorder else '') }}"
+        placeholder="NVR-1">
+    </div>
+    <div class="field">
+      <label class="label" for="host">Host (IP/DNS) *</label>
+      <input class="input" id="host" name="host"
+        value="{{ form.host if form else (recorder.host if recorder else '') }}"
+        placeholder="10.1.2.3" required>
+      {% if errors and errors.host %}<div class="field-error">{{ errors.host }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label class="label" for="port">Порт *</label>
+      <input class="input" id="port" name="port" type="number" min="1" max="65535"
+        value="{{ form.port if form else (recorder.port if recorder else 80) }}" required>
+      {% if errors and errors.port %}<div class="field-error">{{ errors.port }}</div>{% endif %}
+    </div>
+    <div class="field toggle-row">
+      <input type="hidden" name="use_https" value="false">
+      <input type="checkbox" id="use_https" name="use_https" value="true"
+        {% if form %}{% if form.use_https %}checked{% endif %}{% elif recorder and recorder.use_https %}checked{% endif %}>
+      <label for="use_https">HTTPS</label>
+    </div>
+    <div class="field toggle-row">
+      <input type="hidden" name="enabled" value="false">
+      <input type="checkbox" id="enabled" name="enabled" value="true"
+        {% if form %}{% if form.enabled %}checked{% endif %}{% elif not recorder or recorder.enabled %}checked{% endif %}>
+      <label for="enabled">Включён</label>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:24px;">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('drawer-root').innerHTML=''">Отмена</button>
+    </div>
+  </form>
+</aside>

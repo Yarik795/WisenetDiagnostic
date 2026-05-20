@@ -1,0 +1,69 @@
+from app.models import CheckStatus, Recorder
+from app.ui.grouping import (
+    aggregate_status,
+    effective_status,
+    group_by_object,
+    offline_count,
+)
+
+
+def _rec(
+    object_name: str = "Obj",
+    enabled: bool = True,
+    last_status: CheckStatus | None = None,
+) -> Recorder:
+    return Recorder(
+        id="nvr-1",
+        object_name=object_name,
+        name="NVR",
+        host="10.0.0.1",
+        port=80,
+        use_https=False,
+        enabled=enabled,
+        last_status=last_status,
+    )
+
+
+def test_effective_status_disabled() -> None:
+    r = _rec(enabled=False, last_status=CheckStatus.ONLINE)
+    assert effective_status(r) == "disabled"
+
+
+def test_effective_status_unknown() -> None:
+    assert effective_status(_rec()) == "unknown"
+
+
+def test_aggregate_worst_offline() -> None:
+    a = _rec(last_status=CheckStatus.ONLINE)
+    b = _rec(last_status=CheckStatus.OFFLINE)
+    assert aggregate_status([a, b]) == "offline"
+
+
+def test_group_by_object_search() -> None:
+    r1 = Recorder(
+        id="nvr-1",
+        object_name="Москва",
+        name=None,
+        host="10.1.1.1",
+        port=80,
+        use_https=False,
+        enabled=True,
+    )
+    r2 = Recorder(
+        id="nvr-2",
+        object_name="Казань",
+        name=None,
+        host="10.2.2.2",
+        port=80,
+        use_https=False,
+        enabled=True,
+    )
+    groups = group_by_object([r1, r2], search="10.1", sort="name")
+    assert len(groups) == 1
+    assert groups[0].object_name == "Москва"
+
+
+def test_offline_count() -> None:
+    a = _rec(last_status=CheckStatus.ONLINE)
+    b = _rec(last_status=CheckStatus.OFFLINE)
+    assert offline_count([a, b]) == 1
