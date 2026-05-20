@@ -24,7 +24,10 @@ def client(tmp_path: Path) -> TestClient:
 def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    data = r.json()
+    assert data["status"] == "ok"
+    assert "log_file" in data
+    assert Path(data["log_file"]).name == "wisenet.log"
 
 
 def test_root_redirects(client: TestClient) -> None:

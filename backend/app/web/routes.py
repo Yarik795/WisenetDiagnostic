@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from ..config_store import ConfigStore
-from ..logging_config import get_logger
+from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..sunapi import check_recorder
 from ..ui.dependencies import get_store
@@ -43,7 +43,7 @@ def root() -> RedirectResponse:
 
 @router.get("/health", include_in_schema=False)
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "log_file": str(get_log_file_path())}
 
 
 @router.get("/objects", response_class=HTMLResponse)
