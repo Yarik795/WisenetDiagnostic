@@ -29,6 +29,14 @@
   </form>
 </div>
 
+{% if filter_recorder and recorders_by_id.get(filter_recorder) %}
+{% set recorder = recorders_by_id[filter_recorder] %}
+{% set metrics = metrics_map.get(filter_recorder) %}
+<div style="margin-bottom:16px;">
+  {% include "partials/recorder_metrics_detail.html" %}
+</div>
+{% endif %}
+
 {% if not channels %}
 <div class="empty-state">
   <h2>Нет данных по каналам</h2>
@@ -48,7 +56,9 @@
         <th>IP камеры</th>
         <th>Модель</th>
         <th>Состояние</th>
+        <th>Video loss</th>
         <th>Статус</th>
+        <th>Причина</th>
         <th>Опрос</th>
       </tr>
     </thead>
@@ -67,12 +77,14 @@
         <td class="recorder-row-host">{{ ch.camera_ip or '—' }}</td>
         <td>{{ ch.camera_model or '—' }}</td>
         <td>{{ ch.source_state or '—' }}</td>
+        <td>{{ format_bool_ru(ch.video_loss, 'Да', 'Нет') }}</td>
         <td>
           {% set status = ch.health_status %}
           {% set error = ch.health_reason %}
           {% include "partials/status_badge.html" %}
         </td>
-        <td style="font-size:12px;color:var(--text-secondary);">{{ format_time(ch.last_polled_at) }}</td>
+        <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">{{ ch.health_reason or '—' }}</td>
+        <td style="font-size:12px;color:var(--text-secondary);">{{ format_datetime(ch.last_polled_at) }}</td>
       </tr>
       {% endfor %}
     </tbody>

@@ -173,6 +173,12 @@ def apply_poll_result(
         channels_error=counts["error"],
         channels_unknown=counts["unknown"],
         last_polled_at=polled_at,
+        local_time=poll.date_time.local_time if poll.date_time else None,
+        utc_time=poll.date_time.utc_time if poll.date_time else None,
+        sync_type=poll.date_time.sync_type if poll.date_time else None,
+        storage_used_mb=poll.storage.used_space_mb if poll.storage else None,
+        storage_total_mb=poll.storage.total_space_mb if poll.storage else None,
+        disks=poll.storage.disks if poll.storage else None,
     )
     state.record_history("recorder", recorder.id, rec_status, rec_reason, polled_at)
 

@@ -1,0 +1,17 @@
+{% if metrics %}
+<div class="metrics-summary">
+  {% if metrics.model %}<span>{{ metrics.model }}</span>{% endif %}
+  {% if metrics.firmware_version %}<span>FW {{ metrics.firmware_version }}</span>{% endif %}
+  {% if metrics.storage_used_percent is not none %}
+  <span>диск {{ format_percent(metrics.storage_used_percent) }}{% if metrics.storage_status %} ({{ metrics.storage_status }}){% endif %}</span>
+  {% endif %}
+  {% if metrics.archive_days is not none %}
+  <span>архив {{ format_archive_days(metrics.archive_days, archive_days_required()) }}</span>
+  {% endif %}
+  {% if metrics.ntp_status %}<span>NTP {{ metrics.ntp_status }}</span>{% endif %}
+  {% if metrics.time_skew_seconds is not none %}<span>Δt {{ format_skew(metrics.time_skew_seconds) }}</span>{% endif %}
+  <span>{{ format_channel_counts(metrics.channel_count, metrics.channels_ok, metrics.channels_warn, metrics.channels_error, metrics.channels_unknown) }}</span>
+</div>
+{% elif recorder.enabled %}
+<div class="metrics-summary metrics-summary--empty">Нет данных опроса — нажмите «Проверить»</div>
+{% endif %}

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "monitoring.db"
 
@@ -46,6 +47,12 @@ class RecorderMetricsRow:
     channels_error: int
     channels_unknown: int
     last_polled_at: Optional[datetime]
+    local_time: Optional[str] = None
+    utc_time: Optional[str] = None
+    sync_type: Optional[str] = None
+    storage_used_mb: Optional[float] = None
+    storage_total_mb: Optional[float] = None
+    disks_json: Optional[str] = None
 
 
 @dataclass
@@ -124,6 +131,25 @@ class StateStore:
                     ON channels(recorder_id);
                 """
             )
+            self._migrate_schema(conn)
+
+    def _migrate_schema(self, conn: sqlite3.Connection) -> None:
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(recorder_metrics)").fetchall()
+        }
+        additions = [
+            ("local_time", "TEXT"),
+            ("utc_time", "TEXT"),
+            ("sync_type", "TEXT"),
+            ("storage_used_mb", "REAL"),
+            ("storage_total_mb", "REAL"),
+            ("disks_json", "TEXT"),
+        ]
+        for name, col_type in additions:
+            if name not in columns:
+                conn.execute(
+                    f"ALTER TABLE recorder_metrics ADD COLUMN {name} {col_type}"
+                )
 
     def upsert_channel(
         self,
@@ -230,7 +256,14 @@ class StateStore:
         channels_error: int = 0,
         channels_unknown: int = 0,
         last_polled_at: Optional[datetime] = None,
+        local_time: Optional[str] = None,
+        utc_time: Optional[str] = None,
+        sync_type: Optional[str] = None,
+        storage_used_mb: Optional[float] = None,
+        storage_total_mb: Optional[float] = None,
+        disks: Optional[list[dict[str, Any]]] = None,
     ) -> None:
+        disks_json = json.dumps(disks, ensure_ascii=False) if disks else None
         with self._connect() as conn:
             conn.execute(
                 """
@@ -239,8 +272,11 @@ class StateStore:
                     health_status, health_reason, ntp_status, time_skew_seconds,
                     storage_used_percent, storage_status, archive_start, archive_end,
                     archive_days, channel_count, channels_ok, channels_warn,
-                    channels_error, channels_unknown, last_polled_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    channels_error, channels_unknown, last_polled_at,
+                    local_time, utc_time, sync_type,
+                    storage_used_mb, storage_total_mb, disks_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -259,7 +295,13 @@ class StateStore:
                     channels_warn=excluded.channels_warn,
                     channels_error=excluded.channels_error,
                     channels_unknown=excluded.channels_unknown,
-                    last_polled_at=excluded.last_polled_at
+                    last_polled_at=excluded.last_polled_at,
+                    local_time=excluded.local_time,
+                    utc_time=excluded.utc_time,
+                    sync_type=excluded.sync_type,
+                    storage_used_mb=excluded.storage_used_mb,
+                    storage_total_mb=excluded.storage_total_mb,
+                    disks_json=excluded.disks_json
                 """,
                 (
                     recorder_id,
@@ -281,6 +323,12 @@ class StateStore:
                     channels_error,
                     channels_unknown,
                     _iso(last_polled_at),
+                    local_time,
+                    utc_time,
+                    sync_type,
+                    storage_used_mb,
+                    storage_total_mb,
+                    disks_json,
                 ),
             )
 
@@ -417,6 +465,12 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
         channels_error=row["channels_error"],
         channels_unknown=row["channels_unknown"],
         last_polled_at=_parse_iso(row["last_polled_at"]),
+        local_time=row["local_time"] if "local_time" in row.keys() else None,
+        utc_time=row["utc_time"] if "utc_time" in row.keys() else None,
+        sync_type=row["sync_type"] if "sync_type" in row.keys() else None,
+        storage_used_mb=row["storage_used_mb"] if "storage_used_mb" in row.keys() else None,
+        storage_total_mb=row["storage_total_mb"] if "storage_total_mb" in row.keys() else None,
+        disks_json=row["disks_json"] if "disks_json" in row.keys() else None,
     )
 
 

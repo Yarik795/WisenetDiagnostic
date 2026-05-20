@@ -1,0 +1,96 @@
+{% set disks = parse_disks(metrics.disks_json) if metrics else [] %}
+<div class="metrics-detail card">
+  <h3 class="metrics-detail-title">Метрики NVR</h3>
+  {% if not metrics %}
+  <p class="metrics-detail-empty">Данные появятся после успешного опроса (кнопка «Проверить» или автоматический цикл).</p>
+  {% else %}
+  <div class="metrics-detail-grid">
+    <section class="metrics-block">
+      <h4>Устройство</h4>
+      <dl class="metrics-dl">
+        <dt>Модель</dt><dd>{{ metrics.model or '—' }}</dd>
+        <dt>Прошивка</dt><dd>{{ metrics.firmware_version or '—' }}</dd>
+        <dt>SUNAPI</dt><dd>{{ 'доступен' if metrics.device_online else 'недоступен' }}</dd>
+        <dt>Опрос</dt><dd>{{ format_datetime(metrics.last_polled_at) }}</dd>
+        {% if metrics.health_reason %}
+        <dt>Причина статуса</dt><dd>{{ metrics.health_reason }}</dd>
+        {% endif %}
+      </dl>
+    </section>
+    <section class="metrics-block">
+      <h4>Время / NTP</h4>
+      <dl class="metrics-dl">
+        <dt>Локальное</dt><dd>{{ metrics.local_time or '—' }}</dd>
+        <dt>UTC</dt><dd>{{ metrics.utc_time or '—' }}</dd>
+        <dt>Синхронизация</dt><dd>{{ metrics.sync_type or '—' }}</dd>
+        <dt>NTP</dt><dd>{{ metrics.ntp_status or '—' }}</dd>
+        <dt>Расхождение</dt><dd>{{ format_skew(metrics.time_skew_seconds) }}</dd>
+      </dl>
+    </section>
+    <section class="metrics-block">
+      <h4>Архив записи</h4>
+      <dl class="metrics-dl">
+        <dt>Начало</dt><dd>{{ metrics.archive_start or '—' }}</dd>
+        <dt>Конец</dt><dd>{{ metrics.archive_end or '—' }}</dd>
+        <dt>Глубина</dt><dd>{{ format_archive_days(metrics.archive_days, archive_days_required()) }}</dd>
+        <dt>Норматив</dt><dd>{{ archive_days_required() }} сут.</dd>
+      </dl>
+    </section>
+    <section class="metrics-block">
+      <h4>Каналы</h4>
+      <dl class="metrics-dl">
+        <dt>Всего</dt><dd>{{ metrics.channel_count }}</dd>
+        <dt>Исправно</dt><dd>{{ metrics.channels_ok }}</dd>
+        <dt>Деградация</dt><dd>{{ metrics.channels_warn }}</dd>
+        <dt>Неисправно</dt><dd>{{ metrics.channels_error }}</dd>
+        <dt>Неизвестно</dt><dd>{{ metrics.channels_unknown }}</dd>
+      </dl>
+      <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="margin-top:8px;">Открыть каналы</a>
+    </section>
+  </div>
+  <section class="metrics-block metrics-block--full">
+    <h4>Накопители</h4>
+    {% if metrics.storage_used_mb is not none or metrics.storage_total_mb is not none %}
+    <p class="metrics-detail-note">
+      Суммарно: {{ format_mb(metrics.storage_used_mb) }} / {{ format_mb(metrics.storage_total_mb) }}
+      {% if metrics.storage_used_percent is not none %} ({{ format_percent(metrics.storage_used_percent) }}){% endif %}
+      {% if metrics.storage_status %} · статус: {{ metrics.storage_status }}{% endif %}
+    </p>
+    {% endif %}
+    {% if disks %}
+    <div class="table-wrap">
+      <table class="data-table data-table--compact">
+        <thead>
+          <tr>
+            <th>Слот</th>
+            <th>Модель</th>
+            <th>Тип</th>
+            <th>Статус</th>
+            <th>Занято</th>
+            <th>Всего</th>
+            <th>%</th>
+            <th>Темп.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for disk in disks %}
+          <tr>
+            <td>{{ disk_slot(disk) }}</td>
+            <td>{{ disk_field(disk, 'Model', 'model') or '—' }}</td>
+            <td>{{ disk_field(disk, 'Type', 'type') or '—' }}</td>
+            <td>{{ disk_field(disk, 'Status', 'status') or '—' }}</td>
+            <td class="recorder-row-host">{{ disk_used_display(disk) }}</td>
+            <td class="recorder-row-host">{{ disk_total_display(disk) }}</td>
+            <td>{{ disk_percent_display(disk) }}</td>
+            <td>{{ disk_field(disk, 'Temperature', 'temperature') or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="metrics-detail-empty">Детали по слотам не получены (проверьте доступ к storageinfo).</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>

@@ -23,3 +23,9 @@ def format_time(value: datetime | None) -> str:
     if value is None:
         return "—"
     return value.strftime("%H:%M:%S")
+
+
+def format_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "—"
+    return value.strftime("%d.%m.%Y %H:%M:%S")

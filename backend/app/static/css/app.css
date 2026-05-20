@@ -273,6 +273,137 @@ a:hover {
   color: var(--text-secondary);
 }
 
+.recorder-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.recorder-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.recorder-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metrics-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.metrics-summary span::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--text-muted);
+}
+
+.metrics-summary span:first-child::before {
+  content: none;
+  margin: 0;
+}
+
+.metrics-summary--empty {
+  color: var(--status-warn);
+  font-style: italic;
+}
+
+.metrics-details-toggle {
+  width: 100%;
+  margin-top: 4px;
+  padding: 0 20px 12px;
+}
+
+.metrics-details-toggle summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--accent);
+  list-style: none;
+  user-select: none;
+}
+
+.metrics-details-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+.metrics-detail {
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--bg-elevated);
+}
+
+.metrics-detail-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.metrics-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.metrics-block h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.metrics-block--full {
+  margin-top: 16px;
+  grid-column: 1 / -1;
+}
+
+.metrics-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.metrics-dl dt {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.metrics-dl dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.metrics-detail-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.metrics-detail-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.data-table--compact th,
+.data-table--compact td {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
