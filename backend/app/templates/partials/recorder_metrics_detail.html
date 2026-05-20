@@ -30,9 +30,9 @@
     <section class="metrics-block">
       <h4>Архив записи</h4>
       <dl class="metrics-dl">
-        <dt>Начало</dt><dd>{{ metrics.archive_start or '—' }}</dd>
-        <dt>Конец</dt><dd>{{ metrics.archive_end or '—' }}</dd>
-        <dt>Глубина</dt><dd>{{ format_archive_days(metrics.archive_days, archive_days_required()) }}</dd>
+        <dt>Самый короткий</dt><dd>{{ format_archive_days_value(metrics.archive_min_days) }}</dd>
+        <dt>Самый длинный</dt><dd>{{ format_archive_days_value(metrics.archive_max_days) }}</dd>
+        <dt>Диапазон</dt><dd>{{ format_archive_range(metrics.archive_min_days, metrics.archive_max_days, archive_days_required()) }}</dd>
         <dt>Норматив</dt><dd>{{ archive_days_required() }} сут.</dd>
       </dl>
     </section>
@@ -82,7 +82,7 @@
             <td class="recorder-row-host">{{ disk_used_display(disk) }}</td>
             <td class="recorder-row-host">{{ disk_total_display(disk) }}</td>
             <td>{{ disk_percent_display(disk) }}</td>
-            <td>{{ disk_field(disk, 'Temperature', 'temperature') or '—' }}</td>
+            <td>{{ disk_temperature_display(disk) }}</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -56,6 +56,7 @@
         <th>IP камеры</th>
         <th>Модель</th>
         <th>Состояние</th>
+        <th>Архив</th>
         <th>Video loss</th>
         <th>Статус</th>
         <th>Причина</th>
@@ -77,6 +78,7 @@
         <td class="recorder-row-host">{{ ch.camera_ip or '—' }}</td>
         <td>{{ ch.camera_model or '—' }}</td>
         <td>{{ ch.source_state or '—' }}</td>
+        <td class="recorder-row-host">{{ format_archive_days_value(ch.archive_days) }}</td>
         <td>{{ format_bool_ru(ch.video_loss, 'Да', 'Нет') }}</td>
         <td>
           {% set status = ch.health_status %}

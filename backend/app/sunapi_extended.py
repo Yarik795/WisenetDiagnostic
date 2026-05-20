@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import html
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -52,6 +54,7 @@ class RecordingPeriodInfo:
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     archive_days: Optional[float] = None
+    channel_no: Optional[int] = None
 
 
 @dataclass
@@ -69,6 +72,9 @@ class RecorderPollData:
     storage: Optional[StorageInfo] = None
     date_time: Optional[DateTimeInfo] = None
     recording_period: Optional[RecordingPeriodInfo] = None
+    channel_recording_periods: dict[int, RecordingPeriodInfo] = field(
+        default_factory=dict
+    )
     channels: list[ChannelInfo] = field(default_factory=list)
     events: list[EventChannelStatus] = field(default_factory=list)
 
@@ -177,6 +183,214 @@ def merge_channels(*sources: list[ChannelInfo]) -> list[ChannelInfo]:
     return [merged[k] for k in sorted(merged)]
 
 
+def extract_disk_temperature(disk: dict) -> Optional[str]:
+    """Температура из storageinfo: плоские поля, Health или SMART.Attributes."""
+    for key in ("TemperatureCelsius", "temperature_celsius"):
+        val = disk.get(key)
+        if val is not None and str(val).strip() != "":
+            return f"{val} °C"
+
+    for key in ("Temperature", "temperature"):
+        val = disk.get(key)
+        if val is not None and str(val).strip() != "":
+            return str(val).strip()
+
+    for key in ("TemperatureInCelsius", "temperature_in_celsius"):
+        val = disk.get(key)
+        if val is not None and str(val).strip() != "":
+            return f"{val} °C"
+
+    health = disk.get("Health")
+    if isinstance(health, dict):
+        t = health.get("TemperatureInCelsius")
+        if t is not None:
+            return f"{t} °C"
+
+    smart = disk.get("SMART")
+    if isinstance(smart, dict):
+        attrs = smart.get("Attributes") or []
+        if isinstance(attrs, list):
+            for attr in attrs:
+                if not isinstance(attr, dict):
+                    continue
+                name = str(attr.get("Name", "")).lower()
+                if name in ("temperature", "hda temperature"):
+                    val = attr.get("Value")
+                    if val is not None:
+                        return f"{val} °C"
+    return None
+
+
+def normalize_disk_record(disk: dict) -> dict:
+    out = dict(disk)
+    temp = extract_disk_temperature(disk)
+    if temp:
+        out["Temperature"] = temp
+    return out
+
+
+def normalize_storage_disks(disks: list[dict]) -> list[dict]:
+    return [normalize_disk_record(d) for d in disks]
+
+
+_TEMPERATURE_SMART_RE = re.compile(
+    r"Temperature\s*:\s*(\d+)\s*(?:&#?\d+;|\u00b0|\°)?\s*C?",
+    re.IGNORECASE,
+)
+
+
+def parse_temperature_from_smart(text: str) -> Optional[str]:
+    if not text:
+        return None
+    plain = html.unescape(text)
+    plain = re.sub(r"<[^>]+>", " ", plain)
+    m = _TEMPERATURE_SMART_RE.search(plain)
+    if m:
+        return f"{m.group(1)} °C"
+    return None
+
+
+def parse_diskutility_list(body: str) -> list[dict]:
+    data = try_parse_json(body)
+    if isinstance(data, dict) and isinstance(data.get("Disks"), list):
+        return [
+            {"Index": d.get("Index"), "Name": (d.get("Name") or "").strip()}
+            for d in data["Disks"]
+            if isinstance(d, dict) and d.get("Index") is not None
+        ]
+
+    fields = parse_key_value_body(body)
+    pattern = re.compile(r"^Disk\.(\d+)\.(.+)$")
+    disks: dict[int, dict] = {}
+    for key, value in fields.items():
+        m = pattern.match(key)
+        if not m:
+            continue
+        idx = int(m.group(1))
+        attr = m.group(2)
+        disks.setdefault(idx, {})
+        if attr == "Index":
+            disks[idx]["Index"] = int(value) if value.isdigit() else value
+        elif attr == "Name":
+            disks[idx]["Name"] = value.strip()
+        elif attr == "SMART":
+            temp = parse_temperature_from_smart(value)
+            if temp:
+                disks[idx]["Temperature"] = temp
+    return [
+        disks[k]
+        for k in sorted(disks)
+        if disks[k].get("Index") is not None
+    ]
+
+
+def parse_diskutility_detail(body: str) -> dict:
+    data = try_parse_json(body)
+    if isinstance(data, dict) and isinstance(data.get("Disks"), list) and data["Disks"]:
+        item = data["Disks"][0]
+        if isinstance(item, dict):
+            smart = item.get("SMART") or ""
+            temp = parse_temperature_from_smart(str(smart))
+            return {
+                "Index": item.get("Index"),
+                "Name": (item.get("Name") or "").strip(),
+                "Temperature": temp,
+            }
+
+    fields = parse_key_value_body(body)
+    pattern = re.compile(r"^Disk\.(\d+)\.(.+)$")
+    result: dict = {}
+    for key, value in fields.items():
+        m = pattern.match(key)
+        if not m:
+            continue
+        attr = m.group(2)
+        if attr == "Index":
+            result["Index"] = int(value) if value.isdigit() else value
+        elif attr == "Name":
+            result["Name"] = value.strip()
+        elif attr == "SMART":
+            temp = parse_temperature_from_smart(value)
+            if temp:
+                result["Temperature"] = temp
+    return result
+
+
+def merge_disk_temperatures(
+    storage_disks: list[dict],
+    utility_disks: list[dict],
+) -> list[dict]:
+    enriched = normalize_storage_disks(storage_disks)
+    if not utility_disks:
+        return enriched
+
+    by_name = {
+        (u.get("Name") or "").strip().lower(): u
+        for u in utility_disks
+        if u.get("Name")
+    }
+
+    for i, disk in enumerate(enriched):
+        if disk.get("Temperature"):
+            continue
+        model = str(disk.get("Model") or disk.get("model") or "").strip().lower()
+        if model and model in by_name and by_name[model].get("Temperature"):
+            disk["Temperature"] = by_name[model]["Temperature"]
+            continue
+        if i < len(utility_disks) and utility_disks[i].get("Temperature"):
+            disk["Temperature"] = utility_disks[i]["Temperature"]
+    return enriched
+
+
+async def enrich_storage_temperatures(
+    recorder: Recorder,
+    credentials: Credentials,
+    disks: list[dict],
+    *,
+    timeout: float = 20.0,
+    max_detail_fetches: int = 16,
+) -> list[dict]:
+    normalized = normalize_storage_disks(disks)
+    if normalized and all(d.get("Temperature") for d in normalized):
+        return normalized
+
+    list_url = build_url(recorder, "recording.cgi", "diskutility")
+    status, body, _ = await _fetch(recorder, credentials, list_url, timeout)
+    if status != 200 or not body.strip():
+        return normalized
+
+    utility_disks = parse_diskutility_list(body)
+    missing_temp = [u for u in utility_disks if not u.get("Temperature")]
+
+    if missing_temp and len(missing_temp) <= max_detail_fetches:
+
+        async def fetch_one(index) -> dict:
+            detail_url = build_url(
+                recorder,
+                "recording.cgi",
+                "diskutility",
+                Index=str(index),
+            )
+            st, detail_body, _ = await _fetch(
+                recorder, credentials, detail_url, timeout
+            )
+            if st != 200:
+                return {"Index": index}
+            return parse_diskutility_detail(detail_body)
+
+        indices = [u["Index"] for u in missing_temp[:max_detail_fetches]]
+        details = await asyncio.gather(*(fetch_one(i) for i in indices))
+        by_index = {d.get("Index"): d for d in details if d.get("Index") is not None}
+        for u in utility_disks:
+            if u.get("Temperature"):
+                continue
+            detail = by_index.get(u.get("Index"))
+            if detail and detail.get("Temperature"):
+                u["Temperature"] = detail["Temperature"]
+
+    return merge_disk_temperatures(normalized, utility_disks)
+
+
 def parse_storage(body: str) -> StorageInfo:
     data = try_parse_json(body)
     info = StorageInfo()
@@ -189,7 +403,7 @@ def parse_storage(body: str) -> StorageInfo:
             info.used_percent = round(used / total * 100, 1)
         storages = data.get("Storages") or []
         if isinstance(storages, list):
-            info.disks = storages
+            info.disks = normalize_storage_disks(storages)
             info.worst_status = _worst_disk_status(storages)
         return info
 
@@ -199,7 +413,7 @@ def parse_storage(body: str) -> StorageInfo:
     if info.used_space_mb is not None and info.total_space_mb and info.total_space_mb > 0:
         info.used_percent = round(info.used_space_mb / info.total_space_mb * 100, 1)
     disks = parse_storage_indexed(fields)
-    info.disks = disks
+    info.disks = normalize_storage_disks(disks)
     info.worst_status = _worst_disk_status(disks)
     return info
 
@@ -243,17 +457,7 @@ def parse_date(body: str) -> DateTimeInfo:
     return info
 
 
-def parse_recording_period(body: str) -> RecordingPeriodInfo:
-    fields = parse_key_value_body(body)
-    data = try_parse_json(body)
-    info = RecordingPeriodInfo()
-    if isinstance(data, dict):
-        info.start_time = data.get("StartTime")
-        info.end_time = data.get("EndTime")
-    else:
-        info.start_time = fields.get("StartTime")
-        info.end_time = fields.get("EndTime")
-
+def _apply_period_times(info: RecordingPeriodInfo) -> RecordingPeriodInfo:
     start = info.start_time
     end = info.end_time
     if start and end:
@@ -262,6 +466,84 @@ def parse_recording_period(body: str) -> RecordingPeriodInfo:
         if ds and de and de > ds:
             info.archive_days = (de - ds).total_seconds() / 86400
     return info
+
+
+def parse_recording_period(body: str, *, channel_no: Optional[int] = None) -> RecordingPeriodInfo:
+    fields = parse_key_value_body(body)
+    data = try_parse_json(body)
+    info = RecordingPeriodInfo(channel_no=channel_no)
+    if isinstance(data, dict):
+        info.start_time = data.get("StartTime")
+        info.end_time = data.get("EndTime")
+        ch = data.get("Channel")
+        if ch is not None:
+            info.channel_no = int(ch)
+    else:
+        info.start_time = fields.get("StartTime")
+        info.end_time = fields.get("EndTime")
+        if channel_no is not None:
+            prefix = f"Channel.{channel_no}."
+            ch_start = fields.get(f"{prefix}StartTime")
+            ch_end = fields.get(f"{prefix}EndTime")
+            if ch_start and ch_end:
+                info.start_time = ch_start
+                info.end_time = ch_end
+                info.channel_no = channel_no
+
+    return _apply_period_times(info)
+
+
+def _period_has_archive_data(period: RecordingPeriodInfo) -> bool:
+    return period.archive_days is not None or bool(
+        period.start_time and period.end_time
+    )
+
+
+async def fetch_channel_recording_periods(
+    recorder: Recorder,
+    credentials: Credentials,
+    channel_nos: list[int],
+    global_period: Optional[RecordingPeriodInfo],
+    *,
+    timeout: float = 20.0,
+    max_channels: int = 64,
+    max_concurrent: int = 8,
+) -> dict[int, RecordingPeriodInfo]:
+    if not channel_nos:
+        return {}
+
+    sem = asyncio.Semaphore(max_concurrent)
+    nos = channel_nos[:max_channels]
+
+    async def fetch_one(ch_no: int) -> tuple[int, Optional[RecordingPeriodInfo]]:
+        async with sem:
+            url = build_url(
+                recorder,
+                "recording.cgi",
+                "searchrecordingperiod",
+                Channel=str(ch_no),
+            )
+            status, body, _ = await _fetch(recorder, credentials, url, timeout)
+            if status != 200 or not body.strip():
+                return ch_no, None
+            period = parse_recording_period(body, channel_no=ch_no)
+            if _period_has_archive_data(period):
+                return ch_no, period
+            return ch_no, None
+
+    results = await asyncio.gather(*(fetch_one(n) for n in nos))
+    periods: dict[int, RecordingPeriodInfo] = {}
+    for ch_no, period in results:
+        if period is not None:
+            periods[ch_no] = period
+        elif global_period and _period_has_archive_data(global_period):
+            periods[ch_no] = RecordingPeriodInfo(
+                start_time=global_period.start_time,
+                end_time=global_period.end_time,
+                archive_days=global_period.archive_days,
+                channel_no=ch_no,
+            )
+    return periods
 
 
 def parse_eventstatus(body: str) -> list[EventChannelStatus]:
@@ -352,6 +634,13 @@ async def poll_recorder(
     st, b, _ = await _fetch(recorder, credentials, storage_url, timeout)
     if st == 200:
         result.storage = parse_storage(b)
+        if result.storage and result.storage.disks:
+            result.storage.disks = await enrich_storage_temperatures(
+                recorder,
+                credentials,
+                result.storage.disks,
+                timeout=timeout,
+            )
 
     date_url = build_url(recorder, "system.cgi", "date")
     st, b, _ = await _fetch(recorder, credentials, date_url, timeout)
@@ -362,6 +651,15 @@ async def poll_recorder(
     st, b, _ = await _fetch(recorder, credentials, period_url, timeout)
     if st == 200:
         result.recording_period = parse_recording_period(b)
+
+    if result.channels:
+        result.channel_recording_periods = await fetch_channel_recording_periods(
+            recorder,
+            credentials,
+            [ch.channel_no for ch in result.channels],
+            result.recording_period,
+            timeout=timeout,
+        )
 
     event_url = build_url(recorder, "eventstatus.cgi", "eventstatus", action="check")
     st, b, _ = await _fetch(recorder, credentials, event_url, timeout)

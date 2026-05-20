@@ -24,6 +24,9 @@ class ChannelRow:
     health_reason: Optional[str]
     video_loss: Optional[bool]
     last_polled_at: Optional[datetime]
+    archive_start: Optional[str] = None
+    archive_end: Optional[str] = None
+    archive_days: Optional[float] = None
 
 
 @dataclass
@@ -53,6 +56,8 @@ class RecorderMetricsRow:
     storage_used_mb: Optional[float] = None
     storage_total_mb: Optional[float] = None
     disks_json: Optional[str] = None
+    archive_min_days: Optional[float] = None
+    archive_max_days: Optional[float] = None
 
 
 @dataclass
@@ -134,22 +139,36 @@ class StateStore:
             self._migrate_schema(conn)
 
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
-        columns = {
+        metrics_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(recorder_metrics)").fetchall()
         }
-        additions = [
+        metrics_additions = [
             ("local_time", "TEXT"),
             ("utc_time", "TEXT"),
             ("sync_type", "TEXT"),
             ("storage_used_mb", "REAL"),
             ("storage_total_mb", "REAL"),
             ("disks_json", "TEXT"),
+            ("archive_min_days", "REAL"),
+            ("archive_max_days", "REAL"),
         ]
-        for name, col_type in additions:
-            if name not in columns:
+        for name, col_type in metrics_additions:
+            if name not in metrics_columns:
                 conn.execute(
                     f"ALTER TABLE recorder_metrics ADD COLUMN {name} {col_type}"
                 )
+
+        channel_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(channels)").fetchall()
+        }
+        channel_additions = [
+            ("archive_start", "TEXT"),
+            ("archive_end", "TEXT"),
+            ("archive_days", "REAL"),
+        ]
+        for name, col_type in channel_additions:
+            if name not in channel_columns:
+                conn.execute(f"ALTER TABLE channels ADD COLUMN {name} {col_type}")
 
     def upsert_channel(
         self,
@@ -164,6 +183,9 @@ class StateStore:
         health_reason: Optional[str] = None,
         video_loss: Optional[bool] = None,
         last_polled_at: Optional[datetime] = None,
+        archive_start: Optional[str] = None,
+        archive_end: Optional[str] = None,
+        archive_days: Optional[float] = None,
     ) -> None:
         polled = _iso(last_polled_at)
         with self._connect() as conn:
@@ -171,8 +193,9 @@ class StateStore:
                 """
                 INSERT INTO channels (
                     recorder_id, channel_no, name, camera_ip, camera_model,
-                    source_state, health_status, health_reason, video_loss, last_polled_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_state, health_status, health_reason, video_loss, last_polled_at,
+                    archive_start, archive_end, archive_days
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id, channel_no) DO UPDATE SET
                     name=excluded.name,
                     camera_ip=excluded.camera_ip,
@@ -181,7 +204,10 @@ class StateStore:
                     health_status=excluded.health_status,
                     health_reason=excluded.health_reason,
                     video_loss=excluded.video_loss,
-                    last_polled_at=excluded.last_polled_at
+                    last_polled_at=excluded.last_polled_at,
+                    archive_start=excluded.archive_start,
+                    archive_end=excluded.archive_end,
+                    archive_days=excluded.archive_days
                 """,
                 (
                     recorder_id,
@@ -194,6 +220,9 @@ class StateStore:
                     health_reason,
                     _bool_int(video_loss),
                     polled,
+                    archive_start,
+                    archive_end,
+                    archive_days,
                 ),
             )
 
@@ -250,6 +279,8 @@ class StateStore:
         archive_start: Optional[str] = None,
         archive_end: Optional[str] = None,
         archive_days: Optional[float] = None,
+        archive_min_days: Optional[float] = None,
+        archive_max_days: Optional[float] = None,
         channel_count: int = 0,
         channels_ok: int = 0,
         channels_warn: int = 0,
@@ -271,12 +302,13 @@ class StateStore:
                     recorder_id, model, firmware_version, device_online,
                     health_status, health_reason, ntp_status, time_skew_seconds,
                     storage_used_percent, storage_status, archive_start, archive_end,
-                    archive_days, channel_count, channels_ok, channels_warn,
+                    archive_days, archive_min_days, archive_max_days,
+                    channel_count, channels_ok, channels_warn,
                     channels_error, channels_unknown, last_polled_at,
                     local_time, utc_time, sync_type,
                     storage_used_mb, storage_total_mb, disks_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -290,6 +322,8 @@ class StateStore:
                     archive_start=excluded.archive_start,
                     archive_end=excluded.archive_end,
                     archive_days=excluded.archive_days,
+                    archive_min_days=excluded.archive_min_days,
+                    archive_max_days=excluded.archive_max_days,
                     channel_count=excluded.channel_count,
                     channels_ok=excluded.channels_ok,
                     channels_warn=excluded.channels_warn,
@@ -317,6 +351,8 @@ class StateStore:
                     archive_start,
                     archive_end,
                     archive_days,
+                    archive_min_days,
+                    archive_max_days,
                     channel_count,
                     channels_ok,
                     channels_warn,
@@ -441,6 +477,9 @@ def _channel_from_row(row: sqlite3.Row) -> ChannelRow:
         health_reason=row["health_reason"],
         video_loss=None if vl is None else bool(vl),
         last_polled_at=_parse_iso(row["last_polled_at"]),
+        archive_start=row["archive_start"] if "archive_start" in row.keys() else None,
+        archive_end=row["archive_end"] if "archive_end" in row.keys() else None,
+        archive_days=row["archive_days"] if "archive_days" in row.keys() else None,
     )
 
 
@@ -459,6 +498,8 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
         archive_start=row["archive_start"],
         archive_end=row["archive_end"],
         archive_days=row["archive_days"],
+        archive_min_days=row["archive_min_days"] if "archive_min_days" in row.keys() else None,
+        archive_max_days=row["archive_max_days"] if "archive_max_days" in row.keys() else None,
         channel_count=row["channel_count"],
         channels_ok=row["channels_ok"],
         channels_warn=row["channels_warn"],

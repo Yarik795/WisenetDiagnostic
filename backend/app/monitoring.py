@@ -10,7 +10,13 @@ from .health import HealthStatus, worst_status
 from .models import CheckStatus, MonitoringSettings, Recorder
 from .state_store import StateStore
 from .sunapi import check_recorder
-from .sunapi_extended import ChannelInfo, EventChannelStatus, RecorderPollData, poll_recorder
+from .sunapi_extended import (
+    ChannelInfo,
+    EventChannelStatus,
+    RecorderPollData,
+    RecordingPeriodInfo,
+    poll_recorder,
+)
 
 logger = logging.getLogger("monitoring")
 
@@ -20,13 +26,20 @@ def evaluate_channel_health(
     event: Optional[EventChannelStatus],
     settings: MonitoringSettings,
 ) -> tuple[str, str]:
+    state = (ch.source_state or "").lower()
+
+    if state == "deactive":
+        return HealthStatus.UNKNOWN.value, "Канал деактивирован (не используется)"
+    if state == "off":
+        return HealthStatus.WARN.value, "Канал выключен"
+    if state in ("covert1", "covert2"):
+        return HealthStatus.WARN.value, f"Скрытый режим ({ch.source_state})"
+
     if event and event.video_loss is True:
         return HealthStatus.ERROR.value, "Потеря видео (VideoLoss)"
     if event and event.connected is False:
         return HealthStatus.ERROR.value, "Камера не подключена"
-    state = (ch.source_state or "").lower()
-    if state in ("deactive", "off"):
-        return HealthStatus.ERROR.value, f"Канал {ch.source_state}"
+
     reg = (ch.register_status or "").lower()
     if reg and reg not in ("success", "ok"):
         return HealthStatus.WARN.value, f"Статус регистрации: {ch.register_status}"
@@ -37,10 +50,22 @@ def evaluate_channel_health(
     return HealthStatus.UNKNOWN.value, "Нет данных о канале"
 
 
+def archive_bounds(
+    periods: dict[int, RecordingPeriodInfo],
+) -> tuple[Optional[float], Optional[float]]:
+    days = [p.archive_days for p in periods.values() if p.archive_days is not None]
+    if not days:
+        return None, None
+    return min(days), max(days)
+
+
 def evaluate_recorder_health(
     poll: RecorderPollData,
     channel_statuses: list[str],
     settings: MonitoringSettings,
+    *,
+    archive_min_days: Optional[float] = None,
+    archive_max_days: Optional[float] = None,
 ) -> tuple[str, str]:
     if not poll.online:
         return HealthStatus.ERROR.value, poll.error or "NVR недоступен"
@@ -81,14 +106,29 @@ def evaluate_recorder_health(
                     status = HealthStatus.WARN.value
                 reasons.append(f"Расхождение времени {int(skew)} с")
 
-    if poll.recording_period and poll.recording_period.archive_days is not None:
-        days = poll.recording_period.archive_days
-        if days < settings.archive_days_required:
+    archive_check_days = archive_min_days
+    if archive_check_days is None and poll.recording_period:
+        archive_check_days = poll.recording_period.archive_days
+    if archive_check_days is not None:
+        if archive_check_days < settings.archive_days_required:
             if status != HealthStatus.ERROR.value:
                 status = HealthStatus.WARN.value
-            reasons.append(
-                f"Глубина архива {days:.1f} сут. (норма {settings.archive_days_required})"
-            )
+            if archive_min_days is not None and archive_max_days is not None:
+                if archive_min_days != archive_max_days:
+                    reasons.append(
+                        f"Глубина архива {archive_min_days:.1f}-{archive_max_days:.1f} сут. "
+                        f"(норма {settings.archive_days_required})"
+                    )
+                else:
+                    reasons.append(
+                        f"Глубина архива {archive_min_days:.1f} сут. "
+                        f"(норма {settings.archive_days_required})"
+                    )
+            else:
+                reasons.append(
+                    f"Глубина архива {archive_check_days:.1f} сут. "
+                    f"(норма {settings.archive_days_required})"
+                )
 
     ch_worst = worst_status(*channel_statuses) if channel_statuses else HealthStatus.UNKNOWN.value
     if ch_worst == HealthStatus.ERROR.value:
@@ -115,11 +155,14 @@ def apply_poll_result(
     channel_statuses: list[str] = []
     channel_nos: list[int] = []
 
+    periods = poll.channel_recording_periods
+
     for ch in poll.channels:
         event = events_map.get(ch.channel_no)
         h_status, h_reason = evaluate_channel_health(ch, event, settings)
         channel_statuses.append(h_status)
         channel_nos.append(ch.channel_no)
+        period = periods.get(ch.channel_no)
         state.upsert_channel(
             recorder.id,
             ch.channel_no,
@@ -131,6 +174,9 @@ def apply_poll_result(
             health_reason=h_reason,
             video_loss=event.video_loss if event else None,
             last_polled_at=polled_at,
+            archive_start=period.start_time if period else None,
+            archive_end=period.end_time if period else None,
+            archive_days=period.archive_days if period else None,
         )
         state.record_history(
             "channel",
@@ -142,13 +188,25 @@ def apply_poll_result(
 
     state.remove_channels_not_in(recorder.id, channel_nos)
 
-    rec_status, rec_reason = evaluate_recorder_health(poll, channel_statuses, settings)
+    archive_min_days, archive_max_days = archive_bounds(periods)
+    if archive_min_days is None and poll.recording_period:
+        archive_min_days = poll.recording_period.archive_days
+        archive_max_days = poll.recording_period.archive_days
+
+    rec_status, rec_reason = evaluate_recorder_health(
+        poll,
+        channel_statuses,
+        settings,
+        archive_min_days=archive_min_days,
+        archive_max_days=archive_max_days,
+    )
     counts = _count_statuses(channel_statuses)
 
     storage_pct = poll.storage.used_percent if poll.storage else None
     storage_st = poll.storage.worst_status if poll.storage else None
-    archive_days = (
-        poll.recording_period.archive_days if poll.recording_period else None
+    global_period = poll.recording_period
+    archive_days = archive_max_days or (
+        global_period.archive_days if global_period else None
     )
 
     state.upsert_recorder_metrics(
@@ -162,11 +220,11 @@ def apply_poll_result(
         time_skew_seconds=poll.date_time.skew_seconds if poll.date_time else None,
         storage_used_percent=storage_pct,
         storage_status=storage_st,
-        archive_start=(
-            poll.recording_period.start_time if poll.recording_period else None
-        ),
-        archive_end=poll.recording_period.end_time if poll.recording_period else None,
+        archive_start=global_period.start_time if global_period else None,
+        archive_end=global_period.end_time if global_period else None,
         archive_days=archive_days,
+        archive_min_days=archive_min_days,
+        archive_max_days=archive_max_days,
         channel_count=len(poll.channels),
         channels_ok=counts["ok"],
         channels_warn=counts["warn"],

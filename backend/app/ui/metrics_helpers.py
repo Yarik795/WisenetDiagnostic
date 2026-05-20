@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Optional
 
 
@@ -33,13 +34,35 @@ def format_percent(value: Optional[float]) -> str:
     return f"{float(value):.1f}%"
 
 
+def format_archive_days_value(days: Optional[float]) -> str:
+    if days is None:
+        return "—"
+    return f"{days:.1f} сут."
+
+
 def format_archive_days(days: Optional[float], required: int = 30) -> str:
     if days is None:
         return "—"
-    text = f"{days:.1f} сут."
+    text = format_archive_days_value(days)
     if days < required:
         return f"{text} (норма {required})"
     return text
+
+
+def format_archive_range(
+    min_days: Optional[float],
+    max_days: Optional[float],
+    required: int = 30,
+) -> str:
+    if min_days is None and max_days is None:
+        return "—"
+    if min_days is not None and max_days is not None and min_days != max_days:
+        text = f"{min_days:.1f}-{max_days:.1f} сут."
+        if min_days < required:
+            return f"{text} (норма {required})"
+        return text
+    value = max_days if max_days is not None else min_days
+    return format_archive_days(value, required)
 
 
 def format_skew(seconds: Optional[float]) -> str:
@@ -116,3 +139,40 @@ def disk_percent_display(disk: dict[str, Any]) -> str:
     if used is None or total is None or total <= 0:
         return "—"
     return format_percent(used / total * 100)
+
+
+def disk_temperature_display(disk: dict[str, Any]) -> str:
+    for key in ("TemperatureCelsius", "temperature_celsius"):
+        val = disk.get(key)
+        if val is not None and str(val).strip() != "":
+            return f"{val} °C"
+    temp = disk_field(
+        disk,
+        "Temperature",
+        "temperature",
+        "TemperatureInCelsius",
+    )
+    if temp:
+        if temp.isdigit():
+            return f"{temp} °C"
+        return temp
+    health = disk.get("Health")
+    if isinstance(health, dict) and health.get("TemperatureInCelsius") is not None:
+        return f"{health['TemperatureInCelsius']} °C"
+    return "—"
+
+
+def max_disk_temperature(disks_json: Optional[str]) -> Optional[str]:
+    disks = parse_disks_json(disks_json)
+    temps: list[str] = []
+    for disk in disks:
+        t = disk_temperature_display(disk)
+        if t != "—":
+            temps.append(t)
+    if not temps:
+        return None
+    def _temp_value(label: str) -> int:
+        m = re.search(r"\d+", label)
+        return int(m.group()) if m else 0
+
+    return max(temps, key=_temp_value)
