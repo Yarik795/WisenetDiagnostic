@@ -96,6 +96,13 @@ function initHighlightObject() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  if (typeof htmx === "undefined") {
+    showToast(
+      "error",
+      "Не загружен HTMX — кнопки «Проверить» и формы не работают. Обновите страницу или переустановите приложение."
+    );
+    console.error("[wisenet] htmx is undefined — проверьте /static/js/htmx.min.js");
+  }
   applyCollapsedState();
   initGroupToggles();
   initMobileSidebar();
