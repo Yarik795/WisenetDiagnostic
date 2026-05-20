@@ -1,0 +1,20 @@
+{
+  "credentials": {
+    "username": "admin",
+    "password": "CHANGE_ME"
+  },
+  "recorders": [
+    {
+      "id": "nvr-001",
+      "object_name": "Отделение №12 — Москва",
+      "name": "NVR-1",
+      "host": "10.1.2.3",
+      "port": 80,
+      "use_https": false,
+      "enabled": true,
+      "last_status": null,
+      "last_check_at": null,
+      "last_error": null
+    }
+  ]
+}
