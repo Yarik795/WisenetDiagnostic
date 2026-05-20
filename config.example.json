@@ -1,7 +1,7 @@
 {
   "credentials": {
     "username": "admin",
-    "password": "CHANGE_ME"
+    "password": ""
   },
   "monitoring": {
     "poll_interval_minutes": 5,
@@ -11,7 +11,8 @@
     "time_skew_warn_seconds": 60,
     "time_skew_error_seconds": 300,
     "disk_usage_warn_percent": 85,
-    "disk_usage_error_percent": 95
+    "disk_usage_error_percent": 95,
+    "ntp_server": "203.248.240.140"
   },
   "recorders": [
     {

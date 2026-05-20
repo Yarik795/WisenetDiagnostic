@@ -5,18 +5,29 @@ from fastapi.testclient import TestClient
 
 from app.config_store import ConfigStore
 from app.main import app
-from app.ui.dependencies import get_store
+from app.models import MonitoringSettings, RecorderCreate
+from app.ui.dependencies import get_state_store, get_store
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     config_path = tmp_path / "config.json"
     store = ConfigStore(path=config_path)
+    db_path = tmp_path / "monitoring.db"
+
+    from app.state_store import StateStore
+
+    state = StateStore(path=db_path)
+    state.init_db()
 
     def override_store() -> ConfigStore:
         return store
 
+    def override_state() -> StateStore:
+        return state
+
     app.dependency_overrides[get_store] = override_store
+    app.dependency_overrides[get_state_store] = override_state
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -123,3 +134,94 @@ def test_check_returns_row_fragment(
     assert r.status_code == 200
     assert "recorder-row" in r.text
     assert "Исправно" in r.text or "Доступен" in r.text
+
+
+def test_enable_ntp_missing_server_config(client: TestClient) -> None:
+    store = app.dependency_overrides[get_store]()
+    store.update_credentials("admin", "secret")
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.5",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+
+    r = client.post(
+        f"/recorders/{rec.id}/ntp/enable",
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://127.0.0.1/objects",
+        },
+    )
+    assert r.status_code == 400
+    trigger = r.headers.get("HX-Trigger", "")
+    assert "monitoring.ntp_server" in trigger
+
+
+def test_enable_ntp_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timezone
+
+    from app.sunapi_extended import EnableNtpResult
+    from app.web import routes as web_routes
+
+    store = app.dependency_overrides[get_store]()
+    config = store.load()
+    config.monitoring = MonitoringSettings(ntp_server="203.248.240.140")
+    store.save(config)
+    store.update_credentials("admin", "secret")
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.5",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+
+    state = app.dependency_overrides[get_state_store]()
+    polled_at = datetime.now(timezone.utc)
+    state.upsert_recorder_metrics(
+        rec.id,
+        device_online=True,
+        health_status="ok",
+        sync_type="Manual",
+        ntp_status="Fail",
+        last_polled_at=polled_at,
+    )
+
+    async def fake_enable(recorder, credentials, ntp_server, timeout=20.0):
+        return EnableNtpResult(success=True)
+
+    async def fake_poll(config_store, state_store, recorder, include_inventory=True):
+        state_store.upsert_recorder_metrics(
+            recorder.id,
+            device_online=True,
+            health_status="ok",
+            sync_type="NTP",
+            ntp_status="Success",
+            last_polled_at=polled_at,
+        )
+
+    monkeypatch.setattr(web_routes, "enable_recorder_ntp", fake_enable)
+    monkeypatch.setattr(web_routes, "poll_single_recorder", fake_poll)
+
+    r = client.post(
+        f"/recorders/{rec.id}/ntp/enable",
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://127.0.0.1/objects",
+        },
+    )
+    assert r.status_code == 200
+    assert "recorder-row" in r.text
+    assert "NTP" in r.text
+    trigger = r.headers.get("HX-Trigger", "")
+    assert "success" in trigger
+    assert "203.248.240.140" in trigger
+    assert "\\u0441\\u0438\\u043d" in trigger  # "син" в JSON (ensure_ascii)

@@ -62,6 +62,7 @@ class MonitoringSettings(BaseModel):
     time_skew_error_seconds: int = Field(default=300, ge=1)
     disk_usage_warn_percent: int = Field(default=85, ge=1, le=100)
     disk_usage_error_percent: int = Field(default=95, ge=1, le=100)
+    ntp_server: str = ""
 
 
 class AppConfig(BaseModel):

@@ -22,7 +22,27 @@
       <dl class="metrics-dl">
         <dt>Локальное</dt><dd>{{ metrics.local_time or '—' }}</dd>
         <dt>UTC</dt><dd>{{ metrics.utc_time or '—' }}</dd>
-        <dt>Синхронизация</dt><dd>{{ metrics.sync_type or '—' }}</dd>
+        <dt>Синхронизация</dt>
+        <dd>
+          <div class="sync-row">
+            <span class="{{ sync_type_badge_class(metrics.sync_type) }}">{{ sync_type_label(metrics.sync_type) }}</span>
+            {% if is_manual_sync(metrics.sync_type) and recorder.enabled %}
+            <button
+              type="button"
+              class="btn btn-outline btn-sm sync-action-btn"
+              {% set _swap = ntp_swap_target|default('#recorder-row-' ~ recorder.id) %}
+              hx-post="/recorders/{{ recorder.id }}/ntp/enable"
+              hx-target="{{ _swap }}"
+              hx-swap="outerHTML"
+              hx-indicator="#ntp-spinner-{{ recorder.id }}"
+              hx-disabled-elt="this"
+            >
+              <span id="ntp-spinner-{{ recorder.id }}" class="htmx-indicator spinner"></span>
+              Включить NTP
+            </button>
+            {% endif %}
+          </div>
+        </dd>
         <dt>NTP</dt><dd>{{ metrics.ntp_status or '—' }}</dd>
         <dt>Расхождение</dt><dd>{{ format_skew(metrics.time_skew_seconds) }}</dd>
       </dl>

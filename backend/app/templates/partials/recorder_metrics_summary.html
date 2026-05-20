@@ -10,6 +10,7 @@
   {% if metrics.archive_min_days is not none or metrics.archive_max_days is not none or metrics.archive_days is not none %}
   <span>архив {{ format_archive_range(metrics.archive_min_days or metrics.archive_days, metrics.archive_max_days or metrics.archive_days, archive_days_required()) }}</span>
   {% endif %}
+  {% if metrics.sync_type %}<span class="{{ sync_type_badge_class(metrics.sync_type) }} sync-badge--inline">{{ sync_type_label(metrics.sync_type) }}</span>{% endif %}
   {% if metrics.ntp_status %}<span>NTP {{ metrics.ntp_status }}</span>{% endif %}
   {% if metrics.time_skew_seconds is not none %}<span>Δt {{ format_skew(metrics.time_skew_seconds) }}</span>{% endif %}
   <span>{{ format_channel_counts(metrics.channel_count, metrics.channels_ok, metrics.channels_warn, metrics.channels_error, metrics.channels_unknown) }}</span>

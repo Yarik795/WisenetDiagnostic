@@ -13,6 +13,7 @@ from ..config_store import ConfigStore
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..monitoring import poll_single_recorder, run_inventory_cycle, run_poll_cycle
+from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
 from ..ui.dependencies import get_state_store, get_store
 from ..ui.grouping import (
@@ -23,6 +24,7 @@ from ..ui.grouping import (
     problem_count,
 )
 from ..ui.helpers import display_recorder_name
+from ..ui.metrics_helpers import sync_type_label
 from .templates_env import templates
 from .validation import parse_recorder_form
 
@@ -45,6 +47,34 @@ def _object_names(store: ConfigStore) -> list[str]:
 
 def _metrics_map(state: StateStore):
     return metrics_map_from_list(state.list_recorder_metrics())
+
+
+def _recorder_partial_template(referer: str) -> str:
+    if "/recorders" in referer and "/objects" not in referer:
+        return "partials/recorder_table_row.html"
+    if "/channels" in referer:
+        return "partials/recorder_metrics_panel.html"
+    return "partials/recorder_row.html"
+
+
+def _recorder_partial_context(
+    recorder,
+    metrics,
+    *,
+    template: str,
+    metrics_map: dict | None = None,
+) -> dict:
+    status = effective_status(recorder, metrics)
+    ctx: dict = {"recorder": recorder, "status": status, "metrics": metrics}
+    if template == "partials/recorder_table_row.html":
+        ctx["metrics_map"] = metrics_map or {recorder.id: metrics}
+    return ctx
+
+
+def _attach_toast(response: HTMLResponse, toast_type: str, message: str) -> HTMLResponse:
+    payload = {"showToast": {"type": toast_type, "message": message}}
+    response.headers["HX-Trigger"] = json.dumps(payload, ensure_ascii=True)
+    return response
 
 
 def _recorders_by_id(store: ConfigStore) -> dict[str, object]:
@@ -379,12 +409,7 @@ async def recorder_check(
         return HTMLResponse("Не найден", status_code=404)
     outcome_status = updated.last_status
     metrics = state.get_recorder_metrics(recorder_id)
-    status = effective_status(updated, metrics)
-    template = (
-        "partials/recorder_table_row.html"
-        if "/recorders" in referer and "/objects" not in referer
-        else "partials/recorder_row.html"
-    )
+    template = _recorder_partial_template(referer)
     duration_ms = round((time.perf_counter() - start) * 1000)
     check_logger.info(
         "check finished",
@@ -392,7 +417,7 @@ async def recorder_check(
             "event": "check_done",
             "extra_recorder_id": recorder_id,
             "extra_status": outcome_status.value if outcome_status else None,
-            "extra_effective_status": status,
+            "extra_effective_status": effective_status(updated, metrics),
             "extra_error": updated.last_error,
             "extra_duration_ms": duration_ms,
             "extra_template": template,
@@ -402,25 +427,85 @@ async def recorder_check(
     response = templates.TemplateResponse(
         request,
         template,
-        {"recorder": updated, "status": status, "metrics": metrics},
+        _recorder_partial_context(updated, metrics, template=template),
     )
     if outcome_status and outcome_status.value == "online":
-        payload = {
-            "showToast": {
-                "type": "success",
-                "message": f"{display_recorder_name(updated)}: доступен",
-            }
-        }
-        response.headers["HX-Trigger"] = json.dumps(payload, ensure_ascii=True)
-    elif outcome_status and outcome_status.value == "offline":
-        payload = {
-            "showToast": {
-                "type": "error",
-                "message": updated.last_error or "Недоступен",
-            }
-        }
-        response.headers["HX-Trigger"] = json.dumps(payload, ensure_ascii=True)
+        return _attach_toast(
+            response,
+            "success",
+            f"{display_recorder_name(updated)}: доступен",
+        )
+    if outcome_status and outcome_status.value == "offline":
+        return _attach_toast(
+            response,
+            "error",
+            updated.last_error or "Недоступен",
+        )
     return response
+
+
+@router.post("/recorders/{recorder_id}/ntp/enable", response_class=HTMLResponse)
+async def recorder_enable_ntp(
+    request: Request,
+    recorder_id: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    referer = request.headers.get("HX-Current-URL", "")
+    template = _recorder_partial_template(referer)
+
+    recorder = store.get_recorder(recorder_id)
+    if not recorder:
+        return HTMLResponse("Не найден", status_code=404)
+
+    if not recorder.enabled:
+        return HTMLResponse("Регистратор отключён", status_code=400)
+
+    config = store.load()
+    credentials = config.credentials
+    ntp_server = (config.monitoring.ntp_server or "").strip()
+    metrics = state.get_recorder_metrics(recorder_id)
+
+    def _error_response(message: str, status_code: int = 400) -> HTMLResponse:
+        response = templates.TemplateResponse(
+            request,
+            template,
+            _recorder_partial_context(recorder, metrics, template=template),
+            status_code=status_code,
+        )
+        return _attach_toast(response, "error", message)
+
+    if not ntp_server:
+        return _error_response(
+            "Укажите NTP-сервер в config.json: monitoring.ntp_server"
+        )
+
+    if not credentials.username or not credentials.password:
+        return _error_response("Не заданы учётные данные API в настройках")
+
+    result = await enable_recorder_ntp(recorder, credentials, ntp_server)
+    if not result.success:
+        return _error_response(result.error or "Не удалось включить NTP")
+
+    await poll_single_recorder(store, state, recorder, include_inventory=False)
+    updated = store.get_recorder(recorder_id) or recorder
+    metrics = state.get_recorder_metrics(recorder_id)
+    sync_label = sync_type_label(metrics.sync_type if metrics else "NTP")
+    ntp_status = metrics.ntp_status if metrics and metrics.ntp_status else "—"
+
+    response = templates.TemplateResponse(
+        request,
+        template,
+        _recorder_partial_context(updated, metrics, template=template),
+    )
+    return _attach_toast(
+        response,
+        "success",
+        (
+            f"{display_recorder_name(updated)}: синхронизация переключена на NTP "
+            f"({ntp_server}). Текущий режим: {sync_label}, статус NTP: {ntp_status}"
+        ),
+    )
 
 
 def _form_validation_error(

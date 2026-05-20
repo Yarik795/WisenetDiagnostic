@@ -46,7 +46,15 @@ class DateTimeInfo:
     utc_time: Optional[str] = None
     sync_type: Optional[str] = None
     ntp_status: Optional[str] = None
+    ntp_url_list: Optional[str] = None
     skew_seconds: Optional[float] = None
+
+
+@dataclass
+class EnableNtpResult:
+    success: bool
+    error: Optional[str] = None
+    date_time: Optional[DateTimeInfo] = None
 
 
 @dataclass
@@ -432,6 +440,31 @@ def _worst_disk_status(disks: list[dict]) -> Optional[str]:
     return None
 
 
+def _normalize_ntp_url_list(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return ",".join(str(v) for v in value if v)
+    return str(value).strip() or None
+
+
+def is_sunapi_set_success(body: str) -> bool:
+    text = (body or "").strip()
+    if not text:
+        return False
+    if text.upper() == "OK":
+        return True
+    data = try_parse_json(text)
+    if isinstance(data, dict):
+        response = str(data.get("Response", "")).lower()
+        if response in ("success", "ok"):
+            return True
+    lowered = text.lower()
+    if "error" in lowered or "fail" in lowered or "denied" in lowered:
+        return False
+    return False
+
+
 def parse_date(body: str) -> DateTimeInfo:
     data = try_parse_json(body)
     info = DateTimeInfo()
@@ -440,12 +473,14 @@ def parse_date(body: str) -> DateTimeInfo:
         info.utc_time = data.get("UTCTime")
         info.sync_type = data.get("SyncType")
         info.ntp_status = data.get("NTPStatus")
+        info.ntp_url_list = _normalize_ntp_url_list(data.get("NTPURLList"))
     else:
         fields = parse_key_value_body(body)
         info.local_time = fields.get("LocalTime")
         info.utc_time = fields.get("UTCTime")
         info.sync_type = fields.get("SyncType")
         info.ntp_status = fields.get("NTPStatus")
+        info.ntp_url_list = fields.get("NTPURLList")
 
     ref = info.utc_time or info.local_time
     if ref:
@@ -455,6 +490,74 @@ def parse_date(body: str) -> DateTimeInfo:
             local_utc = dt.replace(tzinfo=timezone.utc)
             info.skew_seconds = abs((now - local_utc).total_seconds())
     return info
+
+
+async def fetch_date_info(
+    recorder: Recorder,
+    credentials: Credentials,
+    *,
+    timeout: float = 20.0,
+) -> tuple[Optional[DateTimeInfo], Optional[str]]:
+    url = build_url(recorder, "system.cgi", "date")
+    status, body, err = await _fetch(recorder, credentials, url, timeout)
+    if err:
+        return None, err
+    if status >= 400 or not body.strip():
+        return None, f"HTTP {status}"
+    return parse_date(body), None
+
+
+async def enable_recorder_ntp(
+    recorder: Recorder,
+    credentials: Credentials,
+    ntp_server: str,
+    *,
+    timeout: float = 20.0,
+) -> EnableNtpResult:
+    if not credentials.username or not credentials.password:
+        return EnableNtpResult(success=False, error="Не заданы учётные данные API")
+
+    server = (ntp_server or "").strip()
+    if not server:
+        return EnableNtpResult(
+            success=False,
+            error="Не задан NTP-сервер (monitoring.ntp_server в config.json)",
+        )
+
+    set_url = build_url(
+        recorder,
+        "system.cgi",
+        "date",
+        action="set",
+        SyncType="NTP",
+        NTPURLList=server,
+    )
+    status, body, err = await _fetch(recorder, credentials, set_url, timeout)
+    if err:
+        return EnableNtpResult(success=False, error=err)
+    if status >= 400:
+        return EnableNtpResult(success=False, error=f"HTTP {status}")
+    if not is_sunapi_set_success(body):
+        snippet = (body or "").strip()[:300]
+        return EnableNtpResult(
+            success=False,
+            error=snippet or "Устройство не подтвердило смену режима синхронизации",
+        )
+
+    date_info, view_err = await fetch_date_info(recorder, credentials, timeout=timeout)
+    if view_err:
+        return EnableNtpResult(
+            success=False,
+            error=f"Режим применён, но не удалось проверить: {view_err}",
+        )
+    if not date_info or (date_info.sync_type or "").upper() != "NTP":
+        actual = date_info.sync_type if date_info else "неизвестно"
+        return EnableNtpResult(
+            success=False,
+            error=f"Команда отправлена, но устройство вернуло SyncType={actual}",
+            date_time=date_info,
+        )
+    return EnableNtpResult(success=True, date_time=date_info)
 
 
 def _apply_period_times(info: RecordingPeriodInfo) -> RecordingPeriodInfo:

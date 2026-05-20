@@ -65,6 +65,32 @@ def format_archive_range(
     return format_archive_days(value, required)
 
 
+def is_manual_sync(sync_type: Optional[str]) -> bool:
+    return (sync_type or "").strip().lower() == "manual"
+
+
+def sync_type_label(sync_type: Optional[str]) -> str:
+    if not sync_type:
+        return "—"
+    mapping = {
+        "manual": "Ручная",
+        "ntp": "NTP",
+        "gps": "GPS",
+    }
+    return mapping.get(sync_type.strip().lower(), sync_type)
+
+
+def sync_type_badge_class(sync_type: Optional[str]) -> str:
+    key = (sync_type or "").strip().lower()
+    if key == "manual":
+        return "sync-badge sync-badge--manual"
+    if key == "ntp":
+        return "sync-badge sync-badge--ntp"
+    if key == "gps":
+        return "sync-badge sync-badge--gps"
+    return "sync-badge"
+
+
 def format_skew(seconds: Optional[float]) -> str:
     if seconds is None:
         return "—"

@@ -32,9 +32,8 @@
 {% if filter_recorder and recorders_by_id.get(filter_recorder) %}
 {% set recorder = recorders_by_id[filter_recorder] %}
 {% set metrics = metrics_map.get(filter_recorder) %}
-<div style="margin-bottom:16px;">
-  {% include "partials/recorder_metrics_detail.html" %}
-</div>
+{% set ntp_swap_target = '#recorder-metrics-' ~ recorder.id %}
+{% include "partials/recorder_metrics_panel.html" %}
 {% endif %}
 
 {% if not channels %}
