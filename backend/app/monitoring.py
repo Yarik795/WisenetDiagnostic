@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from .config_store import ConfigStore
+from .config_store import ConfigStore, RecorderStatusUpdate
 from .health import HealthStatus, worst_status
 from .models import CheckStatus, MonitoringSettings, Recorder
 from .state_store import StateStore
@@ -179,7 +179,9 @@ def apply_poll_result(
     poll: RecorderPollData,
     settings: MonitoringSettings,
     polled_at: datetime,
-) -> None:
+    *,
+    update_config: bool = True,
+) -> Optional[RecorderStatusUpdate]:
     events_map = {e.channel_no: e for e in poll.events}
     channel_statuses: list[str] = []
     channel_nos: list[int] = []
@@ -271,12 +273,15 @@ def apply_poll_result(
     state.record_history("recorder", recorder.id, rec_status, rec_reason, polled_at)
 
     check_status = CheckStatus.ONLINE if poll.online else CheckStatus.OFFLINE
-    store.update_recorder_status(
-        recorder.id,
-        check_status,
-        polled_at,
-        poll.error if not poll.online else None,
+    status_update = RecorderStatusUpdate(
+        recorder_id=recorder.id,
+        status=check_status,
+        checked_at=polled_at,
+        error=poll.error if not poll.online else None,
     )
+    if update_config:
+        store.update_recorder_statuses([status_update])
+    return status_update
 
 
 def _count_statuses(statuses: list[str]) -> dict[str, int]:
@@ -292,9 +297,10 @@ async def poll_single_recorder(
     recorder: Recorder,
     *,
     include_inventory: bool = True,
-) -> None:
+    update_config: bool = True,
+) -> Optional[RecorderStatusUpdate]:
     if not recorder.enabled:
-        return
+        return None
     config = config_store.load()
     credentials = config.credentials
     settings = config.monitoring
@@ -305,7 +311,15 @@ async def poll_single_recorder(
         credentials,
         include_inventory=include_inventory,
     )
-    apply_poll_result(config_store, state_store, recorder, poll, settings, polled_at)
+    return apply_poll_result(
+        config_store,
+        state_store,
+        recorder,
+        poll,
+        settings,
+        polled_at,
+        update_config=update_config,
+    )
 
 
 async def run_poll_cycle(
@@ -320,20 +334,26 @@ async def run_poll_cycle(
         return
 
     sem = asyncio.Semaphore(config.monitoring.max_concurrent_polls)
+    status_updates: list[RecorderStatusUpdate] = []
 
     async def _one(rec: Recorder) -> None:
         async with sem:
             try:
-                await poll_single_recorder(
+                update = await poll_single_recorder(
                     config_store,
                     state_store,
                     rec,
                     include_inventory=include_inventory,
+                    update_config=False,
                 )
+                if update is not None:
+                    status_updates.append(update)
             except Exception:
                 logger.exception("poll failed for %s", rec.id)
 
     await asyncio.gather(*[_one(r) for r in recorders])
+    if status_updates:
+        config_store.update_recorder_statuses(status_updates)
     logger.info("poll cycle done", extra={"recorders": len(recorders)})
 
 
@@ -380,8 +400,9 @@ async def run_ntp_fix_all(
         return result
 
     sem = asyncio.Semaphore(config.monitoring.max_concurrent_polls)
+    ntp_status_updates: list[RecorderStatusUpdate] = []
 
-    async def _one(rec: Recorder) -> None:
+    async def _one_ntp(rec: Recorder) -> None:
         async with sem:
             try:
                 fix_result = await enable_recorder_ntp(
@@ -396,14 +417,22 @@ async def run_ntp_fix_all(
                         f"{rec.id}: {fix_result.error or 'ошибка NTP'}"
                     )
                     return
-                await poll_single_recorder(
-                    config_store, state_store, rec, include_inventory=False
+                update = await poll_single_recorder(
+                    config_store,
+                    state_store,
+                    rec,
+                    include_inventory=False,
+                    update_config=False,
                 )
+                if update is not None:
+                    ntp_status_updates.append(update)
                 result.success += 1
             except Exception as exc:
                 result.failed += 1
                 result.errors.append(f"{rec.id}: {exc}")
                 logger.exception("ntp fix failed for %s", rec.id)
 
-    await asyncio.gather(*[_one(r) for r in fixable])
+    await asyncio.gather(*[_one_ntp(r) for r in fixable])
+    if ntp_status_updates:
+        config_store.update_recorder_statuses(ntp_status_updates)
     return result

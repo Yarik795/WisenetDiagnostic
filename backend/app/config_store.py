@@ -3,20 +3,49 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
+import time
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from .models import AppConfig, CheckStatus, Credentials, Recorder, RecorderCreate, RecorderUpdate
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.json"
+_CONFIG_LOCKS: dict[str, threading.Lock] = {}
+_CONFIG_LOCKS_GUARD = threading.Lock()
+_REPLACE_RETRIES = 8
+_REPLACE_RETRY_DELAY_S = 0.05
+
+
+@dataclass(frozen=True)
+class RecorderStatusUpdate:
+    recorder_id: str
+    status: CheckStatus
+    checked_at: datetime
+    error: Optional[str] = None
 
 
 class ConfigStore:
     def __init__(self, path: Optional[Path] = None) -> None:
         self.path = path or Path(os.environ.get("CONFIG_PATH", DEFAULT_CONFIG_PATH))
 
+    def _file_lock(self) -> threading.Lock:
+        key = str(self.path.resolve())
+        with _CONFIG_LOCKS_GUARD:
+            lock = _CONFIG_LOCKS.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                _CONFIG_LOCKS[key] = lock
+            return lock
+
     def load(self) -> AppConfig:
+        with self._file_lock():
+            return self._load_unlocked()
+
+    def _load_unlocked(self) -> AppConfig:
         if not self.path.exists():
             return AppConfig()
         with open(self.path, encoding="utf-8") as f:
@@ -24,6 +53,10 @@ class ConfigStore:
         return AppConfig.model_validate(data)
 
     def save(self, config: AppConfig) -> None:
+        with self._file_lock():
+            self._save_unlocked(config)
+
+    def _save_unlocked(self, config: AppConfig) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = config.model_dump(mode="json")
         fd, tmp_path = tempfile.mkstemp(
@@ -35,11 +68,24 @@ class ConfigStore:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
                 f.write("\n")
-            os.replace(tmp_path, self.path)
+            self._replace_with_retry(tmp_path, self.path)
         except Exception:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
             raise
+
+    @staticmethod
+    def _replace_with_retry(src: str, dst: Path) -> None:
+        last_error: Optional[BaseException] = None
+        for attempt in range(_REPLACE_RETRIES):
+            try:
+                os.replace(src, dst)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                time.sleep(_REPLACE_RETRY_DELAY_S * (attempt + 1))
+        if last_error is not None:
+            raise last_error
 
     def list_recorders(self) -> list[Recorder]:
         return self.load().recorders
@@ -89,20 +135,41 @@ class ConfigStore:
         checked_at,
         error: Optional[str] = None,
     ) -> Optional[Recorder]:
-        config = self.load()
-        for i, r in enumerate(config.recorders):
-            if r.id == recorder_id:
-                updated = r.model_copy(
+        self.update_recorder_statuses(
+            [
+                RecorderStatusUpdate(
+                    recorder_id=recorder_id,
+                    status=status,
+                    checked_at=checked_at,
+                    error=error,
+                )
+            ]
+        )
+        return self.get_recorder(recorder_id)
+
+    def update_recorder_statuses(
+        self, updates: list[RecorderStatusUpdate]
+    ) -> None:
+        if not updates:
+            return
+        by_id = {u.recorder_id: u for u in updates}
+        with self._file_lock():
+            config = self._load_unlocked()
+            changed = False
+            for i, r in enumerate(config.recorders):
+                update = by_id.get(r.id)
+                if update is None:
+                    continue
+                config.recorders[i] = r.model_copy(
                     update={
-                        "last_status": status,
-                        "last_check_at": checked_at,
-                        "last_error": error,
+                        "last_status": update.status,
+                        "last_check_at": update.checked_at,
+                        "last_error": update.error,
                     }
                 )
-                config.recorders[i] = updated
-                self.save(config)
-                return updated
-        return None
+                changed = True
+            if changed:
+                self._save_unlocked(config)
 
     def get_credentials(self) -> Credentials:
         return self.load().credentials

@@ -1,9 +1,11 @@
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from app.config_store import ConfigStore
+from app.config_store import ConfigStore, RecorderStatusUpdate
 from app.models import CheckStatus, RecorderCreate
 
 
@@ -99,3 +101,65 @@ def test_credentials(store: ConfigStore) -> None:
     creds = store.update_credentials("admin", "secret")
     assert creds.username == "admin"
     assert store.get_credentials().password == "secret"
+
+
+def test_batch_update_recorder_statuses(store: ConfigStore) -> None:
+    r1 = store.create_recorder(
+        RecorderCreate(
+            object_name="A",
+            host="1.1.1.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    r2 = store.create_recorder(
+        RecorderCreate(
+            object_name="B",
+            host="2.2.2.2",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    ts = datetime.now(timezone.utc)
+    store.update_recorder_statuses(
+        [
+            RecorderStatusUpdate(r1.id, CheckStatus.ONLINE, ts, None),
+            RecorderStatusUpdate(r2.id, CheckStatus.OFFLINE, ts, "fail"),
+        ]
+    )
+    updated1 = store.get_recorder(r1.id)
+    updated2 = store.get_recorder(r2.id)
+    assert updated1 is not None and updated1.last_status == CheckStatus.ONLINE
+    assert updated2 is not None and updated2.last_status == CheckStatus.OFFLINE
+    assert updated2.last_error == "fail"
+
+
+def test_concurrent_status_updates(store: ConfigStore) -> None:
+    recorders = [
+        store.create_recorder(
+            RecorderCreate(
+                object_name=f"Obj {i}",
+                host=f"10.0.0.{i}",
+                port=80,
+                use_https=False,
+                enabled=True,
+            )
+        )
+        for i in range(6)
+    ]
+    ts = datetime.now(timezone.utc)
+
+    def _update(rec_id: str) -> None:
+        store.update_recorder_status(rec_id, CheckStatus.ONLINE, ts, None)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(_update, r.id) for r in recorders]
+        for fut in as_completed(futures):
+            fut.result()
+
+    for r in recorders:
+        updated = store.get_recorder(r.id)
+        assert updated is not None
+        assert updated.last_status == CheckStatus.ONLINE
