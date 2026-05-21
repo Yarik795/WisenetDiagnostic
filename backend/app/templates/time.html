@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block title %}Время и NTP — Wisenet Диагностика{% endblock %}
+{% block page_title %}Время и NTP{% endblock %}
+{% block page_actions %}
+<button type="button" class="btn btn-outline"
+  hx-post="/monitoring/poll-all"
+  hx-swap="none"
+>Опросить все</button>
+{% endblock %}
+{% block content %}
+<form method="get" action="/time" class="toolbar" style="margin-bottom:16px;">
+  <input type="search" name="search" class="input" placeholder="Поиск по объекту, IP, имени…" value="{{ time_search }}" aria-label="Поиск">
+  <label class="toggle-row" style="margin:0;">
+    <input type="checkbox" name="problems_only" value="true" {% if time_problems_only %}checked{% endif %}>
+    <span>Только проблемы</span>
+  </label>
+  <button type="submit" class="btn btn-outline">Применить</button>
+</form>
+
+{% set time_refresh_url = '/time/partials/dashboard?search=' ~ (time_search|urlencode) ~ '&problems_only=' ~ ('true' if time_problems_only else 'false') %}
+{% include "partials/time_dashboard.html" %}
+{% endblock %}

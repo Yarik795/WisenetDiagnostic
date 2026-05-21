@@ -1,4 +1,5 @@
 const COLLAPSED_KEY = "wisenet-collapsed-objects";
+const TIME_DASHBOARD_COLLAPSED_KEY = "wisenet-time-dashboard-collapsed";
 
 function loadCollapsed() {
   try {
@@ -122,17 +123,89 @@ function initClientSearch() {
 function initHighlightObject() {
   const params = new URLSearchParams(window.location.search);
   const obj = params.get("object");
-  if (!obj) return;
-  const collapsed = loadCollapsed();
-  collapsed.delete(obj);
-  saveCollapsed(collapsed);
-  const group = document.querySelector(
-    `[data-object-group="${CSS.escape(obj)}"]`
-  );
-  if (group) {
-    group.classList.remove("collapsed");
-    group.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (obj) {
+    const collapsed = loadCollapsed();
+    collapsed.delete(obj);
+    saveCollapsed(collapsed);
+    const group = document.querySelector(
+      `[data-object-group="${CSS.escape(obj)}"]`
+    );
+    if (group) {
+      group.classList.remove("collapsed");
+      group.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
+  const hash = window.location.hash;
+  if (hash && hash.startsWith("#recorder-row-")) {
+    const row = document.querySelector(hash);
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+}
+
+function getTimeDashboardCollapsedPreference() {
+  try {
+    const raw = localStorage.getItem(TIME_DASHBOARD_COLLAPSED_KEY);
+    if (raw === null) return null;
+    return raw === "1";
+  } catch {
+    return null;
+  }
+}
+
+function saveTimeDashboardCollapsed(collapsed) {
+  localStorage.setItem(TIME_DASHBOARD_COLLAPSED_KEY, collapsed ? "1" : "0");
+}
+
+function applyTimeDashboardState(root) {
+  const el = root || document.querySelector("[data-time-dashboard]");
+  if (!el) return;
+  const defaultExpanded = el.dataset.defaultExpanded === "true";
+  const pref = getTimeDashboardCollapsedPreference();
+  const collapsed = pref !== null ? pref : !defaultExpanded;
+  if (collapsed) {
+    el.classList.add("collapsed");
+    const body = el.querySelector(".time-dashboard-body");
+    if (body) body.classList.add("time-dashboard-body--collapsed");
+    const header = el.querySelector(".time-dashboard-header");
+    if (header) header.setAttribute("aria-expanded", "false");
+  } else {
+    el.classList.remove("collapsed");
+    const body = el.querySelector(".time-dashboard-body");
+    if (body) body.classList.remove("time-dashboard-body--collapsed");
+    const header = el.querySelector(".time-dashboard-header");
+    if (header) header.setAttribute("aria-expanded", "true");
+  }
+}
+
+function toggleTimeDashboard(dashboard) {
+  const collapsed = !dashboard.classList.contains("collapsed");
+  dashboard.classList.toggle("collapsed", collapsed);
+  const body = dashboard.querySelector(".time-dashboard-body");
+  if (body) body.classList.toggle("time-dashboard-body--collapsed", collapsed);
+  const header = dashboard.querySelector(".time-dashboard-header");
+  if (header) header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  saveTimeDashboardCollapsed(collapsed);
+}
+
+function initTimeDashboard() {
+  applyTimeDashboardState();
+  document.body.addEventListener("click", (e) => {
+    const header = e.target.closest("[data-toggle-time-dashboard]");
+    if (!header) return;
+    if (e.target.closest(".time-dashboard-actions")) return;
+    const dash = header.closest("[data-time-dashboard]");
+    if (dash) toggleTimeDashboard(dash);
+  });
+  document.body.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const header = e.target.closest("[data-toggle-time-dashboard]");
+    if (!header) return;
+    e.preventDefault();
+    const dash = header.closest("[data-time-dashboard]");
+    if (dash) toggleTimeDashboard(dash);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -148,10 +221,12 @@ document.addEventListener("DOMContentLoaded", () => {
   initMobileSidebar();
   initClientSearch();
   initHighlightObject();
+  initTimeDashboard();
 });
 
 document.body.addEventListener("htmx:afterSwap", () => {
   applyCollapsedState();
+  applyTimeDashboardState();
 });
 
 function showToast(type, message) {

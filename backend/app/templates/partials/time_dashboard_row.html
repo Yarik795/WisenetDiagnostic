@@ -1,0 +1,37 @@
+{% set rec = row.recorder %}
+{% set m = row.metrics %}
+<tr class="time-problem-row time-problem-row--{{ row.category }}">
+  <td>
+    <a href="/objects?object={{ rec.object_name|urlencode }}#recorder-row-{{ rec.id }}">{{ rec.object_name }}</a>
+  </td>
+  <td>{{ display_recorder_name(rec) }}</td>
+  <td class="time-mono">{% if m and m.local_time %}{{ m.local_time }}{% else %}—{% endif %}</td>
+  <td class="time-mono {% if m and m.time_skew_seconds is not none and m.time_skew_seconds >= time_skew_error %}time-skew--error{% elif m and m.time_skew_seconds is not none and m.time_skew_seconds >= time_skew_warn %}time-skew--warn{% endif %}">
+    {% if m %}{{ format_skew(m.time_skew_seconds) }}{% else %}—{% endif %}
+  </td>
+  <td>
+    {% if m and m.sync_type %}
+    <span class="{{ sync_type_badge_class(m.sync_type) }} sync-badge--inline">{{ sync_type_label(m.sync_type) }}</span>
+    {% else %}—{% endif %}
+  </td>
+  <td>{% if m %}{{ m.ntp_status or '—' }}{% else %}—{% endif %}</td>
+  <td style="font-size:12px;color:var(--text-secondary);max-width:200px;">{% if m and m.health_reason %}{{ m.health_reason }}{% else %}—{% endif %}</td>
+  {% if time_show_actions|default(true) %}
+  <td>
+    {% if m and show_ntp_action_button(m) and rec.enabled %}
+    <button
+      type="button"
+      class="btn btn-outline btn-sm sync-action-btn"
+      hx-post="/recorders/{{ rec.id }}/ntp/enable"
+      hx-target="#time-dashboard"
+      hx-swap="outerHTML"
+      hx-indicator="#ntp-row-spinner-{{ rec.id }}"
+      hx-disabled-elt="this"
+    >
+      <span id="ntp-row-spinner-{{ rec.id }}" class="htmx-indicator spinner"></span>
+      {{ ntp_action_button_label(m) }}
+    </button>
+    {% endif %}
+  </td>
+  {% endif %}
+</tr>

@@ -11,6 +11,10 @@
       {{ pc }} из {{ group.recorders|length }} с проблемами
     </span>
     {% endif %}
+    {% set time_pc = object_time_problem_count(group.recorders, metrics_map, get_monitoring_settings()) %}
+    {% if time_pc > 0 %}
+    <span class="object-time-badge" title="Проблемы времени или NTP">время: {{ time_pc }}</span>
+    {% endif %}
   </div>
   <div class="object-group-body">
     {% for recorder in group.recorders %}

@@ -14,6 +14,7 @@ from ..ui.helpers import (
     format_host_port,
     format_time,
 )
+from ..ui.time_dashboard import object_time_problem_count
 from ..ui.metrics_helpers import (
     disk_field,
     disk_percent_display,
@@ -75,3 +76,7 @@ templates.env.globals["sync_type_badge_class"] = sync_type_badge_class
 templates.env.globals["archive_days_required"] = (
     lambda: ConfigStore().load().monitoring.archive_days_required
 )
+templates.env.globals["get_monitoring_settings"] = (
+    lambda: ConfigStore().load().monitoring
+)
+templates.env.globals["object_time_problem_count"] = object_time_problem_count

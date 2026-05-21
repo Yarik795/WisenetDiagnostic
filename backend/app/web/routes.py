@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from typing import Literal, Optional
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -12,7 +12,12 @@ from pydantic import ValidationError
 from ..config_store import ConfigStore
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
-from ..monitoring import poll_single_recorder, run_inventory_cycle, run_poll_cycle
+from ..monitoring import (
+    poll_single_recorder,
+    run_inventory_cycle,
+    run_ntp_fix_all,
+    run_poll_cycle,
+)
 from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
 from ..ui.dependencies import get_state_store, get_store
@@ -25,6 +30,7 @@ from ..ui.grouping import (
 )
 from ..ui.helpers import display_recorder_name
 from ..ui.metrics_helpers import format_skew, sync_type_label
+from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
 from .validation import parse_recorder_form
 
@@ -47,6 +53,111 @@ def _object_names(store: ConfigStore) -> list[str]:
 
 def _metrics_map(state: StateStore):
     return metrics_map_from_list(state.list_recorder_metrics())
+
+
+def _time_dashboard_ctx(
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    compact: bool = False,
+    search: str = "",
+    problems_only: bool = True,
+    show_all_table: bool = False,
+    refresh_url: str = "/objects/partials/time-dashboard",
+) -> dict:
+    from datetime import datetime
+
+    config = store.load()
+    recorders = store.list_recorders()
+    metrics = _metrics_map(state)
+    ctx = time_dashboard_context(
+        recorders,
+        metrics,
+        config.monitoring,
+        ntp_server=config.monitoring.ntp_server or "",
+        compact=compact,
+        problems_only=problems_only,
+        search=search,
+        show_all_table=show_all_table,
+    )
+    ctx["time_refresh_url"] = refresh_url
+    ctx["time_server_now"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ctx["time_show_actions"] = True
+    return ctx
+
+
+def _wants_time_dashboard_response(request: Request) -> bool:
+    target = request.headers.get("HX-Target", "")
+    referer = request.headers.get("HX-Current-URL", "")
+    return "#time-dashboard" in target or "/time" in referer
+
+
+def _time_params_from_referer(referer: str) -> dict:
+    parsed = urlparse(referer or "")
+    qs = parse_qs(parsed.query)
+    search = qs.get("search", [""])[0]
+    problems_only = qs.get("problems_only", ["true"])[0].lower() not in (
+        "false",
+        "0",
+        "no",
+    )
+    compact = "/recorders" in parsed.path and "/time" not in parsed.path
+    if "/time" in parsed.path:
+        enc = urlencode(
+            {
+                "search": search,
+                "problems_only": "true" if problems_only else "false",
+            }
+        )
+        refresh_url = f"/time/partials/dashboard?{enc}"
+        show_all = not problems_only
+    elif compact:
+        refresh_url = "/recorders/partials/time-dashboard"
+        show_all = False
+    else:
+        refresh_url = "/objects/partials/time-dashboard"
+        show_all = False
+    return {
+        "compact": compact,
+        "search": search,
+        "problems_only": problems_only,
+        "show_all_table": show_all,
+        "refresh_url": refresh_url,
+    }
+
+
+def _time_dashboard_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    toast_type: str | None = None,
+    toast_message: str | None = None,
+    compact: bool = False,
+    search: str = "",
+    problems_only: bool = True,
+    show_all_table: bool = False,
+    refresh_url: str = "/objects/partials/time-dashboard",
+    status_code: int = 200,
+) -> HTMLResponse:
+    ctx = _time_dashboard_ctx(
+        store,
+        state,
+        compact=compact,
+        search=search,
+        problems_only=problems_only,
+        show_all_table=show_all_table,
+        refresh_url=refresh_url,
+    )
+    response = templates.TemplateResponse(
+        request,
+        "partials/time_dashboard.html",
+        ctx,
+        status_code=status_code,
+    )
+    if toast_type and toast_message:
+        return _attach_toast(response, toast_type, toast_message)
+    return response
 
 
 def _recorder_partial_template(referer: str) -> str:
@@ -112,7 +223,22 @@ def objects_page(
             "metrics_map": metrics,
             "sort": sort,
             "toast": toast,
+            **_time_dashboard_ctx(store, state),
         },
+    )
+
+
+@router.get("/objects/partials/time-dashboard", response_class=HTMLResponse)
+def objects_time_dashboard_partial(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _time_dashboard_response(
+        request,
+        store,
+        state,
+        refresh_url="/objects/partials/time-dashboard",
     )
 
 
@@ -152,7 +278,79 @@ def recorders_page(
             "recorders": recorders,
             "metrics_map": _metrics_map(state),
             "toast": _toast_from_query(request),
+            **_time_dashboard_ctx(
+                store,
+                state,
+                compact=True,
+                refresh_url="/recorders/partials/time-dashboard",
+            ),
         },
+    )
+
+
+@router.get("/recorders/partials/time-dashboard", response_class=HTMLResponse)
+def recorders_time_dashboard_partial(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _time_dashboard_response(
+        request,
+        store,
+        state,
+        compact=True,
+        refresh_url="/recorders/partials/time-dashboard",
+    )
+
+
+@router.get("/time", response_class=HTMLResponse)
+def time_page(
+    request: Request,
+    search: str = "",
+    problems_only: str = "true",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    only_problems = problems_only.lower() not in ("false", "0", "no")
+    qs = urlencode({"search": search, "problems_only": "true" if only_problems else "false"})
+    return templates.TemplateResponse(
+        request,
+        "time.html",
+        {
+            "active_nav": "time",
+            "time_search": search,
+            "time_problems_only": only_problems,
+            "toast": _toast_from_query(request),
+            **_time_dashboard_ctx(
+                store,
+                state,
+                search=search,
+                problems_only=only_problems,
+                show_all_table=not only_problems,
+                refresh_url=f"/time/partials/dashboard?{qs}",
+            ),
+        },
+    )
+
+
+@router.get("/time/partials/dashboard", response_class=HTMLResponse)
+def time_dashboard_partial(
+    request: Request,
+    search: str = "",
+    problems_only: str = "true",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    only_problems = problems_only.lower() not in ("false", "0", "no")
+    qs = urlencode({"search": search, "problems_only": "true" if only_problems else "false"})
+    return _time_dashboard_response(
+        request,
+        store,
+        state,
+        search=search,
+        problems_only=only_problems,
+        show_all_table=not only_problems,
+        refresh_url=f"/time/partials/dashboard?{qs}",
     )
 
 
@@ -465,8 +663,20 @@ async def recorder_enable_ntp(
     credentials = config.credentials
     ntp_server = (config.monitoring.ntp_server or "").strip()
     metrics = state.get_recorder_metrics(recorder_id)
+    use_time_dashboard = _wants_time_dashboard_response(request)
+    time_params = _time_params_from_referer(referer) if use_time_dashboard else {}
 
     def _error_response(message: str, status_code: int = 400) -> HTMLResponse:
+        if use_time_dashboard:
+            return _time_dashboard_response(
+                request,
+                store,
+                state,
+                toast_type="error",
+                toast_message=message,
+                status_code=status_code,
+                **time_params,
+            )
         response = templates.TemplateResponse(
             request,
             template,
@@ -502,19 +712,26 @@ async def recorder_enable_ntp(
     if metrics and metrics.time_skew_seconds is not None:
         skew_note = f", расхождение {format_skew(metrics.time_skew_seconds)}"
 
+    toast_msg = (
+        f"{display_recorder_name(updated)}: NTP обновлён ({ntp_server}). "
+        f"Режим: {sync_label}, статус NTP: {ntp_status}{skew_note}"
+    )
+    if use_time_dashboard:
+        return _time_dashboard_response(
+            request,
+            store,
+            state,
+            toast_type="success",
+            toast_message=toast_msg,
+            **time_params,
+        )
+
     response = templates.TemplateResponse(
         request,
         template,
         _recorder_partial_context(updated, metrics, template=template),
     )
-    return _attach_toast(
-        response,
-        "success",
-        (
-            f"{display_recorder_name(updated)}: NTP обновлён ({ntp_server}). "
-            f"Режим: {sync_label}, статус NTP: {ntp_status}{skew_note}"
-        ),
-    )
+    return _attach_toast(response, "success", toast_msg)
 
 
 def _form_validation_error(
@@ -610,7 +827,62 @@ async def monitoring_poll_all(
     state: StateStore = Depends(get_state_store),
 ) -> Response:
     await run_poll_cycle(store, state, include_inventory=False)
-    return _redirect("/objects", "success", "Опрос регистраторов запущен")
+    referer = request.headers.get("HX-Current-URL", "")
+    if "/time" in referer:
+        return _redirect("/time", "success", "Опрос регистраторов завершён")
+    if "/recorders" in referer and "/objects" not in referer:
+        return _redirect("/recorders", "success", "Опрос регистраторов завершён")
+    return _redirect("/objects", "success", "Опрос регистраторов завершён")
+
+
+@router.post("/monitoring/ntp-fix-all", response_class=HTMLResponse)
+async def monitoring_ntp_fix_all(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    referer = request.headers.get("HX-Current-URL", "")
+    time_params = _time_params_from_referer(referer)
+
+    fix_result = await run_ntp_fix_all(store, state)
+    if fix_result.errors and fix_result.total == 0 and fix_result.success == 0:
+        return _time_dashboard_response(
+            request,
+            store,
+            state,
+            toast_type="error",
+            toast_message=fix_result.errors[0],
+            status_code=400,
+            **time_params,
+        )
+
+    if fix_result.total == 0:
+        msg = "Нет регистраторов, требующих исправления NTP"
+        toast_type = "success"
+    elif fix_result.failed == 0:
+        msg = f"NTP обновлён на {fix_result.success} из {fix_result.total} регистраторов"
+        toast_type = "success"
+    else:
+        msg = (
+            f"Успешно: {fix_result.success}, ошибок: {fix_result.failed} "
+            f"из {fix_result.total}"
+        )
+        toast_type = "error" if fix_result.success == 0 else "success"
+
+    if fix_result.errors and fix_result.failed:
+        detail = "; ".join(fix_result.errors[:3])
+        if len(fix_result.errors) > 3:
+            detail += f" … (+{len(fix_result.errors) - 3})"
+        msg = f"{msg}. {detail}"
+
+    return _time_dashboard_response(
+        request,
+        store,
+        state,
+        toast_type=toast_type,
+        toast_message=msg,
+        **time_params,
+    )
 
 
 @router.post("/monitoring/inventory-all", response_class=HTMLResponse)

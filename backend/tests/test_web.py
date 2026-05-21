@@ -225,3 +225,70 @@ def test_enable_ntp_success(
     assert "success" in trigger
     assert "203.248.240.140" in trigger
     assert "\\u043e\\u0431\\u043d\\u043e\\u0432" in trigger  # "обнов" в JSON (ensure_ascii)
+
+
+def test_time_page(client: TestClient) -> None:
+    r = client.get("/time")
+    assert r.status_code == 200
+    assert "Время и NTP" in r.text
+    assert "time-dashboard" in r.text
+    assert "Исправить" in r.text
+
+
+def test_objects_page_has_time_dashboard(client: TestClient) -> None:
+    store = app.dependency_overrides[get_store]()
+    store.update_credentials("admin", "secret")
+    store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    r = client.get("/objects")
+    assert r.status_code == 200
+    assert "time-dashboard" in r.text
+    assert "Время и NTP" in r.text
+
+
+def test_ntp_fix_all_no_targets(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.web import routes as web_routes
+
+    store = app.dependency_overrides[get_store]()
+    config = store.load()
+    config.monitoring = MonitoringSettings(ntp_server="203.248.240.140")
+    store.save(config)
+    store.update_credentials("admin", "secret")
+    store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+
+    async def fake_fix(config_store, state_store):
+        from app.monitoring import NtpFixAllResult
+
+        return NtpFixAllResult(total=0, success=0, failed=0)
+
+    monkeypatch.setattr(web_routes, "run_ntp_fix_all", fake_fix)
+
+    r = client.post(
+        "/monitoring/ntp-fix-all",
+        headers={
+            "HX-Request": "true",
+            "HX-Target": "#time-dashboard",
+            "HX-Current-URL": "http://127.0.0.1/objects",
+        },
+    )
+    assert r.status_code == 200
+    assert "time-dashboard" in r.text
+    trigger = r.headers.get("HX-Trigger", "")
+    assert "success" in trigger

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -15,6 +16,7 @@ from .sunapi_extended import (
     EventChannelStatus,
     RecorderPollData,
     RecordingPeriodInfo,
+    enable_recorder_ntp,
     poll_recorder,
 )
 
@@ -312,3 +314,68 @@ async def run_inventory_cycle(
     state_store: StateStore,
 ) -> None:
     await run_poll_cycle(config_store, state_store, include_inventory=True)
+
+
+@dataclass
+class NtpFixAllResult:
+    success: int = 0
+    failed: int = 0
+    total: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
+async def run_ntp_fix_all(
+    config_store: ConfigStore,
+    state_store: StateStore,
+) -> NtpFixAllResult:
+    from .ui.time_dashboard import list_fixable_recorders
+
+    config = config_store.load()
+    credentials = config.credentials
+    ntp_server = (config.monitoring.ntp_server or "").strip()
+    posix_tz = (config.monitoring.ntp_posix_timezone or "").strip()
+
+    result = NtpFixAllResult()
+    if not ntp_server:
+        result.errors.append("Не задан monitoring.ntp_server в config.json")
+        return result
+    if not credentials.username or not credentials.password:
+        result.errors.append("Не заданы учётные данные API в настройках")
+        return result
+
+    metrics_map = {
+        m.recorder_id: m for m in state_store.list_recorder_metrics()
+    }
+    fixable = list_fixable_recorders(config.recorders, metrics_map)
+    result.total = len(fixable)
+    if not fixable:
+        return result
+
+    sem = asyncio.Semaphore(config.monitoring.max_concurrent_polls)
+
+    async def _one(rec: Recorder) -> None:
+        async with sem:
+            try:
+                fix_result = await enable_recorder_ntp(
+                    rec,
+                    credentials,
+                    ntp_server,
+                    posix_timezone=posix_tz,
+                )
+                if not fix_result.success:
+                    result.failed += 1
+                    result.errors.append(
+                        f"{rec.id}: {fix_result.error or 'ошибка NTP'}"
+                    )
+                    return
+                await poll_single_recorder(
+                    config_store, state_store, rec, include_inventory=False
+                )
+                result.success += 1
+            except Exception as exc:
+                result.failed += 1
+                result.errors.append(f"{rec.id}: {exc}")
+                logger.exception("ntp fix failed for %s", rec.id)
+
+    await asyncio.gather(*[_one(r) for r in fixable])
+    return result

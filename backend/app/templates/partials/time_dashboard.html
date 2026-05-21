@@ -1,0 +1,135 @@
+<div
+  id="time-dashboard"
+  class="time-dashboard card {% if time_dashboard_compact %}time-dashboard--compact{% endif %}"
+  data-time-dashboard
+  data-default-expanded="{{ 'true' if time_default_expanded else 'false' }}"
+>
+  <div class="time-dashboard-header" data-toggle-time-dashboard role="button" tabindex="0" aria-expanded="{{ 'true' if time_default_expanded else 'false' }}">
+    <div class="time-dashboard-header-left">
+      <span class="time-dashboard-chevron" aria-hidden="true">▼</span>
+      <h2 class="time-dashboard-title">Время и NTP</h2>
+      {% if time_stats.has_problems %}
+      <span class="time-dashboard-alert-dot" aria-hidden="true"></span>
+      {% endif %}
+    </div>
+    <div class="time-dashboard-actions" onclick="event.stopPropagation();">
+      {% if not time_dashboard_compact %}
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        hx-get="{{ time_refresh_url|default('/objects/partials/time-dashboard') }}"
+        hx-target="#time-dashboard"
+        hx-swap="outerHTML"
+        hx-indicator="#time-dashboard-refresh-spinner"
+      >
+        <span id="time-dashboard-refresh-spinner" class="htmx-indicator spinner"></span>
+        Обновить
+      </button>
+      {% endif %}
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        id="time-fix-all-btn"
+        {% if time_stats.fixable == 0 %}disabled{% endif %}
+        hx-post="/monitoring/ntp-fix-all"
+        hx-target="#time-dashboard"
+        hx-swap="outerHTML"
+        hx-indicator="#time-fix-all-spinner"
+        hx-disabled-elt="this"
+        {% if time_stats.fixable > 0 %}
+        hx-confirm="Включить или обновить NTP на {{ time_stats.fixable }} регистратор(ах)? Сервер: {{ time_ntp_server }}"
+        {% endif %}
+      >
+        <span id="time-fix-all-spinner" class="htmx-indicator spinner"></span>
+        Исправить{% if time_stats.fixable > 0 %} ({{ time_stats.fixable }}){% endif %}
+      </button>
+      {% if time_dashboard_compact %}
+      <a href="/time" class="btn btn-ghost btn-sm">Подробнее →</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="time-dashboard-body {% if not time_default_expanded %}time-dashboard-body--collapsed{% endif %}">
+    <div class="time-kpi-grid">
+      <div class="time-kpi time-kpi--ok">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ time_stats.ok }}</span>
+        <span class="time-kpi-label">В норме</span>
+      </div>
+      <div class="time-kpi time-kpi--warn">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ time_stats.warn }}</span>
+        <span class="time-kpi-label">Деградация</span>
+      </div>
+      <div class="time-kpi time-kpi--error">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ time_stats.error }}</span>
+        <span class="time-kpi-label">Критично</span>
+      </div>
+      <div class="time-kpi time-kpi--unknown">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ time_stats.unknown }}</span>
+        <span class="time-kpi-label">Нет данных</span>
+      </div>
+      <div class="time-kpi time-kpi--fix">
+        <span class="time-kpi-value">{{ time_stats.fixable }}</span>
+        <span class="time-kpi-label">К исправлению</span>
+      </div>
+    </div>
+
+    {% if time_stats.stacked_total > 0 %}
+    <div class="time-severity-stack" role="img" aria-label="Распределение по статусу времени">
+      {% for label, count, css_class in time_stats.stacked_segments %}
+      {% if count > 0 %}
+      <div
+        class="time-severity-segment {{ css_class }}"
+        style="flex-grow: {{ count }};"
+        title="{{ count }} — {{ label }}"
+      ></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <p class="time-dashboard-meta">
+      Эталон NTP: <span class="time-mono">{{ time_ntp_server }}</span>
+      · предупреждение ≥ {{ time_skew_warn }} с
+      · критично ≥ {{ time_skew_error }} с
+      {% if time_server_now %}
+      · сервер: <span class="time-mono">{{ time_server_now }}</span>
+      {% endif %}
+    </p>
+
+    {% if time_problem_rows %}
+    <div class="table-wrap time-problems-table-wrap">
+      <table class="data-table data-table--compact time-problems-table">
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>NVR</th>
+            <th>Локальное</th>
+            <th>Δt</th>
+            <th>Режим</th>
+            <th>NTP</th>
+            <th>Причина</th>
+            {% if time_show_actions|default(true) %}
+            <th></th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in time_problem_rows %}
+          {% include "partials/time_dashboard_row.html" %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif time_stats.has_problems %}
+    <p class="time-dashboard-empty">Проблемы времени есть, но не попали в фильтр таблицы.</p>
+    {% elif time_stats.total_enabled == 0 %}
+    <p class="time-dashboard-empty">Нет включённых регистраторов.</p>
+    {% else %}
+    <p class="time-dashboard-empty">Все регистраторы в норме по времени и NTP.</p>
+    {% endif %}
+  </div>
+</div>

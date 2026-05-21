@@ -12,7 +12,9 @@
   {% endif %}
   {% if metrics.sync_type %}<span class="{{ sync_type_badge_class(metrics.sync_type) }} sync-badge--inline">{{ sync_type_label(metrics.sync_type) }}</span>{% endif %}
   {% if metrics.ntp_status %}<span>NTP {{ metrics.ntp_status }}</span>{% endif %}
-  {% if metrics.time_skew_seconds is not none %}<span>Δt {{ format_skew(metrics.time_skew_seconds) }}</span>{% endif %}
+  {% if metrics.time_skew_seconds is not none %}
+  <span class="{% if metrics.time_skew_seconds >= get_monitoring_settings().time_skew_error_seconds %}time-skew--error{% elif metrics.time_skew_seconds >= get_monitoring_settings().time_skew_warn_seconds %}time-skew--warn{% endif %}">Δt {{ format_skew(metrics.time_skew_seconds) }}</span>
+  {% endif %}
   <span>{{ format_channel_counts(metrics.channel_count, metrics.channels_ok, metrics.channels_warn, metrics.channels_error, metrics.channels_unknown) }}</span>
 </div>
 {% elif recorder.enabled %}
