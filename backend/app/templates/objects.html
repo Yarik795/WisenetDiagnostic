@@ -13,8 +13,8 @@
 >+ Добавить регистратор</button>
 {% endblock %}
 {% block content %}
-{% set time_refresh_url = '/objects/partials/time-dashboard' %}
-{% include "partials/time_dashboard.html" %}
+{% set health_refresh_url = '/objects/partials/health-dashboard' %}
+{% include "partials/health_dashboard.html" %}
 <div class="toolbar">
   <input type="search" id="objects-search" class="input" placeholder="Поиск по объекту, IP, имени…" aria-label="Поиск">
   <button type="button" class="btn btn-outline" id="objects-collapse-all">Свернуть все</button>

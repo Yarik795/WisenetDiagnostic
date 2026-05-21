@@ -1,5 +1,7 @@
 {% if metrics %}
+{% set badges = recorder_problem_badges(recorder, metrics, get_monitoring_settings()) %}
 <div class="metrics-summary">
+  {% include "partials/health_badges.html" %}
   {% if metrics.model %}<span>{{ metrics.model }}</span>{% endif %}
   {% if metrics.firmware_version %}<span>FW {{ metrics.firmware_version }}</span>{% endif %}
   {% if metrics.storage_used_percent is not none %}

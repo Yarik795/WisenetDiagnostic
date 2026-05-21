@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+{% block title %}Статус мониторинга — Wisenet Диагностика{% endblock %}
+{% block page_title %}Статус мониторинга{% endblock %}
+{% block page_actions %}
+<button type="button" class="btn btn-outline"
+  hx-post="/monitoring/poll-all"
+  hx-swap="none"
+>Опросить все</button>
+{% endblock %}
+{% block content %}
+<form class="toolbar" style="flex-wrap:wrap;gap:8px;"
+  hx-get="/status/partials/dashboard"
+  hx-target="#health-dashboard"
+  hx-swap="outerHTML"
+  hx-trigger="change, submit"
+>
+  <input type="search" name="search" class="input" placeholder="Поиск…" value="{{ health_search }}" style="min-width:200px;">
+  <select name="category" class="select" style="max-width:220px;">
+    <option value="">Все метрики</option>
+    {% for cat, label in health_category_options %}
+    <option value="{{ cat }}" {% if health_category_filter == cat %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <input type="hidden" name="problems_only" value="false">
+  <label class="checkbox-label">
+    <input type="checkbox" name="problems_only" value="true" {% if health_problems_only %}checked{% endif %} onchange="this.previousElementSibling.disabled=this.checked">
+    Только проблемы
+  </label>
+  <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+</form>
+{% set health_refresh_url = '/status/partials/dashboard' %}
+{% include "partials/health_dashboard.html" %}
+{% endblock %}

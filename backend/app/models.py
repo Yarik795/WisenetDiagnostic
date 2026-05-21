@@ -62,8 +62,32 @@ class MonitoringSettings(BaseModel):
     time_skew_error_seconds: int = Field(default=300, ge=1)
     disk_usage_warn_percent: int = Field(default=85, ge=1, le=100)
     disk_usage_error_percent: int = Field(default=95, ge=1, le=100)
+    hdd_temperature_warn_celsius: int = Field(default=50, ge=1, le=120)
+    hdd_temperature_error_celsius: int = Field(default=60, ge=1, le=120)
+    archive_days_error_threshold: int = Field(default=7, ge=0, le=365)
+    channels_error_threshold_percent: int = Field(default=25, ge=1, le=100)
     ntp_server: str = ""
     ntp_posix_timezone: str = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
+
+    @field_validator("hdd_temperature_error_celsius")
+    @classmethod
+    def hdd_temp_error_above_warn(cls, v: int, info) -> int:
+        warn = info.data.get("hdd_temperature_warn_celsius")
+        if warn is not None and v < warn:
+            raise ValueError(
+                "hdd_temperature_error_celsius must be >= hdd_temperature_warn_celsius"
+            )
+        return v
+
+    @field_validator("archive_days_error_threshold")
+    @classmethod
+    def archive_error_below_required(cls, v: int, info) -> int:
+        required = info.data.get("archive_days_required")
+        if required is not None and v > required:
+            raise ValueError(
+                "archive_days_error_threshold must be <= archive_days_required"
+            )
+        return v
 
 
 class AppConfig(BaseModel):

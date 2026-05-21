@@ -217,20 +217,46 @@ def disk_temperature_display(disk: dict[str, Any]) -> str:
     return "—"
 
 
-def max_disk_temperature(disks_json: Optional[str]) -> Optional[str]:
-    disks = parse_disks_json(disks_json)
-    temps: list[str] = []
-    for disk in disks:
-        t = disk_temperature_display(disk)
-        if t != "—":
-            temps.append(t)
-    if not temps:
-        return None
-    def _temp_value(label: str) -> int:
-        m = re.search(r"\d+", label)
-        return int(m.group()) if m else 0
+def disk_temperature_celsius(disk: dict[str, Any]) -> Optional[float]:
+    for key in ("TemperatureCelsius", "temperature_celsius"):
+        val = disk.get(key)
+        if val is not None and str(val).strip() != "":
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
+    temp = disk_field(disk, "Temperature", "temperature", "TemperatureInCelsius")
+    if temp:
+        m = re.search(r"\d+", temp)
+        if m:
+            return float(m.group())
+    health = disk.get("Health")
+    if isinstance(health, dict) and health.get("TemperatureInCelsius") is not None:
+        try:
+            return float(health["TemperatureInCelsius"])
+        except (TypeError, ValueError):
+            pass
+    return None
 
-    return max(temps, key=_temp_value)
+
+def max_disk_temperature_celsius_from_disks(disks: list[dict[str, Any]]) -> Optional[float]:
+    values = [t for d in disks if (t := disk_temperature_celsius(d)) is not None]
+    return max(values) if values else None
+
+
+def max_disk_temperature_celsius(disks_json: Optional[str]) -> Optional[float]:
+    return max_disk_temperature_celsius_from_disks(parse_disks_json(disks_json))
+
+
+def max_disk_temperature(disks_json: Optional[str]) -> Optional[str]:
+    temp = max_disk_temperature_celsius(disks_json)
+    if temp is None:
+        return None
+    return f"{int(temp) if temp == int(temp) else temp:.1f} °C"
+
+
+def active_fan_event_labels(events: dict[str, bool]) -> list[str]:
+    return active_system_event_labels(events, labels=FAN_EVENT_LABELS)
 
 
 SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
@@ -246,6 +272,14 @@ SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
     "MemoryError": "Ошибка памяти",
     "RecordingError": "Ошибка записи",
     "RecordFrameDrop": "Потеря кадров записи",
+}
+
+FAN_EVENT_LABELS: dict[str, str] = {
+    "CPUFanError": "Вентилятор CPU",
+    "FrameFanError": "Вентилятор корпуса",
+    "FanError": "Ошибка вентилятора",
+    "LeftFanError": "Левый вентилятор",
+    "RightFanError": "Правый вентилятор",
 }
 
 SYSTEM_EVENT_WARN_LABELS: dict[str, str] = {

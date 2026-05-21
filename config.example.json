@@ -12,6 +12,10 @@
     "time_skew_error_seconds": 300,
     "disk_usage_warn_percent": 85,
     "disk_usage_error_percent": 95,
+    "hdd_temperature_warn_celsius": 50,
+    "hdd_temperature_error_celsius": 60,
+    "archive_days_error_threshold": 7,
+    "channels_error_threshold_percent": 25,
     "ntp_server": "203.248.240.140",
     "ntp_posix_timezone": "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
   },

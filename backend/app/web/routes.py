@@ -30,6 +30,8 @@ from ..ui.grouping import (
 )
 from ..ui.helpers import display_recorder_name
 from ..ui.metrics_helpers import format_skew, sync_type_label
+from ..ui.health_classifiers import CATEGORY_LABELS, HealthCategory
+from ..ui.health_dashboard import health_dashboard_context
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
 from .validation import parse_recorder_form
@@ -89,7 +91,114 @@ def _time_dashboard_ctx(
 def _wants_time_dashboard_response(request: Request) -> bool:
     target = request.headers.get("HX-Target", "")
     referer = request.headers.get("HX-Current-URL", "")
-    return "#time-dashboard" in target or "/time" in referer
+    return "#time-dashboard" in target or (
+        "/time" in referer and "#health-dashboard" not in target
+    )
+
+
+def _health_dashboard_ctx(
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    compact: bool = False,
+    search: str = "",
+    problems_only: bool = True,
+    category_filter: Optional[HealthCategory] = None,
+    refresh_url: str = "/objects/partials/health-dashboard",
+) -> dict:
+    from datetime import datetime
+
+    config = store.load()
+    recorders = store.list_recorders()
+    metrics = _metrics_map(state)
+    ctx = health_dashboard_context(
+        recorders,
+        metrics,
+        config.monitoring,
+        ntp_server=config.monitoring.ntp_server or "",
+        compact=compact,
+        problems_only=problems_only,
+        search=search,
+        category_filter=category_filter,
+    )
+    ctx["health_refresh_url"] = refresh_url
+    ctx["health_server_now"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return ctx
+
+
+def _health_dashboard_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    toast_type: str | None = None,
+    toast_message: str | None = None,
+    compact: bool = False,
+    search: str = "",
+    problems_only: bool = True,
+    category_filter: Optional[HealthCategory] = None,
+    refresh_url: str = "/objects/partials/health-dashboard",
+    status_code: int = 200,
+) -> HTMLResponse:
+    ctx = _health_dashboard_ctx(
+        store,
+        state,
+        compact=compact,
+        search=search,
+        problems_only=problems_only,
+        category_filter=category_filter,
+        refresh_url=refresh_url,
+    )
+    response = templates.TemplateResponse(
+        request,
+        "partials/health_dashboard.html",
+        ctx,
+        status_code=status_code,
+    )
+    if toast_type and toast_message:
+        return _attach_toast(response, toast_type, toast_message)
+    return response
+
+
+def _wants_health_dashboard_response(request: Request) -> bool:
+    target = request.headers.get("HX-Target", "")
+    referer = request.headers.get("HX-Current-URL", "")
+    return "#health-dashboard" in target or "/status" in referer
+
+
+def _health_params_from_referer(referer: str) -> dict:
+    parsed = urlparse(referer or "")
+    qs = parse_qs(parsed.query)
+    search = qs.get("search", [""])[0]
+    problems_only = qs.get("problems_only", ["true"])[0].lower() not in (
+        "false",
+        "0",
+        "no",
+    )
+    category_raw = qs.get("category", [""])[0].strip()
+    category_filter: Optional[HealthCategory] = None
+    if category_raw in CATEGORY_LABELS:
+        category_filter = category_raw  # type: ignore[assignment]
+    compact = "/recorders" in parsed.path and "/status" not in parsed.path
+    if "/status" in parsed.path:
+        enc_parts = {
+            "search": search,
+            "problems_only": "true" if problems_only else "false",
+        }
+        if category_filter:
+            enc_parts["category"] = category_filter
+        refresh_url = f"/status/partials/dashboard?{urlencode(enc_parts)}"
+    elif compact:
+        refresh_url = "/recorders/partials/health-dashboard"
+    else:
+        refresh_url = "/objects/partials/health-dashboard"
+    return {
+        "compact": compact,
+        "search": search,
+        "problems_only": problems_only,
+        "category_filter": category_filter,
+        "refresh_url": refresh_url,
+    }
 
 
 def _time_params_from_referer(referer: str) -> dict:
@@ -223,8 +332,22 @@ def objects_page(
             "metrics_map": metrics,
             "sort": sort,
             "toast": toast,
-            **_time_dashboard_ctx(store, state),
+            **_health_dashboard_ctx(store, state),
         },
+    )
+
+
+@router.get("/objects/partials/health-dashboard", response_class=HTMLResponse)
+def objects_health_dashboard_partial(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _health_dashboard_response(
+        request,
+        store,
+        state,
+        refresh_url="/objects/partials/health-dashboard",
     )
 
 
@@ -278,13 +401,28 @@ def recorders_page(
             "recorders": recorders,
             "metrics_map": _metrics_map(state),
             "toast": _toast_from_query(request),
-            **_time_dashboard_ctx(
+            **_health_dashboard_ctx(
                 store,
                 state,
                 compact=True,
-                refresh_url="/recorders/partials/time-dashboard",
+                refresh_url="/recorders/partials/health-dashboard",
             ),
         },
+    )
+
+
+@router.get("/recorders/partials/health-dashboard", response_class=HTMLResponse)
+def recorders_health_dashboard_partial(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _health_dashboard_response(
+        request,
+        store,
+        state,
+        compact=True,
+        refresh_url="/recorders/partials/health-dashboard",
     )
 
 
@@ -351,6 +489,78 @@ def time_dashboard_partial(
         problems_only=only_problems,
         show_all_table=not only_problems,
         refresh_url=f"/time/partials/dashboard?{qs}",
+    )
+
+
+@router.get("/status", response_class=HTMLResponse)
+def status_page(
+    request: Request,
+    search: str = "",
+    problems_only: str = "true",
+    category: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    only_problems = problems_only.lower() not in ("false", "0", "no")
+    category_filter: Optional[HealthCategory] = None
+    if category.strip() in CATEGORY_LABELS:
+        category_filter = category.strip()  # type: ignore[assignment]
+    enc = {
+        "search": search,
+        "problems_only": "true" if only_problems else "false",
+    }
+    if category_filter:
+        enc["category"] = category_filter
+    qs = urlencode(enc)
+    return templates.TemplateResponse(
+        request,
+        "status.html",
+        {
+            "active_nav": "status",
+            "health_search": search,
+            "health_problems_only": only_problems,
+            "health_category_filter": category_filter,
+            "health_category_options": list(CATEGORY_LABELS.items()),
+            "toast": _toast_from_query(request),
+            **_health_dashboard_ctx(
+                store,
+                state,
+                search=search,
+                problems_only=only_problems,
+                category_filter=category_filter,
+                refresh_url=f"/status/partials/dashboard?{qs}",
+            ),
+        },
+    )
+
+
+@router.get("/status/partials/dashboard", response_class=HTMLResponse)
+def status_dashboard_partial(
+    request: Request,
+    search: str = "",
+    problems_only: str = "true",
+    category: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    only_problems = problems_only.lower() not in ("false", "0", "no")
+    category_filter: Optional[HealthCategory] = None
+    if category.strip() in CATEGORY_LABELS:
+        category_filter = category.strip()  # type: ignore[assignment]
+    enc = {
+        "search": search,
+        "problems_only": "true" if only_problems else "false",
+    }
+    if category_filter:
+        enc["category"] = category_filter
+    return _health_dashboard_response(
+        request,
+        store,
+        state,
+        search=search,
+        problems_only=only_problems,
+        category_filter=category_filter,
+        refresh_url=f"/status/partials/dashboard?{urlencode(enc)}",
     )
 
 
@@ -828,6 +1038,8 @@ async def monitoring_poll_all(
 ) -> Response:
     await run_poll_cycle(store, state, include_inventory=False)
     referer = request.headers.get("HX-Current-URL", "")
+    if "/status" in referer:
+        return _redirect("/status", "success", "Опрос регистраторов завершён")
     if "/time" in referer:
         return _redirect("/time", "success", "Опрос регистраторов завершён")
     if "/recorders" in referer and "/objects" not in referer:
@@ -842,18 +1054,26 @@ async def monitoring_ntp_fix_all(
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     referer = request.headers.get("HX-Current-URL", "")
-    time_params = _time_params_from_referer(referer)
+    use_health = _wants_health_dashboard_response(request)
+    dash_params = (
+        _health_params_from_referer(referer)
+        if use_health
+        else _time_params_from_referer(referer)
+    )
 
     fix_result = await run_ntp_fix_all(store, state)
+    dash_response = (
+        _health_dashboard_response if use_health else _time_dashboard_response
+    )
     if fix_result.errors and fix_result.total == 0 and fix_result.success == 0:
-        return _time_dashboard_response(
+        return dash_response(
             request,
             store,
             state,
             toast_type="error",
             toast_message=fix_result.errors[0],
             status_code=400,
-            **time_params,
+            **dash_params,
         )
 
     if fix_result.total == 0:
@@ -875,13 +1095,13 @@ async def monitoring_ntp_fix_all(
             detail += f" … (+{len(fix_result.errors) - 3})"
         msg = f"{msg}. {detail}"
 
-    return _time_dashboard_response(
+    return dash_response(
         request,
         store,
         state,
         toast_type=toast_type,
         toast_message=msg,
-        **time_params,
+        **dash_params,
     )
 
 

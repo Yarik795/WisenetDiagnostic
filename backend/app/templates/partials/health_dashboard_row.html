@@ -1,0 +1,17 @@
+{% set rec = row.recorder %}
+<tr class="time-problem-row time-problem-row--{{ row.status }}">
+  <td>
+    <a href="/objects?object={{ rec.object_name|urlencode }}#recorder-row-{{ rec.id }}">{{ rec.object_name }}</a>
+  </td>
+  <td>{{ display_recorder_name(rec) }}</td>
+  <td><span class="health-badge health-badge--neutral">{{ row.category_label }}</span></td>
+  <td class="time-mono" style="font-size:12px;">{{ row.value_display }}</td>
+  <td>
+    <span class="status-badge">
+      <span class="status-dot {{ row.status }}"></span>
+      <span>{{ status_label(row.status) }}</span>
+    </span>
+  </td>
+  <td style="font-size:12px;max-width:280px;">{{ row.reason }}</td>
+  <td class="recorder-row-host" style="font-size:12px;">{{ row.polled_at_display }}</td>
+</tr>

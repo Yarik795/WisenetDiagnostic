@@ -1,5 +1,6 @@
 const COLLAPSED_KEY = "wisenet-collapsed-objects";
 const TIME_DASHBOARD_COLLAPSED_KEY = "wisenet-time-dashboard-collapsed";
+const HEALTH_DASHBOARD_COLLAPSED_KEY = "wisenet-health-dashboard-collapsed";
 
 function loadCollapsed() {
   try {
@@ -191,6 +192,7 @@ function toggleTimeDashboard(dashboard) {
 
 function initTimeDashboard() {
   applyTimeDashboardState();
+  applyHealthDashboardState();
   document.body.addEventListener("click", (e) => {
     const header = e.target.closest("[data-toggle-time-dashboard]");
     if (!header) return;
@@ -208,6 +210,62 @@ function initTimeDashboard() {
   });
 }
 
+function getHealthDashboardCollapsedPreference() {
+  try {
+    const raw = localStorage.getItem(HEALTH_DASHBOARD_COLLAPSED_KEY);
+    if (raw === null) return null;
+    return raw === "1";
+  } catch {
+    return null;
+  }
+}
+
+function saveHealthDashboardCollapsed(collapsed) {
+  localStorage.setItem(HEALTH_DASHBOARD_COLLAPSED_KEY, collapsed ? "1" : "0");
+}
+
+function applyHealthDashboardState(root) {
+  const el = root || document.querySelector("[data-health-dashboard]");
+  if (!el) return;
+  const defaultExpanded = el.dataset.defaultExpanded === "true";
+  const pref = getHealthDashboardCollapsedPreference();
+  const collapsed = pref !== null ? pref : !defaultExpanded;
+  const body = el.querySelector(".time-dashboard-body");
+  const header = el.querySelector(".time-dashboard-header");
+  el.classList.toggle("collapsed", collapsed);
+  if (body) body.classList.toggle("time-dashboard-body--collapsed", collapsed);
+  if (header) header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
+function toggleHealthDashboard(dashboard) {
+  const collapsed = !dashboard.classList.contains("collapsed");
+  dashboard.classList.toggle("collapsed", collapsed);
+  const body = dashboard.querySelector(".time-dashboard-body");
+  if (body) body.classList.toggle("time-dashboard-body--collapsed", collapsed);
+  const header = dashboard.querySelector(".time-dashboard-header");
+  if (header) header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  saveHealthDashboardCollapsed(collapsed);
+}
+
+function initHealthDashboard() {
+  applyHealthDashboardState();
+  document.body.addEventListener("click", (e) => {
+    const header = e.target.closest("[data-toggle-health-dashboard]");
+    if (!header) return;
+    if (e.target.closest(".time-dashboard-actions")) return;
+    const dash = header.closest("[data-health-dashboard]");
+    if (dash) toggleHealthDashboard(dash);
+  });
+  document.body.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const header = e.target.closest("[data-toggle-health-dashboard]");
+    if (!header) return;
+    e.preventDefault();
+    const dash = header.closest("[data-health-dashboard]");
+    if (dash) toggleHealthDashboard(dash);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   if (typeof htmx === "undefined") {
     showToast(
@@ -222,11 +280,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initClientSearch();
   initHighlightObject();
   initTimeDashboard();
+  initHealthDashboard();
 });
 
 document.body.addEventListener("htmx:afterSwap", () => {
   applyCollapsedState();
   applyTimeDashboardState();
+  applyHealthDashboardState();
 });
 
 function showToast(type, message) {

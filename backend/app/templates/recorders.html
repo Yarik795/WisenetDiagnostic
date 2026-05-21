@@ -9,8 +9,8 @@
 >+ Добавить регистратор</button>
 {% endblock %}
 {% block content %}
-{% set time_refresh_url = '/recorders/partials/time-dashboard' %}
-{% include "partials/time_dashboard.html" %}
+{% set health_refresh_url = '/recorders/partials/health-dashboard' %}
+{% include "partials/health_dashboard.html" %}
 {% if not recorders %}
 <div class="empty-state">
   <h2>Нет регистраторов</h2>

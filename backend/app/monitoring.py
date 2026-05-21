@@ -23,6 +23,7 @@ from .ui.metrics_helpers import (
     SYSTEM_EVENT_ERROR_LABELS,
     SYSTEM_EVENT_WARN_LABELS,
     active_system_event_labels,
+    max_disk_temperature_celsius_from_disks,
 )
 
 logger = logging.getLogger("monitoring")
@@ -119,6 +120,22 @@ def evaluate_recorder_health(
                 if status != HealthStatus.ERROR.value:
                     status = HealthStatus.WARN.value
                 reasons.append(f"Заполнение диска {pct}%")
+        if poll.storage.disks:
+            max_temp = max_disk_temperature_celsius_from_disks(poll.storage.disks)
+            if max_temp is not None:
+                if max_temp >= settings.hdd_temperature_error_celsius:
+                    status = HealthStatus.ERROR.value
+                    reasons.append(
+                        f"Температура HDD {max_temp:.0f} °C "
+                        f"(критично ≥ {settings.hdd_temperature_error_celsius} °C)"
+                    )
+                elif max_temp >= settings.hdd_temperature_warn_celsius:
+                    if status != HealthStatus.ERROR.value:
+                        status = HealthStatus.WARN.value
+                    reasons.append(
+                        f"Температура HDD {max_temp:.0f} °C "
+                        f"(предупреждение ≥ {settings.hdd_temperature_warn_celsius} °C)"
+                    )
 
     if poll.date_time:
         if poll.date_time.ntp_status and poll.date_time.ntp_status.lower() == "fail":
@@ -139,7 +156,13 @@ def evaluate_recorder_health(
     if archive_check_days is None and poll.recording_period:
         archive_check_days = poll.recording_period.archive_days
     if archive_check_days is not None:
-        if archive_check_days < settings.archive_days_required:
+        if archive_check_days < settings.archive_days_error_threshold:
+            status = HealthStatus.ERROR.value
+            reasons.append(
+                f"Глубина архива {archive_check_days:.1f} сут. "
+                f"(критично < {settings.archive_days_error_threshold} сут.)"
+            )
+        elif archive_check_days < settings.archive_days_required:
             if status != HealthStatus.ERROR.value:
                 status = HealthStatus.WARN.value
             if archive_min_days is not None and archive_max_days is not None:

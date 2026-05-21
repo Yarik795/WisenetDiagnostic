@@ -1,0 +1,7 @@
+{% if badges %}
+<div class="health-badges">
+  {% for code, css_class, title in badges %}
+  <span class="{{ css_class }}" title="{{ title }}">{{ code }}</span>
+  {% endfor %}
+</div>
+{% endif %}

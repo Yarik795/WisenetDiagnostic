@@ -14,6 +14,8 @@ from ..ui.helpers import (
     format_host_port,
     format_time,
 )
+from ..ui.health_classifiers import BADGE_CODES, CATEGORY_LABELS, recorder_problem_badges
+from ..ui.health_dashboard import object_category_problem_counts, object_health_problem_count
 from ..ui.time_dashboard import object_time_problem_count
 from ..ui.metrics_helpers import (
     disk_field,
@@ -82,3 +84,8 @@ templates.env.globals["get_monitoring_settings"] = (
     lambda: ConfigStore().load().monitoring
 )
 templates.env.globals["object_time_problem_count"] = object_time_problem_count
+templates.env.globals["object_health_problem_count"] = object_health_problem_count
+templates.env.globals["object_category_problem_counts"] = object_category_problem_counts
+templates.env.globals["recorder_problem_badges"] = recorder_problem_badges
+templates.env.globals["category_badge_code"] = lambda c: BADGE_CODES.get(c, c)
+templates.env.globals["category_label"] = lambda c: CATEGORY_LABELS.get(c, c)

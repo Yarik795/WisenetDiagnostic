@@ -112,3 +112,36 @@ def test_recorder_system_events_ok() -> None:
     )
     status, reason = evaluate_recorder_health(poll, ["ok"], _settings())
     assert status == "ok"
+
+
+def test_recorder_hdd_temperature_warn() -> None:
+    from app.sunapi_extended import StorageInfo
+
+    poll = RecorderPollData(
+        online=True,
+        storage=StorageInfo(
+            disks=[{"TemperatureCelsius": 52}],
+            used_percent=40.0,
+        ),
+    )
+    settings = MonitoringSettings(
+        hdd_temperature_warn_celsius=50,
+        hdd_temperature_error_celsius=60,
+    )
+    status, reason = evaluate_recorder_health(poll, ["ok"], settings)
+    assert status == "warn"
+    assert "Температура HDD" in reason
+
+
+def test_recorder_archive_critical_error() -> None:
+    settings = MonitoringSettings(archive_days_error_threshold=7)
+    poll = RecorderPollData(online=True)
+    status, reason = evaluate_recorder_health(
+        poll,
+        ["ok"],
+        settings,
+        archive_min_days=3.0,
+        archive_max_days=10.0,
+    )
+    assert status == "error"
+    assert "критично" in reason.lower()
