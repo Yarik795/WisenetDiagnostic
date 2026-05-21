@@ -19,6 +19,11 @@ from .sunapi_extended import (
     enable_recorder_ntp,
     poll_recorder,
 )
+from .ui.metrics_helpers import (
+    SYSTEM_EVENT_ERROR_LABELS,
+    SYSTEM_EVENT_WARN_LABELS,
+    active_system_event_labels,
+)
 
 logger = logging.getLogger("monitoring")
 
@@ -61,6 +66,25 @@ def archive_bounds(
     return min(days), max(days)
 
 
+def _apply_system_event_health(
+    system_events: dict[str, bool],
+    status: str,
+    reasons: list[str],
+) -> str:
+    for label in active_system_event_labels(
+        system_events, labels=SYSTEM_EVENT_ERROR_LABELS
+    ):
+        status = HealthStatus.ERROR.value
+        reasons.append(label)
+    for label in active_system_event_labels(
+        system_events, labels=SYSTEM_EVENT_WARN_LABELS
+    ):
+        if status != HealthStatus.ERROR.value:
+            status = HealthStatus.WARN.value
+        reasons.append(label)
+    return status
+
+
 def evaluate_recorder_health(
     poll: RecorderPollData,
     channel_statuses: list[str],
@@ -74,6 +98,9 @@ def evaluate_recorder_health(
 
     reasons: list[str] = []
     status = HealthStatus.OK.value
+
+    if poll.system_events:
+        status = _apply_system_event_health(poll.system_events, status, reasons)
 
     if poll.storage:
         pct = poll.storage.used_percent
@@ -239,6 +266,7 @@ def apply_poll_result(
         storage_used_mb=poll.storage.used_space_mb if poll.storage else None,
         storage_total_mb=poll.storage.total_space_mb if poll.storage else None,
         disks=poll.storage.disks if poll.storage else None,
+        system_events=poll.system_events or None,
     )
     state.record_history("recorder", recorder.id, rec_status, rec_reason, polled_at)
 

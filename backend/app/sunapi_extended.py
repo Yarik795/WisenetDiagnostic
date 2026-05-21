@@ -91,6 +91,12 @@ class EventChannelStatus:
 
 
 @dataclass
+class EventStatusResult:
+    channels: list[EventChannelStatus] = field(default_factory=list)
+    system_events: dict[str, bool] = field(default_factory=dict)
+
+
+@dataclass
 class RecorderPollData:
     device: Optional[DeviceInfo] = None
     online: bool = False
@@ -103,6 +109,7 @@ class RecorderPollData:
     )
     channels: list[ChannelInfo] = field(default_factory=list)
     events: list[EventChannelStatus] = field(default_factory=list)
+    system_events: dict[str, bool] = field(default_factory=dict)
 
 
 def build_base_url(recorder: Recorder, cgi: str) -> str:
@@ -879,39 +886,98 @@ async def fetch_channel_recording_periods(
     return periods
 
 
-def parse_eventstatus(body: str) -> list[EventChannelStatus]:
+def _parse_bool_value(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
+def _apply_channel_event_attr(
+    ch_status: EventChannelStatus, attr: str, value
+) -> None:
+    attr_lower = attr.lower()
+    if attr_lower == "videoloss":
+        ch_status.video_loss = _parse_bool_value(value)
+    elif attr in ("Connected", "NetworkCameraConnect"):
+        ch_status.connected = _parse_bool_value(value)
+
+
+def _collect_system_events_from_fields(fields: dict[str, str]) -> dict[str, bool]:
+    system_events: dict[str, bool] = {}
+    prefix = "SystemEvent."
+    for key, value in fields.items():
+        if not key.startswith(prefix):
+            continue
+        event_key = key[len(prefix) :]
+        if event_key:
+            system_events[event_key] = _parse_bool_value(value)
+    return system_events
+
+
+def _collect_system_events_from_json(data: dict) -> dict[str, bool]:
+    system_events: dict[str, bool] = {}
+    raw = data.get("SystemEvent")
+    if not isinstance(raw, dict):
+        return system_events
+
+    def walk(prefix: str, obj: dict) -> None:
+        for key, val in obj.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(val, dict):
+                walk(full_key, val)
+            elif isinstance(val, bool):
+                system_events[full_key] = val
+            elif val is not None and str(val).strip().lower() in ("true", "false"):
+                system_events[full_key] = str(val).strip().lower() == "true"
+
+    walk("", raw)
+    return system_events
+
+
+def parse_eventstatus(body: str) -> EventStatusResult:
     fields = parse_key_value_body(body)
     channels: dict[int, EventChannelStatus] = {}
-    pattern = re.compile(r"^Channel\.(\d+)\.(.+)$")
+    channel_pattern = re.compile(r"^Channel\.(\d+)\.(.+)$")
     for key, value in fields.items():
-        m = pattern.match(key)
+        m = channel_pattern.match(key)
         if not m:
             continue
         ch = int(m.group(1))
         attr = m.group(2)
         channels.setdefault(ch, EventChannelStatus(channel_no=ch))
-        if attr.lower() == "videoloss":
-            channels[ch].video_loss = value.lower() == "true"
-        elif attr == "Connected":
-            channels[ch].connected = value.lower() == "true"
+        _apply_channel_event_attr(channels[ch], attr, value)
+
+    system_events = _collect_system_events_from_fields(fields)
 
     data = try_parse_json(body)
-    if isinstance(data, dict) and "ChannelEvent" in data:
-        for item in data["ChannelEvent"]:
-            ch = item.get("Channel")
-            if ch is None:
-                continue
-            ch = int(ch)
-            channels.setdefault(ch, EventChannelStatus(channel_no=ch))
-            for key, val in item.items():
-                if key == "Channel":
+    if isinstance(data, dict):
+        if "ChannelEvent" in data:
+            for item in data["ChannelEvent"]:
+                ch = item.get("Channel")
+                if ch is None:
                     continue
-                if isinstance(val, bool):
-                    if key.lower() == "videoloss":
-                        channels[ch].video_loss = val
-                    elif key == "Connected":
-                        channels[ch].connected = val
-    return [channels[k] for k in sorted(channels)]
+                ch = int(ch)
+                channels.setdefault(ch, EventChannelStatus(channel_no=ch))
+                for key, val in item.items():
+                    if key == "Channel":
+                        continue
+                    if isinstance(val, bool) or (
+                        isinstance(val, str)
+                        and val.strip().lower() in ("true", "false")
+                    ):
+                        _apply_channel_event_attr(channels[ch], key, val)
+                    elif key == "NetworkCameraConnect" and val is not None:
+                        _apply_channel_event_attr(
+                            channels[ch], "NetworkCameraConnect", val
+                        )
+        json_system = _collect_system_events_from_json(data)
+        if json_system:
+            system_events = json_system
+
+    return EventStatusResult(
+        channels=[channels[k] for k in sorted(channels)],
+        system_events=system_events,
+    )
 
 
 def _to_float(value) -> Optional[float]:
@@ -999,6 +1065,8 @@ async def poll_recorder(
     event_url = build_url(recorder, "eventstatus.cgi", "eventstatus", action="check")
     st, b, _ = await _fetch(recorder, credentials, event_url, timeout)
     if st == 200:
-        result.events = parse_eventstatus(b)
+        event_result = parse_eventstatus(b)
+        result.events = event_result.channels
+        result.system_events = event_result.system_events
 
     return result

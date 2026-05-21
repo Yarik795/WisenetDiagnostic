@@ -38,6 +38,7 @@ from ..ui.metrics_helpers import (
     parse_disks_json,
     sync_type_badge_class,
     sync_type_label,
+    system_events_display,
 )
 
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -67,6 +68,7 @@ templates.env.globals["disk_total_display"] = disk_total_display
 templates.env.globals["disk_percent_display"] = disk_percent_display
 templates.env.globals["disk_temperature_display"] = disk_temperature_display
 templates.env.globals["max_disk_temperature"] = max_disk_temperature
+templates.env.globals["system_events_display"] = system_events_display
 templates.env.globals["is_manual_sync"] = is_manual_sync
 templates.env.globals["needs_ntp_time_update"] = needs_ntp_time_update
 templates.env.globals["show_ntp_action_button"] = show_ntp_action_button

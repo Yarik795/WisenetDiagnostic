@@ -56,6 +56,7 @@ class RecorderMetricsRow:
     storage_used_mb: Optional[float] = None
     storage_total_mb: Optional[float] = None
     disks_json: Optional[str] = None
+    system_events_json: Optional[str] = None
     archive_min_days: Optional[float] = None
     archive_max_days: Optional[float] = None
 
@@ -151,6 +152,7 @@ class StateStore:
             ("disks_json", "TEXT"),
             ("archive_min_days", "REAL"),
             ("archive_max_days", "REAL"),
+            ("system_events_json", "TEXT"),
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -293,8 +295,12 @@ class StateStore:
         storage_used_mb: Optional[float] = None,
         storage_total_mb: Optional[float] = None,
         disks: Optional[list[dict[str, Any]]] = None,
+        system_events: Optional[dict[str, bool]] = None,
     ) -> None:
         disks_json = json.dumps(disks, ensure_ascii=False) if disks else None
+        system_events_json = (
+            json.dumps(system_events, ensure_ascii=False) if system_events else None
+        )
         with self._connect() as conn:
             conn.execute(
                 """
@@ -306,9 +312,9 @@ class StateStore:
                     channel_count, channels_ok, channels_warn,
                     channels_error, channels_unknown, last_polled_at,
                     local_time, utc_time, sync_type,
-                    storage_used_mb, storage_total_mb, disks_json
+                    storage_used_mb, storage_total_mb, disks_json, system_events_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -335,7 +341,8 @@ class StateStore:
                     sync_type=excluded.sync_type,
                     storage_used_mb=excluded.storage_used_mb,
                     storage_total_mb=excluded.storage_total_mb,
-                    disks_json=excluded.disks_json
+                    disks_json=excluded.disks_json,
+                    system_events_json=excluded.system_events_json
                 """,
                 (
                     recorder_id,
@@ -365,6 +372,7 @@ class StateStore:
                     storage_used_mb,
                     storage_total_mb,
                     disks_json,
+                    system_events_json,
                 ),
             )
 
@@ -512,6 +520,9 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
         storage_used_mb=row["storage_used_mb"] if "storage_used_mb" in row.keys() else None,
         storage_total_mb=row["storage_total_mb"] if "storage_total_mb" in row.keys() else None,
         disks_json=row["disks_json"] if "disks_json" in row.keys() else None,
+        system_events_json=(
+            row["system_events_json"] if "system_events_json" in row.keys() else None
+        ),
     )
 
 

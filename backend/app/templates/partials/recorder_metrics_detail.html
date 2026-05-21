@@ -15,6 +15,7 @@
         {% if metrics.health_reason %}
         <dt>Причина статуса</dt><dd>{{ metrics.health_reason }}</dd>
         {% endif %}
+        <dt>Аппаратные события</dt><dd>{{ system_events_display(metrics.system_events_json) }}</dd>
       </dl>
     </section>
     <section class="metrics-block">

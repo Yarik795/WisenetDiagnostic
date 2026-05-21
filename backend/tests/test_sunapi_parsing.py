@@ -49,11 +49,34 @@ Channel.0.Connected=False
 Channel.1.Videoloss=False
 Channel.1.Connected=True
 """
-    events = parse_eventstatus(body)
-    by_ch = {e.channel_no: e for e in events}
+    result = parse_eventstatus(body)
+    by_ch = {e.channel_no: e for e in result.channels}
     assert by_ch[0].video_loss is True
     assert by_ch[0].connected is False
     assert by_ch[1].video_loss is False
+    assert by_ch[1].connected is True
+
+
+def test_parse_eventstatus_network_camera_connect() -> None:
+    body = """
+Channel.0.NetworkCameraConnect=True
+Channel.22.NetworkCameraConnect=False
+SystemEvent.CPUFanError=False
+SystemEvent.FrameFanError=False
+"""
+    result = parse_eventstatus(body)
+    by_ch = {e.channel_no: e for e in result.channels}
+    assert by_ch[0].connected is True
+    assert by_ch[22].connected is False
+    assert result.system_events["CPUFanError"] is False
+    assert result.system_events["FrameFanError"] is False
+
+
+def test_parse_eventstatus_cpu_fan_error_active() -> None:
+    body = "SystemEvent.CPUFanError=True\nSystemEvent.FrameFanError=False\n"
+    result = parse_eventstatus(body)
+    assert result.system_events["CPUFanError"] is True
+    assert result.system_events["FrameFanError"] is False
 
 
 def test_parse_storage_percent() -> None:

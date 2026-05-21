@@ -6,7 +6,7 @@
   <span>диск {{ format_percent(metrics.storage_used_percent) }}{% if metrics.storage_status %} ({{ metrics.storage_status }}){% endif %}</span>
   {% endif %}
   {% set max_temp = max_disk_temperature(metrics.disks_json) %}
-  {% if max_temp %}<span>темп. {{ max_temp }}</span>{% endif %}
+  {% if max_temp %}<span>макс. HDD {{ max_temp }}</span>{% endif %}
   {% if metrics.archive_min_days is not none or metrics.archive_max_days is not none or metrics.archive_days is not none %}
   <span>архив {{ format_archive_range(metrics.archive_min_days or metrics.archive_days, metrics.archive_max_days or metrics.archive_days, archive_days_required()) }}</span>
   {% endif %}

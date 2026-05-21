@@ -231,3 +231,63 @@ def max_disk_temperature(disks_json: Optional[str]) -> Optional[str]:
         return int(m.group()) if m else 0
 
     return max(temps, key=_temp_value)
+
+
+SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
+    "CPUFanError": "Вентилятор CPU",
+    "FrameFanError": "Вентилятор корпуса",
+    "FanError": "Ошибка вентилятора",
+    "LeftFanError": "Левый вентилятор",
+    "RightFanError": "Правый вентилятор",
+    "HDDFail": "Сбой HDD",
+    "HDDError": "Ошибка HDD",
+    "HDDFull": "HDD заполнен",
+    "BatteryFail": "Сбой батареи",
+    "MemoryError": "Ошибка памяти",
+    "RecordingError": "Ошибка записи",
+    "RecordFrameDrop": "Потеря кадров записи",
+}
+
+SYSTEM_EVENT_WARN_LABELS: dict[str, str] = {
+    "CpuOverload": "Перегрузка CPU",
+    "NetCamTrafficOverFlow": "Перегрузка трафика камер",
+    "NetTxTrafficOverflow": "Перегрузка исходящего трафика",
+    "NewFWAvailable": "Доступно обновление ПО",
+    "BeingUpdate": "Идёт обновление",
+}
+
+
+def parse_system_events_json(raw: Optional[str]) -> dict[str, bool]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: bool(v) for k, v in data.items()}
+
+
+def active_system_event_labels(
+    events: dict[str, bool],
+    *,
+    labels: dict[str, str],
+) -> list[str]:
+    result: list[str] = []
+    for key, label in labels.items():
+        if events.get(key):
+            result.append(label)
+    return result
+
+
+def system_events_display(system_events_json: Optional[str]) -> str:
+    events = parse_system_events_json(system_events_json)
+    if not events:
+        return "Аппаратные события: нет данных"
+    active = active_system_event_labels(
+        events, labels={**SYSTEM_EVENT_ERROR_LABELS, **SYSTEM_EVENT_WARN_LABELS}
+    )
+    if not active:
+        return "Аппаратные события: норма"
+    return "; ".join(active)
