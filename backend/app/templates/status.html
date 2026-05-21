@@ -10,7 +10,7 @@
 {% block content %}
 <form class="toolbar" style="flex-wrap:wrap;gap:8px;"
   hx-get="/status/partials/dashboard"
-  hx-target="#health-dashboard"
+  hx-target="#health-dashboard-stack"
   hx-swap="outerHTML"
   hx-trigger="change, submit"
 >
@@ -29,5 +29,5 @@
   <button type="submit" class="btn btn-outline btn-sm">Применить</button>
 </form>
 {% set health_refresh_url = '/status/partials/dashboard' %}
-{% include "partials/health_dashboard.html" %}
+{% include "partials/health_dashboard_stack.html" %}
 {% endblock %}

@@ -103,7 +103,7 @@ def _health_dashboard_ctx(
     compact: bool = False,
     search: str = "",
     problems_only: bool = True,
-    category_filter: Optional[HealthCategory] = None,
+    highlight_category: Optional[HealthCategory] = None,
     refresh_url: str = "/objects/partials/health-dashboard",
 ) -> dict:
     from datetime import datetime
@@ -119,7 +119,7 @@ def _health_dashboard_ctx(
         compact=compact,
         problems_only=problems_only,
         search=search,
-        category_filter=category_filter,
+        highlight_category=highlight_category,
     )
     ctx["health_refresh_url"] = refresh_url
     ctx["health_server_now"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -136,7 +136,7 @@ def _health_dashboard_response(
     compact: bool = False,
     search: str = "",
     problems_only: bool = True,
-    category_filter: Optional[HealthCategory] = None,
+    highlight_category: Optional[HealthCategory] = None,
     refresh_url: str = "/objects/partials/health-dashboard",
     status_code: int = 200,
 ) -> HTMLResponse:
@@ -146,12 +146,12 @@ def _health_dashboard_response(
         compact=compact,
         search=search,
         problems_only=problems_only,
-        category_filter=category_filter,
+        highlight_category=highlight_category,
         refresh_url=refresh_url,
     )
     response = templates.TemplateResponse(
         request,
-        "partials/health_dashboard.html",
+        "partials/health_dashboard_stack.html",
         ctx,
         status_code=status_code,
     )
@@ -163,7 +163,11 @@ def _health_dashboard_response(
 def _wants_health_dashboard_response(request: Request) -> bool:
     target = request.headers.get("HX-Target", "")
     referer = request.headers.get("HX-Current-URL", "")
-    return "#health-dashboard" in target or "/status" in referer
+    return (
+        "#health-dashboard-stack" in target
+        or "#health-dashboard" in target
+        or "/status" in referer
+    )
 
 
 def _health_params_from_referer(referer: str) -> dict:
@@ -176,17 +180,17 @@ def _health_params_from_referer(referer: str) -> dict:
         "no",
     )
     category_raw = qs.get("category", [""])[0].strip()
-    category_filter: Optional[HealthCategory] = None
+    highlight_category: Optional[HealthCategory] = None
     if category_raw in CATEGORY_LABELS:
-        category_filter = category_raw  # type: ignore[assignment]
+        highlight_category = category_raw  # type: ignore[assignment]
     compact = "/recorders" in parsed.path and "/status" not in parsed.path
     if "/status" in parsed.path:
         enc_parts = {
             "search": search,
             "problems_only": "true" if problems_only else "false",
         }
-        if category_filter:
-            enc_parts["category"] = category_filter
+        if highlight_category:
+            enc_parts["category"] = highlight_category
         refresh_url = f"/status/partials/dashboard?{urlencode(enc_parts)}"
     elif compact:
         refresh_url = "/recorders/partials/health-dashboard"
@@ -196,7 +200,7 @@ def _health_params_from_referer(referer: str) -> dict:
         "compact": compact,
         "search": search,
         "problems_only": problems_only,
-        "category_filter": category_filter,
+        "highlight_category": highlight_category,
         "refresh_url": refresh_url,
     }
 
@@ -527,7 +531,7 @@ def status_page(
                 state,
                 search=search,
                 problems_only=only_problems,
-                category_filter=category_filter,
+                highlight_category=category_filter,
                 refresh_url=f"/status/partials/dashboard?{qs}",
             ),
         },
@@ -544,22 +548,22 @@ def status_dashboard_partial(
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     only_problems = problems_only.lower() not in ("false", "0", "no")
-    category_filter: Optional[HealthCategory] = None
+    highlight_category: Optional[HealthCategory] = None
     if category.strip() in CATEGORY_LABELS:
-        category_filter = category.strip()  # type: ignore[assignment]
+        highlight_category = category.strip()  # type: ignore[assignment]
     enc = {
         "search": search,
         "problems_only": "true" if only_problems else "false",
     }
-    if category_filter:
-        enc["category"] = category_filter
+    if highlight_category:
+        enc["category"] = highlight_category
     return _health_dashboard_response(
         request,
         store,
         state,
         search=search,
         problems_only=only_problems,
-        category_filter=category_filter,
+        highlight_category=highlight_category,
         refresh_url=f"/status/partials/dashboard?{urlencode(enc)}",
     )
 

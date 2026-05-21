@@ -1,0 +1,114 @@
+{% set stats = section.stats %}
+<div
+  id="{{ section.element_id }}"
+  class="time-dashboard category-dashboard card {% if health_dashboard_compact %}time-dashboard--compact{% endif %}{% if health_highlight_category == section.category %} category-dashboard--highlight{% endif %}"
+  data-category-dashboard="{{ section.category }}"
+  data-default-expanded="{{ 'true' if section.default_expanded else 'false' }}"
+>
+  <div
+    class="time-dashboard-header"
+    data-toggle-category-dashboard
+    role="button"
+    tabindex="0"
+    aria-expanded="{{ 'true' if section.default_expanded else 'false' }}"
+  >
+    <div class="time-dashboard-header-left">
+      <span class="time-dashboard-chevron" aria-hidden="true">▼</span>
+      <h2 class="time-dashboard-title">{{ section.title }}</h2>
+      {% if stats and stats.has_problems %}
+      <span class="time-dashboard-alert-dot" aria-hidden="true"></span>
+      {% endif %}
+    </div>
+    <div class="time-dashboard-actions" onclick="event.stopPropagation();">
+      {% if not health_dashboard_compact %}
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        hx-get="{{ health_refresh_url|default('/objects/partials/health-dashboard') }}"
+        hx-target="#health-dashboard-stack"
+        hx-swap="outerHTML"
+        hx-indicator="#cat-refresh-{{ section.category }}"
+      >
+        <span id="cat-refresh-{{ section.category }}" class="htmx-indicator spinner"></span>
+        Обновить
+      </button>
+      {% endif %}
+      {% if health_dashboard_compact %}
+      <a href="/status?category={{ section.category }}" class="btn btn-ghost btn-sm">Подробнее →</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="time-dashboard-body {% if not section.default_expanded %}time-dashboard-body--collapsed{% endif %}">
+    {% if stats %}
+    <div class="time-kpi-grid">
+      <div class="time-kpi time-kpi--ok">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ stats.ok }}</span>
+        <span class="time-kpi-label">В норме</span>
+      </div>
+      <div class="time-kpi time-kpi--warn">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ stats.warn }}</span>
+        <span class="time-kpi-label">Деградация</span>
+      </div>
+      <div class="time-kpi time-kpi--error">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ stats.error }}</span>
+        <span class="time-kpi-label">Критично</span>
+      </div>
+      <div class="time-kpi time-kpi--unknown">
+        <span class="time-kpi-dot"></span>
+        <span class="time-kpi-value">{{ stats.unknown }}</span>
+        <span class="time-kpi-label">Нет данных</span>
+      </div>
+    </div>
+
+    {% if stats.stacked_total > 0 %}
+    <div class="time-severity-stack" role="img" aria-label="Распределение по {{ section.title }}">
+      {% for label, count, css_class in stats.stacked_segments %}
+      {% if count > 0 %}
+      <div
+        class="time-severity-segment {{ css_class }}"
+        style="flex-grow: {{ count }};"
+        title="{{ count }} — {{ label }}"
+      ></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if section.meta_text %}
+    <p class="time-dashboard-meta">{{ section.meta_text }}</p>
+    {% endif %}
+
+    {% if section.problem_rows %}
+    <div class="table-wrap time-problems-table-wrap">
+      <table class="data-table data-table--compact time-problems-table">
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>NVR</th>
+            <th>Значение</th>
+            <th>Статус</th>
+            <th>Причина</th>
+            <th>Опрос</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in section.problem_rows %}
+          {% include "partials/category_dashboard_row.html" %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif stats and stats.has_problems %}
+    <p class="time-dashboard-empty">Проблемы есть, но не попали в фильтр таблицы.</p>
+    {% elif stats and stats.total_enabled == 0 %}
+    <p class="time-dashboard-empty">Нет включённых регистраторов.</p>
+    {% else %}
+    <p class="time-dashboard-empty">Все регистраторы в норме по показателю «{{ section.title }}».</p>
+    {% endif %}
+  </div>
+</div>

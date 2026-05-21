@@ -1,6 +1,6 @@
 <div
   id="time-dashboard"
-  class="time-dashboard card {% if time_dashboard_compact %}time-dashboard--compact{% endif %}"
+  class="time-dashboard card {% if time_dashboard_compact %}time-dashboard--compact{% endif %}{% if health_highlight_category == 'time' %} category-dashboard--highlight{% endif %}"
   data-time-dashboard
   data-default-expanded="{{ 'true' if time_default_expanded else 'false' }}"
 >
@@ -18,7 +18,7 @@
         type="button"
         class="btn btn-outline btn-sm"
         hx-get="{{ time_refresh_url|default('/objects/partials/time-dashboard') }}"
-        hx-target="#time-dashboard"
+        hx-target="{{ time_hx_target|default('#time-dashboard') }}"
         hx-swap="outerHTML"
         hx-indicator="#time-dashboard-refresh-spinner"
       >
@@ -32,7 +32,7 @@
         id="time-fix-all-btn"
         {% if time_stats.fixable == 0 %}disabled{% endif %}
         hx-post="/monitoring/ntp-fix-all"
-        hx-target="#time-dashboard"
+        hx-target="{{ time_hx_target|default('#time-dashboard') }}"
         hx-swap="outerHTML"
         hx-indicator="#time-fix-all-spinner"
         hx-disabled-elt="this"

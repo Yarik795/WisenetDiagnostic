@@ -10,7 +10,7 @@
 {% endblock %}
 {% block content %}
 {% set health_refresh_url = '/recorders/partials/health-dashboard' %}
-{% include "partials/health_dashboard.html" %}
+{% include "partials/health_dashboard_stack.html" %}
 {% if not recorders %}
 <div class="empty-state">
   <h2>Нет регистраторов</h2>

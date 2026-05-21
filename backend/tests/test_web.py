@@ -235,7 +235,7 @@ def test_time_page(client: TestClient) -> None:
     assert "Исправить" in r.text
 
 
-def test_objects_page_has_health_dashboard(client: TestClient) -> None:
+def test_objects_page_has_category_dashboard_stack(client: TestClient) -> None:
     store = app.dependency_overrides[get_store]()
     store.update_credentials("admin", "secret")
     store.create_recorder(
@@ -249,9 +249,13 @@ def test_objects_page_has_health_dashboard(client: TestClient) -> None:
     )
     r = client.get("/objects")
     assert r.status_code == 200
-    assert "health-dashboard" in r.text
-    assert "Мониторинг неисправностей" in r.text
-    assert "Температура HDD" in r.text
+    assert "health-dashboard-stack" in r.text
+    assert "time-dashboard" in r.text
+    assert "category-dashboard-temperature" in r.text
+    assert "category-dashboard-storage" in r.text
+    assert "category-dashboard-fans" in r.text
+    assert "category-dashboard-channels" in r.text
+    assert "category-dashboard-archive" in r.text
 
 
 def test_ntp_fix_all_no_targets(
@@ -285,7 +289,7 @@ def test_ntp_fix_all_no_targets(
         "/monitoring/ntp-fix-all",
         headers={
             "HX-Request": "true",
-            "HX-Target": "#health-dashboard",
+            "HX-Target": "#health-dashboard-stack",
             "HX-Current-URL": "http://127.0.0.1/objects",
         },
     )

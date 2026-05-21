@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 from app.models import MonitoringSettings
 from app.ui.health_dashboard import (
-    aggregate_health_stats,
+    aggregate_category_stats,
+    build_category_sections,
     list_health_problem_rows,
     object_health_problem_count,
 )
@@ -45,23 +46,45 @@ def _metrics(**kwargs):
     return SimpleNamespace(**base)
 
 
-def test_aggregate_health_stats_has_category_kpis() -> None:
+def test_build_category_sections_count_and_order() -> None:
     settings = MonitoringSettings()
-    r1 = _rec("a")
+    sections = build_category_sections([_rec()], {"a": _metrics()}, settings)
+    assert len(sections) == 6
+    assert sections[0].category == "time"
+    assert sections[0].is_time is True
+    assert sections[1].category == "temperature"
+
+
+def test_temperature_section_rows_only_temperature() -> None:
+    settings = MonitoringSettings()
     metrics_map = {"a": _metrics()}
-    stats = aggregate_health_stats([r1], metrics_map, settings)
+    sections = build_category_sections([_rec()], metrics_map, settings)
+    temp = next(s for s in sections if s.category == "temperature")
+    assert temp.stats is not None
+    assert temp.stats.warn >= 1
+    assert all(r.category == "temperature" for r in temp.problem_rows)
+
+
+def test_aggregate_category_stats() -> None:
+    settings = MonitoringSettings()
+    stats = aggregate_category_stats(
+        "temperature", [_rec()], {"a": _metrics()}, settings
+    )
     assert stats.total_enabled == 1
-    assert len(stats.category_kpis) == 6
-    assert any(k.category == "temperature" for k in stats.category_kpis)
+    assert stats.warn == 1
+    assert stats.has_problems is True
 
 
-def test_problem_rows_include_temperature() -> None:
+def test_list_health_problem_rows_filtered() -> None:
     settings = MonitoringSettings()
-    r1 = _rec("a")
-    metrics_map = {"a": _metrics()}
-    rows = list_health_problem_rows([r1], metrics_map, settings)
-    categories = {row.category for row in rows}
-    assert "temperature" in categories
+    rows = list_health_problem_rows(
+        [_rec()],
+        {"a": _metrics()},
+        settings,
+        category_filter="temperature",
+    )
+    assert len(rows) == 1
+    assert rows[0].category == "temperature"
 
 
 def test_object_health_problem_count() -> None:

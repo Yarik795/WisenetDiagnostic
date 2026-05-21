@@ -1,6 +1,6 @@
 const COLLAPSED_KEY = "wisenet-collapsed-objects";
 const TIME_DASHBOARD_COLLAPSED_KEY = "wisenet-time-dashboard-collapsed";
-const HEALTH_DASHBOARD_COLLAPSED_KEY = "wisenet-health-dashboard-collapsed";
+const CATEGORY_DASHBOARD_COLLAPSED_PREFIX = "wisenet-category-dashboard-collapsed:";
 
 function loadCollapsed() {
   try {
@@ -190,29 +190,13 @@ function toggleTimeDashboard(dashboard) {
   saveTimeDashboardCollapsed(collapsed);
 }
 
-function initTimeDashboard() {
-  applyTimeDashboardState();
-  applyHealthDashboardState();
-  document.body.addEventListener("click", (e) => {
-    const header = e.target.closest("[data-toggle-time-dashboard]");
-    if (!header) return;
-    if (e.target.closest(".time-dashboard-actions")) return;
-    const dash = header.closest("[data-time-dashboard]");
-    if (dash) toggleTimeDashboard(dash);
-  });
-  document.body.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    const header = e.target.closest("[data-toggle-time-dashboard]");
-    if (!header) return;
-    e.preventDefault();
-    const dash = header.closest("[data-time-dashboard]");
-    if (dash) toggleTimeDashboard(dash);
-  });
+function categoryDashboardStorageKey(category) {
+  return `${CATEGORY_DASHBOARD_COLLAPSED_PREFIX}${category}`;
 }
 
-function getHealthDashboardCollapsedPreference() {
+function getCategoryDashboardCollapsedPreference(category) {
   try {
-    const raw = localStorage.getItem(HEALTH_DASHBOARD_COLLAPSED_KEY);
+    const raw = localStorage.getItem(categoryDashboardStorageKey(category));
     if (raw === null) return null;
     return raw === "1";
   } catch {
@@ -220,49 +204,82 @@ function getHealthDashboardCollapsedPreference() {
   }
 }
 
-function saveHealthDashboardCollapsed(collapsed) {
-  localStorage.setItem(HEALTH_DASHBOARD_COLLAPSED_KEY, collapsed ? "1" : "0");
+function saveCategoryDashboardCollapsed(category, collapsed) {
+  localStorage.setItem(categoryDashboardStorageKey(category), collapsed ? "1" : "0");
 }
 
-function applyHealthDashboardState(root) {
-  const el = root || document.querySelector("[data-health-dashboard]");
-  if (!el) return;
-  const defaultExpanded = el.dataset.defaultExpanded === "true";
-  const pref = getHealthDashboardCollapsedPreference();
-  const collapsed = pref !== null ? pref : !defaultExpanded;
-  const body = el.querySelector(".time-dashboard-body");
-  const header = el.querySelector(".time-dashboard-header");
-  el.classList.toggle("collapsed", collapsed);
-  if (body) body.classList.toggle("time-dashboard-body--collapsed", collapsed);
-  if (header) header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+function applyCategoryDashboardState(root) {
+  const nodes = root
+    ? root.querySelectorAll("[data-category-dashboard]")
+    : document.querySelectorAll("[data-category-dashboard]");
+  nodes.forEach((el) => {
+    const category = el.dataset.categoryDashboard;
+    if (!category) return;
+    const defaultExpanded = el.dataset.defaultExpanded === "true";
+    const pref = getCategoryDashboardCollapsedPreference(category);
+    const collapsed = pref !== null ? pref : !defaultExpanded;
+    const body = el.querySelector(".time-dashboard-body");
+    const header = el.querySelector(".time-dashboard-header");
+    el.classList.toggle("collapsed", collapsed);
+    if (body) body.classList.toggle("time-dashboard-body--collapsed", collapsed);
+    if (header) header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  });
 }
 
-function toggleHealthDashboard(dashboard) {
+function toggleCategoryDashboard(dashboard) {
+  const category = dashboard.dataset.categoryDashboard;
   const collapsed = !dashboard.classList.contains("collapsed");
   dashboard.classList.toggle("collapsed", collapsed);
   const body = dashboard.querySelector(".time-dashboard-body");
   if (body) body.classList.toggle("time-dashboard-body--collapsed", collapsed);
   const header = dashboard.querySelector(".time-dashboard-header");
   if (header) header.setAttribute("aria-expanded", collapsed ? "false" : "true");
-  saveHealthDashboardCollapsed(collapsed);
+  if (category) saveCategoryDashboardCollapsed(category, collapsed);
 }
 
-function initHealthDashboard() {
-  applyHealthDashboardState();
+function initCategoryDashboards() {
+  applyCategoryDashboardState();
   document.body.addEventListener("click", (e) => {
-    const header = e.target.closest("[data-toggle-health-dashboard]");
+    const header = e.target.closest("[data-toggle-category-dashboard]");
     if (!header) return;
     if (e.target.closest(".time-dashboard-actions")) return;
-    const dash = header.closest("[data-health-dashboard]");
-    if (dash) toggleHealthDashboard(dash);
+    const dash = header.closest("[data-category-dashboard]");
+    if (dash) toggleCategoryDashboard(dash);
   });
   document.body.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
-    const header = e.target.closest("[data-toggle-health-dashboard]");
+    const header = e.target.closest("[data-toggle-category-dashboard]");
     if (!header) return;
     e.preventDefault();
-    const dash = header.closest("[data-health-dashboard]");
-    if (dash) toggleHealthDashboard(dash);
+    const dash = header.closest("[data-category-dashboard]");
+    if (dash) toggleCategoryDashboard(dash);
+  });
+}
+
+function scrollToHighlightedCategory() {
+  const highlighted = document.querySelector(".category-dashboard--highlight");
+  if (highlighted) {
+    highlighted.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function initTimeDashboard() {
+  applyTimeDashboardState();
+  applyCategoryDashboardState();
+  document.body.addEventListener("click", (e) => {
+    const header = e.target.closest("[data-toggle-time-dashboard]");
+    if (!header) return;
+    if (e.target.closest(".time-dashboard-actions")) return;
+    const dash = header.closest("[data-time-dashboard]");
+    if (dash) toggleTimeDashboard(dash);
+  });
+  document.body.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const header = e.target.closest("[data-toggle-time-dashboard]");
+    if (!header) return;
+    e.preventDefault();
+    const dash = header.closest("[data-time-dashboard]");
+    if (dash) toggleTimeDashboard(dash);
   });
 }
 
@@ -280,13 +297,15 @@ document.addEventListener("DOMContentLoaded", () => {
   initClientSearch();
   initHighlightObject();
   initTimeDashboard();
-  initHealthDashboard();
+  initCategoryDashboards();
+  scrollToHighlightedCategory();
 });
 
 document.body.addEventListener("htmx:afterSwap", () => {
   applyCollapsedState();
   applyTimeDashboardState();
-  applyHealthDashboardState();
+  applyCategoryDashboardState();
+  scrollToHighlightedCategory();
 });
 
 function showToast(type, message) {

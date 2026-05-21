@@ -1,0 +1,19 @@
+<div id="health-dashboard-stack" class="health-dashboard-stack">
+  {% for section in category_sections %}
+  {% if section.is_time and section.time_context %}
+  {% set time_stats = section.time_context.time_stats %}
+  {% set time_problem_rows = section.time_context.time_problem_rows %}
+  {% set time_ntp_server = section.time_context.time_ntp_server %}
+  {% set time_skew_warn = section.time_context.time_skew_warn %}
+  {% set time_skew_error = section.time_context.time_skew_error %}
+  {% set time_dashboard_compact = section.time_context.time_dashboard_compact %}
+  {% set time_default_expanded = section.time_context.time_default_expanded %}
+  {% set time_refresh_url = health_refresh_url|default('/objects/partials/health-dashboard') %}
+  {% set time_hx_target = '#health-dashboard-stack' %}
+  {% set time_show_actions = true %}
+  {% include "partials/time_dashboard.html" %}
+  {% else %}
+  {% include "partials/category_dashboard.html" %}
+  {% endif %}
+  {% endfor %}
+</div>
