@@ -22,6 +22,7 @@ from .sunapi_parsing import (
 
 # Часовой пояс GMT+3 для NVR (SUNAPI POSIXTimeZone)
 DEFAULT_NTP_POSIX_TIMEZONE = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
+NTP_TIME_SKEW_APPLY_THRESHOLD_SECONDS = 1.0
 
 # Модели с температурой в формате «35°C/95°F» — показываем только °C
 MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset({"XRN-2010", "HRX-1620"})
@@ -565,6 +566,58 @@ async def fetch_date_info(
     return parse_date(body), None
 
 
+def _ntp_set_params(server: str, posix_timezone: str) -> dict[str, str]:
+    return {
+        "SyncType": "NTP",
+        "NTPURLList": server,
+        "POSIXTimeZone": posix_timezone,
+        "NTPServerEnable": "False",
+        "DSTEnable": "False",
+        "DateFormat": "YYYY-MM-DD",
+        "TimeFormat": "HMS24",
+    }
+
+
+def _manual_time_set_params(posix_timezone: str, when: Optional[datetime] = None) -> dict[str, str]:
+    now = when or datetime.now()
+    return {
+        "SyncType": "Manual",
+        "Year": str(now.year),
+        "Month": str(now.month),
+        "Day": str(now.day),
+        "Hour": str(now.hour),
+        "Minute": str(now.minute),
+        "Second": str(now.second),
+        "POSIXTimeZone": posix_timezone,
+        "DSTEnable": "False",
+    }
+
+
+def _skew_exceeds_threshold(
+    date_info: Optional[DateTimeInfo],
+    threshold: float = NTP_TIME_SKEW_APPLY_THRESHOLD_SECONDS,
+) -> bool:
+    if not date_info or date_info.skew_seconds is None:
+        return False
+    return date_info.skew_seconds > threshold
+
+
+async def _apply_ntp_settings(
+    recorder: Recorder,
+    credentials: Credentials,
+    server: str,
+    posix_timezone: str,
+    *,
+    timeout: float = 20.0,
+) -> tuple[bool, Optional[str]]:
+    return await _sunapi_date_set(
+        recorder,
+        credentials,
+        timeout=timeout,
+        **_ntp_set_params(server, posix_timezone),
+    )
+
+
 async def _sunapi_date_set(
     recorder: Recorder,
     credentials: Credentials,
@@ -596,6 +649,7 @@ async def enable_recorder_ntp(
     ntp_server: str,
     *,
     posix_timezone: str = DEFAULT_NTP_POSIX_TIMEZONE,
+    skew_apply_threshold: float = NTP_TIME_SKEW_APPLY_THRESHOLD_SECONDS,
     timeout: float = 20.0,
 ) -> EnableNtpResult:
     if not credentials.username or not credentials.password:
@@ -615,14 +669,8 @@ async def enable_recorder_ntp(
             error="Не задан POSIXTimeZone (monitoring.ntp_posix_timezone в config.json)",
         )
 
-    ok, err = await _sunapi_date_set(
-        recorder,
-        credentials,
-        timeout=timeout,
-        SyncType="NTP",
-        NTPURLList=server,
-        POSIXTimeZone=tz,
-        NTPServerEnable="False",
+    ok, err = await _apply_ntp_settings(
+        recorder, credentials, server, tz, timeout=timeout
     )
     if not ok:
         return EnableNtpResult(success=False, error=err)
@@ -631,8 +679,42 @@ async def enable_recorder_ntp(
     if view_err:
         return EnableNtpResult(
             success=False,
-            error=f"Режим применён, но не удалось проверить: {view_err}",
+            error=f"NTP настроен, но не удалось проверить: {view_err}",
         )
+
+    if _skew_exceeds_threshold(date_info, skew_apply_threshold):
+        manual_ok, manual_err = await _sunapi_date_set(
+            recorder,
+            credentials,
+            timeout=timeout,
+            **_manual_time_set_params(tz),
+        )
+        if not manual_ok:
+            return EnableNtpResult(
+                success=False,
+                error=manual_err or "Не удалось синхронизировать системное время",
+                date_time=date_info,
+            )
+
+        ok, err = await _apply_ntp_settings(
+            recorder, credentials, server, tz, timeout=timeout
+        )
+        if not ok:
+            return EnableNtpResult(
+                success=False,
+                error=err or "Время обновлено, но не удалось повторно включить NTP",
+                date_time=date_info,
+            )
+
+        date_info, view_err = await fetch_date_info(
+            recorder, credentials, timeout=timeout
+        )
+        if view_err:
+            return EnableNtpResult(
+                success=False,
+                error=f"NTP применён, но не удалось проверить время: {view_err}",
+            )
+
     if not date_info or (date_info.sync_type or "").upper() != "NTP":
         actual = date_info.sync_type if date_info else "неизвестно"
         return EnableNtpResult(

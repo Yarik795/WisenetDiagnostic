@@ -24,7 +24,7 @@ from ..ui.grouping import (
     problem_count,
 )
 from ..ui.helpers import display_recorder_name
-from ..ui.metrics_helpers import sync_type_label
+from ..ui.metrics_helpers import format_skew, sync_type_label
 from .templates_env import templates
 from .validation import parse_recorder_form
 
@@ -491,13 +491,16 @@ async def recorder_enable_ntp(
         posix_timezone=posix_tz,
     )
     if not result.success:
-        return _error_response(result.error or "Не удалось включить NTP")
+        return _error_response(result.error or "Не удалось обновить NTP")
 
     await poll_single_recorder(store, state, recorder, include_inventory=False)
     updated = store.get_recorder(recorder_id) or recorder
     metrics = state.get_recorder_metrics(recorder_id)
     sync_label = sync_type_label(metrics.sync_type if metrics else "NTP")
     ntp_status = metrics.ntp_status if metrics and metrics.ntp_status else "—"
+    skew_note = ""
+    if metrics and metrics.time_skew_seconds is not None:
+        skew_note = f", расхождение {format_skew(metrics.time_skew_seconds)}"
 
     response = templates.TemplateResponse(
         request,
@@ -508,8 +511,8 @@ async def recorder_enable_ntp(
         response,
         "success",
         (
-            f"{display_recorder_name(updated)}: синхронизация переключена на NTP "
-            f"({ntp_server}). Текущий режим: {sync_label}, статус NTP: {ntp_status}"
+            f"{display_recorder_name(updated)}: NTP обновлён ({ntp_server}). "
+            f"Режим: {sync_label}, статус NTP: {ntp_status}{skew_note}"
         ),
     )
 

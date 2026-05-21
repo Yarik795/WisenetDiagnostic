@@ -22,6 +22,7 @@ from ..ui.metrics_helpers import (
     disk_total_display,
     disk_used_display,
     is_manual_sync,
+    needs_ntp_time_update,
     max_disk_temperature,
     format_archive_days,
     format_archive_days_value,
@@ -64,6 +65,7 @@ templates.env.globals["disk_percent_display"] = disk_percent_display
 templates.env.globals["disk_temperature_display"] = disk_temperature_display
 templates.env.globals["max_disk_temperature"] = max_disk_temperature
 templates.env.globals["is_manual_sync"] = is_manual_sync
+templates.env.globals["needs_ntp_time_update"] = needs_ntp_time_update
 templates.env.globals["sync_type_label"] = sync_type_label
 templates.env.globals["sync_type_badge_class"] = sync_type_badge_class
 templates.env.globals["archive_days_required"] = (

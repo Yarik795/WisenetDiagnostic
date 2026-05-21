@@ -69,6 +69,21 @@ def is_manual_sync(sync_type: Optional[str]) -> bool:
     return (sync_type or "").strip().lower() == "manual"
 
 
+NTP_UPDATE_SKEW_THRESHOLD_SECONDS = 1.0
+
+
+def needs_ntp_time_update(
+    metrics,
+    threshold: float = NTP_UPDATE_SKEW_THRESHOLD_SECONDS,
+) -> bool:
+    if metrics is None:
+        return False
+    skew = metrics.time_skew_seconds
+    if skew is None:
+        return False
+    return skew > threshold
+
+
 def sync_type_label(sync_type: Optional[str]) -> str:
     if not sync_type:
         return "—"

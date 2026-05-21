@@ -224,4 +224,4 @@ def test_enable_ntp_success(
     trigger = r.headers.get("HX-Trigger", "")
     assert "success" in trigger
     assert "203.248.240.140" in trigger
-    assert "\\u0441\\u0438\\u043d" in trigger  # "син" в JSON (ensure_ascii)
+    assert "\\u043e\\u0431\\u043d\\u043e\\u0432" in trigger  # "обнов" в JSON (ensure_ascii)

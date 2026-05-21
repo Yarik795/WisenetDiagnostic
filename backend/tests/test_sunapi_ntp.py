@@ -86,8 +86,68 @@ async def test_enable_recorder_ntp_success(monkeypatch: pytest.MonkeyPatch) -> N
         "STWT-3" in set_url
     )
     assert "NTPServerEnable=False" in set_url
+    assert "DSTEnable=False" in set_url
+    assert "DateFormat=YYYY-MM-DD" in set_url
+    assert "TimeFormat=HMS24" in set_url
     assert "ActivateServer" not in set_url
     assert "action=view" in calls[1]
+
+
+@pytest.mark.asyncio
+async def test_enable_recorder_ntp_applies_manual_when_skew_high(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = Recorder(
+        id="nvr-1",
+        object_name="Obj",
+        host="10.0.0.1",
+        port=80,
+    )
+    credentials = Credentials(username="admin", password="secret")
+    calls: list[str] = []
+    view_calls = 0
+
+    async def fake_fetch(rec, creds, url, timeout=20.0):
+        nonlocal view_calls
+        calls.append(url)
+        if "action=set" in url:
+            return 200, "OK", None
+        view_calls += 1
+        if view_calls == 1:
+            return (
+                200,
+                json.dumps(
+                    {
+                        "SyncType": "NTP",
+                        "NTPStatus": "Success",
+                        "LocalTime": "2000-01-01 00:00:00",
+                        "UTCTime": "2000-01-01 00:00:00",
+                    }
+                ),
+                None,
+            )
+        return (
+            200,
+            json.dumps(
+                {
+                    "SyncType": "NTP",
+                    "NTPStatus": "Success",
+                    "LocalTime": "2026-05-21 12:00:00",
+                    "UTCTime": "2026-05-21 09:00:00",
+                }
+            ),
+            None,
+        )
+
+    monkeypatch.setattr("app.sunapi_extended._fetch", fake_fetch)
+
+    result = await enable_recorder_ntp(recorder, credentials, "10.34.76.201")
+    assert result.success is True
+    set_urls = [u for u in calls if "action=set" in u]
+    assert len(set_urls) == 3
+    assert "SyncType=Manual" in set_urls[1]
+    assert "SyncType=NTP" in set_urls[0]
+    assert "SyncType=NTP" in set_urls[2]
 
 
 @pytest.mark.asyncio
