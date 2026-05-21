@@ -84,6 +84,20 @@ def needs_ntp_time_update(
     return skew > threshold
 
 
+def show_ntp_action_button(metrics) -> bool:
+    if metrics is None:
+        return False
+    if is_manual_sync(metrics.sync_type):
+        return True
+    return needs_ntp_time_update(metrics)
+
+
+def ntp_action_button_label(metrics) -> str:
+    if is_manual_sync(metrics.sync_type):
+        return "Включить NTP"
+    return "Обновить NTP"
+
+
 def sync_type_label(sync_type: Optional[str]) -> str:
     if not sync_type:
         return "—"

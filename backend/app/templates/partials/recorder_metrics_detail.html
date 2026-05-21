@@ -26,7 +26,7 @@
         <dd>
           <div class="sync-row">
             <span class="{{ sync_type_badge_class(metrics.sync_type) }}">{{ sync_type_label(metrics.sync_type) }}</span>
-            {% if needs_ntp_time_update(metrics) and recorder.enabled %}
+            {% if show_ntp_action_button(metrics) and recorder.enabled %}
             <button
               type="button"
               class="btn btn-outline btn-sm sync-action-btn"
@@ -38,7 +38,7 @@
               hx-disabled-elt="this"
             >
               <span id="ntp-spinner-{{ recorder.id }}" class="htmx-indicator spinner"></span>
-              Обновить NTP
+              {{ ntp_action_button_label(metrics) }}
             </button>
             {% endif %}
           </div>
