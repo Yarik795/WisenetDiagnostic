@@ -15,6 +15,8 @@
 {% block content %}
 <div class="toolbar">
   <input type="search" id="objects-search" class="input" placeholder="Поиск по объекту, IP, имени…" aria-label="Поиск">
+  <button type="button" class="btn btn-outline" id="objects-collapse-all">Свернуть все</button>
+  <button type="button" class="btn btn-outline" id="objects-expand-all">Развернуть все</button>
   <select class="select" style="max-width:200px;"
     name="sort"
     hx-get="/objects/partials/groups"

@@ -218,6 +218,17 @@ a:hover {
   background: var(--bg-elevated);
 }
 
+.object-group-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.object-group.collapsed .object-group-chevron {
+  transform: rotate(-90deg);
+}
+
 .object-group.collapsed .object-group-body {
   display: none;
 }

@@ -1,6 +1,6 @@
 <div class="object-group" data-object-group="{{ group.object_name }}">
   <div class="object-group-header" data-toggle-group role="button" tabindex="0">
-    <span aria-hidden="true">▼</span>
+    <span class="object-group-chevron" aria-hidden="true">▼</span>
     <h2 class="object-group-title">{{ group.object_name }}</h2>
     <span class="object-group-meta">{{ group.recorders|length }} NVR</span>
     {% set status = group.aggregate_status %}

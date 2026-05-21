@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import json
-
 import pytest
 
 from app.models import Credentials, Recorder
 from app.sunapi_extended import (
     EnableNtpResult,
     enable_recorder_ntp,
+    format_celsius_only_temperature,
     is_sunapi_set_success,
+    normalize_disk_record,
     parse_date,
 )
 
@@ -31,6 +32,23 @@ def test_parse_date_ntp_url_list_json_array() -> None:
     info = parse_date(body)
     assert info.sync_type == "NTP"
     assert info.ntp_url_list == "10.0.0.1,10.0.0.2"
+
+
+def test_format_celsius_only_temperature() -> None:
+    assert format_celsius_only_temperature("35°C/95°F") == "35 °C"
+    assert format_celsius_only_temperature("33\u00b0C/91\u00b0F") == "33 °C"
+
+
+def test_normalize_disk_temperature_xrn_2010() -> None:
+    disk = {"Temperature": "35°C/95°F"}
+    out = normalize_disk_record(disk, model="XRN-2010")
+    assert out["Temperature"] == "35 °C"
+
+
+def test_normalize_disk_temperature_other_model_unchanged() -> None:
+    disk = {"Temperature": "35°C/95°F"}
+    out = normalize_disk_record(disk, model="SNB-6000")
+    assert out["Temperature"] == "35°C/95°F"
 
 
 @pytest.mark.asyncio
@@ -57,9 +75,43 @@ async def test_enable_recorder_ntp_success(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.success is True
     assert result.date_time is not None
     assert result.date_time.sync_type == "NTP"
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert "SyncType=NTP" in calls[0]
     assert "NTPURLList=203.248.240.140" in calls[0]
+    assert "TimeZone=" in calls[1]
+    assert "GMT%2B03" in calls[1] or "GMT+03" in calls[1]
+    assert "Moscow" in calls[1]
+    assert "ActivateServer=False" in calls[1]
+    assert "action=view" in calls[2]
+
+
+@pytest.mark.asyncio
+async def test_enable_recorder_ntp_timezone_step_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = Recorder(
+        id="nvr-1",
+        object_name="Obj",
+        host="10.0.0.1",
+        port=80,
+    )
+    credentials = Credentials(username="admin", password="secret")
+    set_calls = 0
+
+    async def fake_fetch(rec, creds, url, timeout=20.0):
+        nonlocal set_calls
+        if "action=set" in url:
+            set_calls += 1
+            if set_calls == 1:
+                return 200, "OK", None
+            return 200, "error", None
+        return 200, json.dumps({"SyncType": "NTP"}), None
+
+    monkeypatch.setattr("app.sunapi_extended._fetch", fake_fetch)
+
+    result = await enable_recorder_ntp(recorder, credentials, "10.0.0.1")
+    assert result.success is False
+    assert set_calls == 2
 
 
 @pytest.mark.asyncio

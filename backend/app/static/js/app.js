@@ -25,22 +25,62 @@ function applyCollapsedState() {
   });
 }
 
+function setAllGroupsCollapsed(collapsedAll) {
+  const collapsed = loadCollapsed();
+  document.querySelectorAll("[data-object-group]").forEach((group) => {
+    const name = group.dataset.objectGroup;
+    if (!name) return;
+    if (collapsedAll) {
+      collapsed.add(name);
+      group.classList.add("collapsed");
+    } else {
+      collapsed.delete(name);
+      group.classList.remove("collapsed");
+    }
+  });
+  saveCollapsed(collapsed);
+}
+
+function toggleObjectGroup(group) {
+  const name = group.dataset.objectGroup;
+  if (!name) return;
+  const collapsed = loadCollapsed();
+  if (collapsed.has(name)) {
+    collapsed.delete(name);
+  } else {
+    collapsed.add(name);
+  }
+  saveCollapsed(collapsed);
+  group.classList.toggle("collapsed");
+}
+
 function initGroupToggles() {
   document.body.addEventListener("click", (e) => {
     const header = e.target.closest("[data-toggle-group]");
     if (!header) return;
     const group = header.closest("[data-object-group]");
     if (!group) return;
-    const name = group.dataset.objectGroup;
-    const collapsed = loadCollapsed();
-    if (collapsed.has(name)) {
-      collapsed.delete(name);
-    } else {
-      collapsed.add(name);
-    }
-    saveCollapsed(collapsed);
-    group.classList.toggle("collapsed");
+    toggleObjectGroup(group);
   });
+
+  document.body.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const header = e.target.closest("[data-toggle-group]");
+    if (!header) return;
+    e.preventDefault();
+    const group = header.closest("[data-object-group]");
+    if (!group) return;
+    toggleObjectGroup(group);
+  });
+
+  const collapseAllBtn = document.getElementById("objects-collapse-all");
+  const expandAllBtn = document.getElementById("objects-expand-all");
+  if (collapseAllBtn) {
+    collapseAllBtn.addEventListener("click", () => setAllGroupsCollapsed(true));
+  }
+  if (expandAllBtn) {
+    expandAllBtn.addEventListener("click", () => setAllGroupsCollapsed(false));
+  }
 }
 
 function initMobileSidebar() {

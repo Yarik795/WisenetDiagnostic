@@ -20,6 +20,17 @@ from .sunapi_parsing import (
     try_parse_json,
 )
 
+# Часовой пояс NVR (SUNAPI TimeZone enum, GMT+3)
+NTP_TIMEZONE_GMT3 = "(GMT+03:00) Moscow, St. Petersburg, Volgograd"
+
+# Модели с температурой в формате «35°C/95°F» — показываем только °C
+MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset({"XRN-2010", "HRX-1620"})
+
+_COMBINED_TEMP_RE = re.compile(
+    r"^(\d+)\s*(?:&#?\d+;|\u00b0|\°|.)?\s*C",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ChannelInfo:
@@ -191,28 +202,64 @@ def merge_channels(*sources: list[ChannelInfo]) -> list[ChannelInfo]:
     return [merged[k] for k in sorted(merged)]
 
 
-def extract_disk_temperature(disk: dict) -> Optional[str]:
+def format_celsius_only_temperature(raw: str) -> Optional[str]:
+    """Из строки вида 35°C/95°F оставляет только значение в °C."""
+    if not raw:
+        return None
+    text = html.unescape(str(raw).strip())
+    m = _COMBINED_TEMP_RE.match(text)
+    if m:
+        return f"{m.group(1)} °C"
+    if "/" in text:
+        left = text.split("/", 1)[0].strip()
+        digits = re.search(r"(\d+)", left)
+        if digits:
+            return f"{digits.group(1)} °C"
+    return None
+
+
+def _model_uses_celsius_only_temperature(model: Optional[str]) -> bool:
+    if not model:
+        return False
+    return model.strip().upper() in MODELS_CELSIUS_ONLY_TEMPERATURE
+
+
+def _finalize_disk_temperature(
+    temp: Optional[str], *, model: Optional[str] = None
+) -> Optional[str]:
+    if not temp:
+        return None
+    if _model_uses_celsius_only_temperature(model):
+        normalized = format_celsius_only_temperature(temp)
+        if normalized:
+            return normalized
+    return temp
+
+
+def extract_disk_temperature(
+    disk: dict, *, model: Optional[str] = None
+) -> Optional[str]:
     """Температура из storageinfo: плоские поля, Health или SMART.Attributes."""
     for key in ("TemperatureCelsius", "temperature_celsius"):
         val = disk.get(key)
         if val is not None and str(val).strip() != "":
-            return f"{val} °C"
+            return _finalize_disk_temperature(f"{val} °C", model=model)
 
     for key in ("Temperature", "temperature"):
         val = disk.get(key)
         if val is not None and str(val).strip() != "":
-            return str(val).strip()
+            return _finalize_disk_temperature(str(val).strip(), model=model)
 
     for key in ("TemperatureInCelsius", "temperature_in_celsius"):
         val = disk.get(key)
         if val is not None and str(val).strip() != "":
-            return f"{val} °C"
+            return _finalize_disk_temperature(f"{val} °C", model=model)
 
     health = disk.get("Health")
     if isinstance(health, dict):
         t = health.get("TemperatureInCelsius")
         if t is not None:
-            return f"{t} °C"
+            return _finalize_disk_temperature(f"{t} °C", model=model)
 
     smart = disk.get("SMART")
     if isinstance(smart, dict):
@@ -225,20 +272,22 @@ def extract_disk_temperature(disk: dict) -> Optional[str]:
                 if name in ("temperature", "hda temperature"):
                     val = attr.get("Value")
                     if val is not None:
-                        return f"{val} °C"
+                        return _finalize_disk_temperature(f"{val} °C", model=model)
     return None
 
 
-def normalize_disk_record(disk: dict) -> dict:
+def normalize_disk_record(disk: dict, *, model: Optional[str] = None) -> dict:
     out = dict(disk)
-    temp = extract_disk_temperature(disk)
+    temp = extract_disk_temperature(disk, model=model)
     if temp:
         out["Temperature"] = temp
     return out
 
 
-def normalize_storage_disks(disks: list[dict]) -> list[dict]:
-    return [normalize_disk_record(d) for d in disks]
+def normalize_storage_disks(
+    disks: list[dict], *, model: Optional[str] = None
+) -> list[dict]:
+    return [normalize_disk_record(d, model=model) for d in disks]
 
 
 _TEMPERATURE_SMART_RE = re.compile(
@@ -247,18 +296,24 @@ _TEMPERATURE_SMART_RE = re.compile(
 )
 
 
-def parse_temperature_from_smart(text: str) -> Optional[str]:
+def parse_temperature_from_smart(
+    text: str, *, model: Optional[str] = None
+) -> Optional[str]:
     if not text:
         return None
     plain = html.unescape(text)
     plain = re.sub(r"<[^>]+>", " ", plain)
+    if _model_uses_celsius_only_temperature(model):
+        combined = format_celsius_only_temperature(plain)
+        if combined:
+            return combined
     m = _TEMPERATURE_SMART_RE.search(plain)
     if m:
         return f"{m.group(1)} °C"
     return None
 
 
-def parse_diskutility_list(body: str) -> list[dict]:
+def parse_diskutility_list(body: str, *, model: Optional[str] = None) -> list[dict]:
     data = try_parse_json(body)
     if isinstance(data, dict) and isinstance(data.get("Disks"), list):
         return [
@@ -282,7 +337,7 @@ def parse_diskutility_list(body: str) -> list[dict]:
         elif attr == "Name":
             disks[idx]["Name"] = value.strip()
         elif attr == "SMART":
-            temp = parse_temperature_from_smart(value)
+            temp = parse_temperature_from_smart(value, model=model)
             if temp:
                 disks[idx]["Temperature"] = temp
     return [
@@ -292,13 +347,13 @@ def parse_diskutility_list(body: str) -> list[dict]:
     ]
 
 
-def parse_diskutility_detail(body: str) -> dict:
+def parse_diskutility_detail(body: str, *, model: Optional[str] = None) -> dict:
     data = try_parse_json(body)
     if isinstance(data, dict) and isinstance(data.get("Disks"), list) and data["Disks"]:
         item = data["Disks"][0]
         if isinstance(item, dict):
             smart = item.get("SMART") or ""
-            temp = parse_temperature_from_smart(str(smart))
+            temp = parse_temperature_from_smart(str(smart), model=model)
             return {
                 "Index": item.get("Index"),
                 "Name": (item.get("Name") or "").strip(),
@@ -318,7 +373,7 @@ def parse_diskutility_detail(body: str) -> dict:
         elif attr == "Name":
             result["Name"] = value.strip()
         elif attr == "SMART":
-            temp = parse_temperature_from_smart(value)
+            temp = parse_temperature_from_smart(value, model=model)
             if temp:
                 result["Temperature"] = temp
     return result
@@ -327,8 +382,10 @@ def parse_diskutility_detail(body: str) -> dict:
 def merge_disk_temperatures(
     storage_disks: list[dict],
     utility_disks: list[dict],
+    *,
+    model: Optional[str] = None,
 ) -> list[dict]:
-    enriched = normalize_storage_disks(storage_disks)
+    enriched = normalize_storage_disks(storage_disks, model=model)
     if not utility_disks:
         return enriched
 
@@ -355,10 +412,11 @@ async def enrich_storage_temperatures(
     credentials: Credentials,
     disks: list[dict],
     *,
+    device_model: Optional[str] = None,
     timeout: float = 20.0,
     max_detail_fetches: int = 16,
 ) -> list[dict]:
-    normalized = normalize_storage_disks(disks)
+    normalized = normalize_storage_disks(disks, model=device_model)
     if normalized and all(d.get("Temperature") for d in normalized):
         return normalized
 
@@ -367,7 +425,7 @@ async def enrich_storage_temperatures(
     if status != 200 or not body.strip():
         return normalized
 
-    utility_disks = parse_diskutility_list(body)
+    utility_disks = parse_diskutility_list(body, model=device_model)
     missing_temp = [u for u in utility_disks if not u.get("Temperature")]
 
     if missing_temp and len(missing_temp) <= max_detail_fetches:
@@ -384,7 +442,7 @@ async def enrich_storage_temperatures(
             )
             if st != 200:
                 return {"Index": index}
-            return parse_diskutility_detail(detail_body)
+            return parse_diskutility_detail(detail_body, model=device_model)
 
         indices = [u["Index"] for u in missing_temp[:max_detail_fetches]]
         details = await asyncio.gather(*(fetch_one(i) for i in indices))
@@ -396,10 +454,10 @@ async def enrich_storage_temperatures(
             if detail and detail.get("Temperature"):
                 u["Temperature"] = detail["Temperature"]
 
-    return merge_disk_temperatures(normalized, utility_disks)
+    return merge_disk_temperatures(normalized, utility_disks, model=device_model)
 
 
-def parse_storage(body: str) -> StorageInfo:
+def parse_storage(body: str, *, model: Optional[str] = None) -> StorageInfo:
     data = try_parse_json(body)
     info = StorageInfo()
     if isinstance(data, dict):
@@ -411,7 +469,7 @@ def parse_storage(body: str) -> StorageInfo:
             info.used_percent = round(used / total * 100, 1)
         storages = data.get("Storages") or []
         if isinstance(storages, list):
-            info.disks = normalize_storage_disks(storages)
+            info.disks = normalize_storage_disks(storages, model=model)
             info.worst_status = _worst_disk_status(storages)
         return info
 
@@ -421,7 +479,7 @@ def parse_storage(body: str) -> StorageInfo:
     if info.used_space_mb is not None and info.total_space_mb and info.total_space_mb > 0:
         info.used_percent = round(info.used_space_mb / info.total_space_mb * 100, 1)
     disks = parse_storage_indexed(fields)
-    info.disks = normalize_storage_disks(disks)
+    info.disks = normalize_storage_disks(disks, model=model)
     info.worst_status = _worst_disk_status(disks)
     return info
 
@@ -507,6 +565,50 @@ async def fetch_date_info(
     return parse_date(body), None
 
 
+async def _sunapi_date_set(
+    recorder: Recorder,
+    credentials: Credentials,
+    *,
+    timeout: float = 20.0,
+    **params: str,
+) -> tuple[bool, Optional[str]]:
+    set_url = build_url(
+        recorder,
+        "system.cgi",
+        "date",
+        action="set",
+        **params,
+    )
+    status, body, err = await _fetch(recorder, credentials, set_url, timeout)
+    if err:
+        return False, err
+    if status >= 400:
+        return False, f"HTTP {status}"
+    if not is_sunapi_set_success(body):
+        snippet = (body or "").strip()[:300]
+        return False, snippet or "Устройство не подтвердило изменение настроек времени"
+    return True, None
+
+
+async def _apply_ntp_timezone_and_server_mode(
+    recorder: Recorder,
+    credentials: Credentials,
+    *,
+    timeout: float = 20.0,
+) -> tuple[bool, Optional[str]]:
+    """После включения NTP: GMT+3 и отключение режима NTP-сервера на устройстве."""
+    ok, err = await _sunapi_date_set(
+        recorder,
+        credentials,
+        timeout=timeout,
+        TimeZone=NTP_TIMEZONE_GMT3,
+        ActivateServer="False",
+    )
+    if ok:
+        return True, None
+    return False, err or "Не удалось применить часовой пояс и отключить NTP-сервер"
+
+
 async def enable_recorder_ntp(
     recorder: Recorder,
     credentials: Credentials,
@@ -524,24 +626,23 @@ async def enable_recorder_ntp(
             error="Не задан NTP-сервер (monitoring.ntp_server в config.json)",
         )
 
-    set_url = build_url(
+    ok, err = await _sunapi_date_set(
         recorder,
-        "system.cgi",
-        "date",
-        action="set",
+        credentials,
+        timeout=timeout,
         SyncType="NTP",
         NTPURLList=server,
     )
-    status, body, err = await _fetch(recorder, credentials, set_url, timeout)
-    if err:
+    if not ok:
         return EnableNtpResult(success=False, error=err)
-    if status >= 400:
-        return EnableNtpResult(success=False, error=f"HTTP {status}")
-    if not is_sunapi_set_success(body):
-        snippet = (body or "").strip()[:300]
+
+    tz_ok, tz_err = await _apply_ntp_timezone_and_server_mode(
+        recorder, credentials, timeout=timeout
+    )
+    if not tz_ok:
         return EnableNtpResult(
             success=False,
-            error=snippet or "Устройство не подтвердило смену режима синхронизации",
+            error=tz_err or "Не удалось применить часовой пояс (GMT+3)",
         )
 
     date_info, view_err = await fetch_date_info(recorder, credentials, timeout=timeout)
@@ -735,13 +836,15 @@ async def poll_recorder(
 
     storage_url = build_url(recorder, "system.cgi", "storageinfo")
     st, b, _ = await _fetch(recorder, credentials, storage_url, timeout)
+    device_model = result.device.model if result.device else None
     if st == 200:
-        result.storage = parse_storage(b)
+        result.storage = parse_storage(b, model=device_model)
         if result.storage and result.storage.disks:
             result.storage.disks = await enrich_storage_temperatures(
                 recorder,
                 credentials,
                 result.storage.disks,
+                device_model=device_model,
                 timeout=timeout,
             )
 
