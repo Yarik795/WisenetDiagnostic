@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import html
 import re
+import socket
+import struct
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -23,6 +25,10 @@ from .sunapi_parsing import (
 # Часовой пояс GMT+3 для NVR (SUNAPI POSIXTimeZone)
 DEFAULT_NTP_POSIX_TIMEZONE = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
 NTP_TIME_SKEW_APPLY_THRESHOLD_SECONDS = 1.0
+NTP_EPOCH_DELTA = 2208988800  # секунды между 1900-01-01 и 1970-01-01
+NTP_QUERY_TIMEOUT_SECONDS = 5.0
+# Смещение локального времени устройства (GMT+3, POSIX STWT-3)
+NTP_LOCAL_UTC_OFFSET = timedelta(hours=3)
 
 # Модели с температурой в формате «35°C/95°F» — показываем только °C
 MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset({"XRN-2010", "HRX-1620"})
@@ -578,6 +584,55 @@ def _ntp_set_params(server: str, posix_timezone: str) -> dict[str, str]:
     }
 
 
+def _first_ntp_host(ntp_server: str) -> str:
+    host = (ntp_server or "").split(",")[0].strip()
+    if not host:
+        raise ValueError("Не указан NTP-сервер")
+    return host
+
+
+def query_ntp_utc_time(
+    ntp_server: str,
+    *,
+    timeout: float = NTP_QUERY_TIMEOUT_SECONDS,
+) -> datetime:
+    """Запрашивает текущее UTC-время у NTP-сервера (UDP/123)."""
+    host = _first_ntp_host(ntp_server)
+    packet = b"\x1b" + 47 * b"\0"
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        sock.sendto(packet, (host, 123))
+        data, _ = sock.recvfrom(48)
+    if len(data) < 48:
+        raise OSError("Некорректный ответ NTP-сервера")
+    transmit_ts = struct.unpack("!12I", data)[10]
+    seconds = transmit_ts - NTP_EPOCH_DELTA
+    return datetime.fromtimestamp(seconds, tz=timezone.utc)
+
+
+def ntp_utc_to_local_naive(utc_time: datetime) -> datetime:
+    if utc_time.tzinfo is None:
+        utc_time = utc_time.replace(tzinfo=timezone.utc)
+    local = utc_time + NTP_LOCAL_UTC_OFFSET
+    return local.replace(tzinfo=None)
+
+
+async def fetch_ntp_local_datetime(
+    ntp_server: str,
+    *,
+    timeout: float = NTP_QUERY_TIMEOUT_SECONDS,
+) -> tuple[Optional[datetime], Optional[str]]:
+    try:
+        utc_time = await asyncio.to_thread(
+            query_ntp_utc_time, ntp_server, timeout=timeout
+        )
+        return ntp_utc_to_local_naive(utc_time), None
+    except OSError as exc:
+        return None, f"Ошибка NTP: {exc}"
+    except Exception as exc:
+        return None, str(exc)
+
+
 def _manual_time_set_params(posix_timezone: str, when: Optional[datetime] = None) -> dict[str, str]:
     now = when or datetime.now()
     return {
@@ -683,16 +738,26 @@ async def enable_recorder_ntp(
         )
 
     if _skew_exceeds_threshold(date_info, skew_apply_threshold):
+        ntp_local, ntp_time_err = await fetch_ntp_local_datetime(
+            server, timeout=min(timeout, NTP_QUERY_TIMEOUT_SECONDS)
+        )
+        if not ntp_local:
+            return EnableNtpResult(
+                success=False,
+                error=ntp_time_err or "Не удалось получить время с NTP-сервера",
+                date_time=date_info,
+            )
+
         manual_ok, manual_err = await _sunapi_date_set(
             recorder,
             credentials,
             timeout=timeout,
-            **_manual_time_set_params(tz),
+            **_manual_time_set_params(tz, when=ntp_local),
         )
         if not manual_ok:
             return EnableNtpResult(
                 success=False,
-                error=manual_err or "Не удалось синхронизировать системное время",
+                error=manual_err or "Не удалось установить время с NTP-сервера",
                 date_time=date_info,
             )
 

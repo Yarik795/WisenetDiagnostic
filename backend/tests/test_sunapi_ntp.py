@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import json
+import struct
 
 import pytest
 
 from app.models import Credentials, Recorder
+from datetime import datetime, timezone
+
 from app.sunapi_extended import (
     DEFAULT_NTP_POSIX_TIMEZONE,
     EnableNtpResult,
     enable_recorder_ntp,
+    fetch_ntp_local_datetime,
     format_celsius_only_temperature,
     is_sunapi_set_success,
     normalize_disk_record,
+    ntp_utc_to_local_naive,
     parse_date,
+    query_ntp_utc_time,
 )
 
 
@@ -93,6 +99,59 @@ async def test_enable_recorder_ntp_success(monkeypatch: pytest.MonkeyPatch) -> N
     assert "action=view" in calls[1]
 
 
+def test_ntp_utc_to_local_naive_gmt3() -> None:
+    utc = datetime(2026, 5, 21, 9, 0, 0, tzinfo=timezone.utc)
+    local = ntp_utc_to_local_naive(utc)
+    assert local == datetime(2026, 5, 21, 12, 0, 0)
+
+
+def test_query_ntp_utc_time_parses_packet(monkeypatch: pytest.MonkeyPatch) -> None:
+    epoch_seconds = int(datetime(2026, 5, 21, 9, 0, 0, tzinfo=timezone.utc).timestamp())
+    ntp_seconds = epoch_seconds + 2208988800
+    packet = struct.pack("!12I", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ntp_seconds, 0)
+
+    class FakeSocket:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def settimeout(self, timeout):
+            pass
+
+        def sendto(self, data, addr):
+            assert addr == ("10.34.76.201", 123)
+
+        def recvfrom(self, size):
+            return packet, ("10.34.76.201", 123)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr("app.sunapi_extended.socket.socket", lambda *a, **k: FakeSocket())
+
+    result = query_ntp_utc_time("10.34.76.201")
+    assert result.year == 2026
+    assert result.month == 5
+    assert result.day == 21
+    assert result.hour == 9
+
+
+@pytest.mark.asyncio
+async def test_fetch_ntp_local_datetime(monkeypatch: pytest.MonkeyPatch) -> None:
+    utc = datetime(2026, 5, 21, 9, 30, 45, tzinfo=timezone.utc)
+
+    def fake_query(server, timeout=5.0):
+        return utc
+
+    monkeypatch.setattr("app.sunapi_extended.query_ntp_utc_time", fake_query)
+
+    local, err = await fetch_ntp_local_datetime("10.34.76.201")
+    assert err is None
+    assert local == datetime(2026, 5, 21, 12, 30, 45)
+
+
 @pytest.mark.asyncio
 async def test_enable_recorder_ntp_applies_manual_when_skew_high(
     monkeypatch: pytest.MonkeyPatch,
@@ -139,13 +198,19 @@ async def test_enable_recorder_ntp_applies_manual_when_skew_high(
             None,
         )
 
+    async def fake_ntp_local(server, timeout=5.0):
+        return datetime(2026, 5, 21, 12, 0, 0), None
+
     monkeypatch.setattr("app.sunapi_extended._fetch", fake_fetch)
+    monkeypatch.setattr("app.sunapi_extended.fetch_ntp_local_datetime", fake_ntp_local)
 
     result = await enable_recorder_ntp(recorder, credentials, "10.34.76.201")
     assert result.success is True
     set_urls = [u for u in calls if "action=set" in u]
     assert len(set_urls) == 3
     assert "SyncType=Manual" in set_urls[1]
+    assert "Year=2026" in set_urls[1]
+    assert "Hour=12" in set_urls[1]
     assert "SyncType=NTP" in set_urls[0]
     assert "SyncType=NTP" in set_urls[2]
 
