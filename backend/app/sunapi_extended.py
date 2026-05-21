@@ -20,8 +20,8 @@ from .sunapi_parsing import (
     try_parse_json,
 )
 
-# Часовой пояс NVR (SUNAPI TimeZone enum, GMT+3)
-NTP_TIMEZONE_GMT3 = "(GMT+03:00) Moscow, St. Petersburg, Volgograd"
+# Часовой пояс GMT+3 для NVR (SUNAPI POSIXTimeZone)
+DEFAULT_NTP_POSIX_TIMEZONE = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
 
 # Модели с температурой в формате «35°C/95°F» — показываем только °C
 MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset({"XRN-2010", "HRX-1620"})
@@ -590,30 +590,12 @@ async def _sunapi_date_set(
     return True, None
 
 
-async def _apply_ntp_timezone_and_server_mode(
-    recorder: Recorder,
-    credentials: Credentials,
-    *,
-    timeout: float = 20.0,
-) -> tuple[bool, Optional[str]]:
-    """После включения NTP: GMT+3 и отключение режима NTP-сервера на устройстве."""
-    ok, err = await _sunapi_date_set(
-        recorder,
-        credentials,
-        timeout=timeout,
-        TimeZone=NTP_TIMEZONE_GMT3,
-        ActivateServer="False",
-    )
-    if ok:
-        return True, None
-    return False, err or "Не удалось применить часовой пояс и отключить NTP-сервер"
-
-
 async def enable_recorder_ntp(
     recorder: Recorder,
     credentials: Credentials,
     ntp_server: str,
     *,
+    posix_timezone: str = DEFAULT_NTP_POSIX_TIMEZONE,
     timeout: float = 20.0,
 ) -> EnableNtpResult:
     if not credentials.username or not credentials.password:
@@ -626,24 +608,24 @@ async def enable_recorder_ntp(
             error="Не задан NTP-сервер (monitoring.ntp_server в config.json)",
         )
 
+    tz = (posix_timezone or DEFAULT_NTP_POSIX_TIMEZONE).strip()
+    if not tz:
+        return EnableNtpResult(
+            success=False,
+            error="Не задан POSIXTimeZone (monitoring.ntp_posix_timezone в config.json)",
+        )
+
     ok, err = await _sunapi_date_set(
         recorder,
         credentials,
         timeout=timeout,
         SyncType="NTP",
         NTPURLList=server,
+        POSIXTimeZone=tz,
+        NTPServerEnable="False",
     )
     if not ok:
         return EnableNtpResult(success=False, error=err)
-
-    tz_ok, tz_err = await _apply_ntp_timezone_and_server_mode(
-        recorder, credentials, timeout=timeout
-    )
-    if not tz_ok:
-        return EnableNtpResult(
-            success=False,
-            error=tz_err or "Не удалось применить часовой пояс (GMT+3)",
-        )
 
     date_info, view_err = await fetch_date_info(recorder, credentials, timeout=timeout)
     if view_err:

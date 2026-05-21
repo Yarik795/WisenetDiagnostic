@@ -195,7 +195,7 @@ def test_enable_ntp_success(
         last_polled_at=polled_at,
     )
 
-    async def fake_enable(recorder, credentials, ntp_server, timeout=20.0):
+    async def fake_enable(recorder, credentials, ntp_server, **kwargs):
         return EnableNtpResult(success=True)
 
     async def fake_poll(config_store, state_store, recorder, include_inventory=True):

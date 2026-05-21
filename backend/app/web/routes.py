@@ -483,7 +483,13 @@ async def recorder_enable_ntp(
     if not credentials.username or not credentials.password:
         return _error_response("Не заданы учётные данные API в настройках")
 
-    result = await enable_recorder_ntp(recorder, credentials, ntp_server)
+    posix_tz = (config.monitoring.ntp_posix_timezone or "").strip()
+    result = await enable_recorder_ntp(
+        recorder,
+        credentials,
+        ntp_server,
+        posix_timezone=posix_tz,
+    )
     if not result.success:
         return _error_response(result.error or "Не удалось включить NTP")
 

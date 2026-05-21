@@ -63,6 +63,7 @@ class MonitoringSettings(BaseModel):
     disk_usage_warn_percent: int = Field(default=85, ge=1, le=100)
     disk_usage_error_percent: int = Field(default=95, ge=1, le=100)
     ntp_server: str = ""
+    ntp_posix_timezone: str = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
 
 
 class AppConfig(BaseModel):

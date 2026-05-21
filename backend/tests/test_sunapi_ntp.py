@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+
 import pytest
 
 from app.models import Credentials, Recorder
 from app.sunapi_extended import (
+    DEFAULT_NTP_POSIX_TIMEZONE,
     EnableNtpResult,
     enable_recorder_ntp,
     format_celsius_only_temperature,
@@ -75,20 +77,21 @@ async def test_enable_recorder_ntp_success(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.success is True
     assert result.date_time is not None
     assert result.date_time.sync_type == "NTP"
-    assert len(calls) == 3
-    assert "SyncType=NTP" in calls[0]
-    assert "NTPURLList=203.248.240.140" in calls[0]
-    assert "TimeZone=" in calls[1]
-    assert "GMT%2B03" in calls[1] or "GMT+03" in calls[1]
-    assert "Moscow" in calls[1]
-    assert "ActivateServer=False" in calls[1]
-    assert "action=view" in calls[2]
+    assert len(calls) == 2
+    set_url = calls[0]
+    assert "SyncType=NTP" in set_url
+    assert "NTPURLList=203.248.240.140" in set_url
+    assert "POSIXTimeZone=" in set_url
+    assert DEFAULT_NTP_POSIX_TIMEZONE.replace(",", "%2C") in set_url or (
+        "STWT-3" in set_url
+    )
+    assert "NTPServerEnable=False" in set_url
+    assert "ActivateServer" not in set_url
+    assert "action=view" in calls[1]
 
 
 @pytest.mark.asyncio
-async def test_enable_recorder_ntp_timezone_step_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_enable_recorder_ntp_set_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = Recorder(
         id="nvr-1",
         object_name="Obj",
@@ -96,22 +99,17 @@ async def test_enable_recorder_ntp_timezone_step_fails(
         port=80,
     )
     credentials = Credentials(username="admin", password="secret")
-    set_calls = 0
 
     async def fake_fetch(rec, creds, url, timeout=20.0):
-        nonlocal set_calls
         if "action=set" in url:
-            set_calls += 1
-            if set_calls == 1:
-                return 200, "OK", None
-            return 200, "error", None
+            return 200, "NG\nError Code: 603", None
         return 200, json.dumps({"SyncType": "NTP"}), None
 
     monkeypatch.setattr("app.sunapi_extended._fetch", fake_fetch)
 
     result = await enable_recorder_ntp(recorder, credentials, "10.0.0.1")
     assert result.success is False
-    assert set_calls == 2
+    assert "603" in (result.error or "")
 
 
 @pytest.mark.asyncio
