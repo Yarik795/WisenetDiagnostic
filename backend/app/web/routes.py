@@ -31,6 +31,7 @@ from ..ui.grouping import (
 from ..ui.helpers import display_recorder_name
 from ..ui.metrics_helpers import format_skew, sync_type_label
 from ..ui.health_classifiers import CATEGORY_LABELS, HealthCategory
+from ..ui.error_report import DeviceAuthMode, build_error_report_context
 from ..ui.health_dashboard import health_dashboard_context
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
@@ -385,6 +386,43 @@ def objects_groups_partial(
         "partials/object_groups.html",
         {"groups": groups, "recorders": recorders, "metrics_map": metrics},
     )
+
+
+@router.get("/objects/export/errors.html", response_class=HTMLResponse)
+def objects_export_errors_html(
+    request: Request,
+    device_auth: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    from datetime import datetime
+
+    config = store.load()
+    recorders = store.list_recorders()
+    metrics = _metrics_map(state)
+    auth_mode: DeviceAuthMode = (
+        "userinfo" if device_auth == "userinfo" else ""
+    )
+    report = build_error_report_context(
+        recorders,
+        metrics,
+        config.monitoring,
+        credentials=config.credentials,
+        ntp_server=config.monitoring.ntp_server or "",
+        device_auth=auth_mode,
+    )
+    filename = (
+        f"wisenet-dashboard-errors-{datetime.now().strftime('%Y%m%d-%H%M')}.html"
+    )
+    response = templates.TemplateResponse(
+        request,
+        "exports/error_report.html",
+        {"report": report},
+    )
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="{filename}"'
+    )
+    return response
 
 
 @router.get("/recorders", response_class=HTMLResponse)

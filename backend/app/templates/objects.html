@@ -2,6 +2,18 @@
 {% block title %}Объекты — Wisenet Диагностика{% endblock %}
 {% block page_title %}Объекты{% endblock %}
 {% block page_actions %}
+<a
+  href="/objects/export/errors.html"
+  class="btn btn-outline"
+  download
+  title="Скачать HTML-файл со списком ошибок и предупреждений по всем дашбордам; ссылки на NVR открывают web-интерфейс устройства"
+>Экспорт отчёта по ошибкам (HTML)</a>
+<a
+  href="/objects/export/errors.html?device_auth=userinfo"
+  class="btn btn-outline"
+  download
+  title="Экспериментально: ссылки содержат логин и пароль NVR для автоматического входа. Не пересылайте файл посторонним"
+>Экспорт с авто-входом на NVR</a>
 <button type="button" class="btn btn-outline"
   hx-post="/monitoring/poll-all"
   hx-swap="none"
