@@ -3,7 +3,7 @@
   <td>
     <a href="/objects?object={{ rec.object_name|urlencode }}#recorder-row-{{ rec.id }}">{{ rec.object_name }}</a>
   </td>
-  <td>{{ display_recorder_name(rec) }}</td>
+  <td>{% include "partials/recorder_nvr_cell.html" %}</td>
   <td class="time-mono" style="font-size:12px;">{{ row.value_display }}</td>
   <td>
     <span class="status-badge">

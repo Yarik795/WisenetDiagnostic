@@ -6,8 +6,17 @@
 >
   <div class="recorder-row-main">
     <div class="recorder-row-info">
-      <div class="recorder-row-name">{{ display_recorder_name(recorder) }}</div>
+      <div class="recorder-row-name">
+        {% if recorder.name and recorder.name.strip() %}
+        {{ display_recorder_name(recorder) }}
+        <span class="recorder-row-host">{{ recorder.host }}</span>
+        {% else %}
+        {{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}
+        {% endif %}
+      </div>
+      {% if recorder.name and recorder.name.strip() %}
       <div class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</div>
+      {% endif %}
       {% include "partials/recorder_metrics_summary.html" %}
     </div>
     <div class="recorder-row-actions">

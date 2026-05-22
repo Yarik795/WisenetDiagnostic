@@ -235,6 +235,38 @@ def test_time_page(client: TestClient) -> None:
     assert "Исправить" in r.text
 
 
+def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
+    from datetime import datetime, timezone
+
+    store = app.dependency_overrides[get_store]()
+    store.update_credentials("admin", "secret")
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name="ВСП-001",
+            name="NVR-корпус",
+            host="192.168.1.10",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    state = app.dependency_overrides[get_state_store]()
+    state.upsert_recorder_metrics(
+        rec.id,
+        device_online=True,
+        health_status="warn",
+        health_reason="Температура HDD выше порога",
+        disks=[{"TemperatureCelsius": 55}],
+        last_polled_at=datetime.now(timezone.utc),
+    )
+
+    r = client.get("/objects")
+    assert r.status_code == 200
+    assert "NVR-корпус" in r.text
+    assert "192.168.1.10" in r.text
+    assert "category-dashboard-temperature" in r.text
+
+
 def test_objects_page_has_category_dashboard_stack(client: TestClient) -> None:
     store = app.dependency_overrides[get_store]()
     store.update_credentials("admin", "secret")

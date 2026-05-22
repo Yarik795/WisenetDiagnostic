@@ -1,0 +1,6 @@
+{% set r = recorder|default(rec) %}
+{% if r.name and r.name.strip() %}
+{{ display_recorder_name(r) }} <span class="recorder-row-host">{{ r.host }}</span>
+{% else %}
+<span class="time-mono">{{ r.host }}</span>
+{% endif %}
