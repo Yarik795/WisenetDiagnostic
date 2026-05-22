@@ -1,5 +1,11 @@
+from app.sunapi import DeviceInfo
 from app.sunapi_extended import (
+    ChannelInfo,
+    NvrApiProfile,
+    _is_diskutility_error,
+    _to_float,
     extract_disk_temperature,
+    format_celsius_only_temperature,
     merge_channels,
     merge_disk_temperatures,
     normalize_disk_record,
@@ -12,7 +18,6 @@ from app.sunapi_extended import (
     parse_temperature_from_smart,
     parse_videosource_channels,
 )
-from app.sunapi_extended import ChannelInfo
 
 
 def test_parse_videosource_text() -> None:
@@ -188,3 +193,80 @@ def test_merge_channels() -> None:
     assert len(merged) == 1
     assert merged[0].name == "A"
     assert merged[0].camera_ip == "10.0.0.1"
+
+
+def test_parse_cameraregister_kv_connectfail() -> None:
+    body = """
+Channel.0.IPAddress=10.0.0.5
+Channel.0.Model=XNV-6080
+Channel.0.Status=ConnectFail
+Channel.1.IPAddress=10.0.0.6
+Channel.1.Model=XNV-6081
+Channel.1.Status=Success
+"""
+    channels = parse_cameraregister(body)
+    by_no = {c.channel_no: c for c in channels}
+    assert by_no[0].camera_ip == "10.0.0.5"
+    assert by_no[0].camera_model == "XNV-6080"
+    assert by_no[0].register_status == "ConnectFail"
+    assert by_no[1].register_status == "Success"
+
+
+def test_to_float_tb_and_gb() -> None:
+    assert _to_float("5.98TB") == 5.98 * 1024 * 1024
+    assert _to_float("41.92TB") == 41.92 * 1024 * 1024
+    assert _to_float("1000GB") == 1000 * 1024
+    assert _to_float("512MB") == 512
+
+
+def test_parse_storage_tb_units_percent() -> None:
+    body = "UsedSpace=1.5TB\nTotalSpace=5.98TB\n"
+    info = parse_storage(body)
+    assert info.used_space_mb is not None
+    assert info.total_space_mb is not None
+    assert info.used_percent is not None
+    assert 0 < info.used_percent < 100
+
+
+def test_nvr_profile_old_cgi_disables_diskutility() -> None:
+    device = DeviceInfo(model="HRX-1620", cgi_version="2.5.6")
+    profile = NvrApiProfile.from_device(device)
+    assert profile.supports_diskutility is False
+    assert profile.celsius_only_temperature is True
+
+
+def test_nvr_profile_new_cgi_allows_diskutility() -> None:
+    device = DeviceInfo(model="XRN-6410B2", cgi_version="2.6.0")
+    profile = NvrApiProfile.from_device(device)
+    assert profile.supports_diskutility is True
+
+
+def test_parse_storage_combined_temperature_hrx() -> None:
+    body = """
+Storage.1.Temperature=46°C/114°F
+Storage.1.Model=WD_RED
+"""
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="HRX-1620", cgi_version="2.5.6")
+    )
+    info = parse_storage(body, model="HRX-1620", profile=profile)
+    assert info.disks[0]["Temperature"] == "46 °C"
+
+
+def test_format_celsius_only_temperature() -> None:
+    assert format_celsius_only_temperature("46°C/114°F") == "46 °C"
+
+
+def test_is_diskutility_error_response() -> None:
+    body = "NG\nError Code: 600\nSubmenu Not Found\n"
+    assert _is_diskutility_error(body) is True
+
+
+def test_normalize_disk_combined_temp_xrn_2010a() -> None:
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="XRN-2010A", cgi_version="2.5.4")
+    )
+    disk = {"Storage": 1, "Temperature": "35°C/95°F"}
+    normalized = normalize_disk_record(disk, model="XRN-2010A", profile=profile)
+    assert normalized["Temperature"] == "35 °C"
+    assert extract_disk_temperature(normalized, profile=profile) == "35 °C"

@@ -1,9 +1,15 @@
-from app.models import MonitoringSettings
+from datetime import datetime, timezone
+from pathlib import Path
+
+from app.config_store import ConfigStore
+from app.models import MonitoringSettings, Recorder
 from app.monitoring import (
+    apply_poll_result,
     archive_bounds,
     evaluate_channel_health,
     evaluate_recorder_health,
 )
+from app.state_store import StateStore
 from app.sunapi_extended import (
     ChannelInfo,
     EventChannelStatus,
@@ -82,6 +88,89 @@ def test_network_camera_connect_false_is_error_for_on_channel() -> None:
     status, reason = evaluate_channel_health(ch, event, _settings())
     assert status == "error"
     assert "не подключена" in reason.lower()
+
+
+def test_deactive_with_disconnect_is_unknown() -> None:
+    ch = ChannelInfo(channel_no=3, source_state="Deactive", register_status="Disconnected")
+    event = EventChannelStatus(channel_no=3, connected=False)
+    status, _ = evaluate_channel_health(ch, event, _settings())
+    assert status == "unknown"
+
+
+def test_on_connectfail_is_error() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        source_state="On",
+        camera_ip="10.0.0.5",
+        register_status="ConnectFail",
+    )
+    status, reason = evaluate_channel_health(ch, None, _settings())
+    assert status == "error"
+    assert "ConnectFail" in reason
+
+
+def test_on_disconnected_is_error() -> None:
+    ch = ChannelInfo(
+        channel_no=1,
+        source_state="On",
+        register_status="Disconnected",
+    )
+    status, _ = evaluate_channel_health(ch, None, _settings())
+    assert status == "error"
+
+
+def test_short_poll_preserves_channels(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(
+        id="nvr1",
+        object_name="Obj",
+        host="10.0.0.1",
+        port=80,
+    )
+    state.upsert_channel(
+        "nvr1",
+        0,
+        name="Cam 0",
+        source_state="On",
+        health_status="ok",
+    )
+    state.upsert_channel(
+        "nvr1",
+        1,
+        name="Cam 1",
+        source_state="Deactive",
+        health_status="unknown",
+    )
+    state.upsert_recorder_metrics(
+        "nvr1",
+        device_online=True,
+        channel_count=2,
+        channels_ok=1,
+        channels_unknown=1,
+    )
+    poll = RecorderPollData(
+        online=True,
+        channels_polled=False,
+        events=[EventChannelStatus(channel_no=0, connected=True)],
+    )
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        datetime.now(timezone.utc),
+        update_config=False,
+    )
+    channels = state.list_channels("nvr1")
+    assert len(channels) == 2
+    metrics = state.get_recorder_metrics("nvr1")
+    assert metrics is not None
+    assert metrics.channel_count == 2
+    assert metrics.channels_ok == 1
+    assert metrics.channels_unknown == 1
 
 
 def test_recorder_cpu_fan_error() -> None:

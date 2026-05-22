@@ -21,6 +21,7 @@ class DeviceInfo:
     model: Optional[str] = None
     firmware_version: Optional[str] = None
     device_type: Optional[str] = None
+    cgi_version: Optional[str] = None
 
 
 @dataclass
@@ -49,6 +50,7 @@ def parse_deviceinfo_response(text: str) -> DeviceInfo:
         model=fields.get("Model"),
         firmware_version=fields.get("FirmwareVersion"),
         device_type=fields.get("DeviceType"),
+        cgi_version=fields.get("CGIVersion"),
     )
 
 

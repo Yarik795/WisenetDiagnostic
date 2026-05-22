@@ -31,7 +31,29 @@ NTP_QUERY_TIMEOUT_SECONDS = 5.0
 NTP_LOCAL_UTC_OFFSET = timedelta(hours=3)
 
 # Модели с температурой в формате «35°C/95°F» — показываем только °C
-MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset({"XRN-2010", "HRX-1620"})
+MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset(
+    {"XRN-2010", "XRN-2010A", "XRN-2010P", "HRX-1620"}
+)
+
+_CGI_VERSION_RE = re.compile(r"(\d+)\.(\d+)")
+_SIZE_UNIT_RE = re.compile(
+    r"^([\d.,]+)\s*(TB|GB|MB|КБ|МБ|ТБ)?$",
+    re.IGNORECASE,
+)
+_DISKUTILITY_ERROR_MARKERS = ("NG", "Error Code:", "Submenu Not Found")
+_REGISTER_STATUS_ERROR = frozenset(
+    {"connectfail", "disconnected", "fail", "failed", "error"}
+)
+
+
+def normalize_register_status(status: Optional[str]) -> str:
+    if not status:
+        return ""
+    return status.strip().lower().replace(" ", "").replace("_", "")
+
+
+def is_register_status_error(status: Optional[str]) -> bool:
+    return normalize_register_status(status) in _REGISTER_STATUS_ERROR
 
 _COMBINED_TEMP_RE = re.compile(
     r"^(\d+)\s*(?:&#?\d+;|\u00b0|\°|.)?\s*C",
@@ -97,10 +119,46 @@ class EventStatusResult:
 
 
 @dataclass
+class NvrApiProfile:
+    """Возможности SUNAPI по модели и версии CGI (после deviceinfo)."""
+
+    model: Optional[str] = None
+    cgi_version: Optional[float] = None
+    supports_diskutility: bool = True
+    celsius_only_temperature: bool = False
+
+    @classmethod
+    def from_device(cls, device: Optional[DeviceInfo]) -> "NvrApiProfile":
+        model = (device.model or "").strip() if device else ""
+        cgi_raw = device.cgi_version if device else None
+        cgi_ver = _parse_cgi_version(cgi_raw)
+        model_upper = model.upper()
+
+        celsius_only = any(
+            model_upper.startswith(prefix)
+            for prefix in ("HRX-1620", "XRN-2010")
+        ) or model_upper in MODELS_CELSIUS_ONLY_TEMPERATURE
+
+        supports_diskutility = True
+        if cgi_ver is not None and cgi_ver < 2.6:
+            supports_diskutility = False
+        if any(model_upper.startswith(p) for p in ("HRX-1620", "XRN-2010")):
+            supports_diskutility = False
+
+        return cls(
+            model=model or None,
+            cgi_version=cgi_ver,
+            supports_diskutility=supports_diskutility,
+            celsius_only_temperature=celsius_only,
+        )
+
+
+@dataclass
 class RecorderPollData:
     device: Optional[DeviceInfo] = None
     online: bool = False
     error: Optional[str] = None
+    channels_polled: bool = False
     storage: Optional[StorageInfo] = None
     date_time: Optional[DateTimeInfo] = None
     recording_period: Optional[RecordingPeriodInfo] = None
@@ -121,6 +179,29 @@ def build_url(recorder: Recorder, cgi: str, submenu: str, action: str = "view", 
     base = build_base_url(recorder, cgi)
     query: dict[str, str] = {"msubmenu": submenu, "action": action, **params}
     return f"{base}?{urlencode(query)}"
+
+
+def _parse_cgi_version(raw: Optional[str]) -> Optional[float]:
+    if not raw:
+        return None
+    m = _CGI_VERSION_RE.search(str(raw).strip())
+    if not m:
+        return None
+    return float(f"{m.group(1)}.{m.group(2)}")
+
+
+def _is_diskutility_error(body: str) -> bool:
+    text = (body or "").strip()
+    if not text:
+        return True
+    upper = text.upper()
+    return any(marker.upper() in upper for marker in _DISKUTILITY_ERROR_MARKERS)
+
+
+def _period_signature(period: Optional[RecordingPeriodInfo]) -> Optional[tuple[str, str]]:
+    if not period or not period.start_time or not period.end_time:
+        return None
+    return (period.start_time.strip(), period.end_time.strip())
 
 
 async def _fetch(
@@ -183,17 +264,33 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
             ch = item.get("Channel")
             if ch is None:
                 continue
+            name = item.get("Title") or item.get("Name") or item.get("Model")
             channels.append(
                 ChannelInfo(
                     channel_no=int(ch),
                     camera_ip=item.get("IPAddress"),
                     camera_model=item.get("Model"),
                     register_status=item.get("Status"),
-                    name=item.get("Model"),
+                    name=name,
                 )
             )
         return channels
-    return []
+
+    fields = parse_key_value_body(body)
+    indexed = parse_channel_indexed(fields, "Channel")
+    channels = []
+    for ch, attrs in sorted(indexed.items()):
+        name = attrs.get("Title") or attrs.get("Name") or attrs.get("Model")
+        channels.append(
+            ChannelInfo(
+                channel_no=ch,
+                camera_ip=attrs.get("IPAddress"),
+                camera_model=attrs.get("Model"),
+                register_status=attrs.get("Status"),
+                name=name,
+            )
+        )
+    return channels
 
 
 def merge_channels(*sources: list[ChannelInfo]) -> list[ChannelInfo]:
@@ -232,18 +329,30 @@ def format_celsius_only_temperature(raw: str) -> Optional[str]:
     return None
 
 
-def _model_uses_celsius_only_temperature(model: Optional[str]) -> bool:
+def _model_uses_celsius_only_temperature(
+    model: Optional[str], *, profile: Optional[NvrApiProfile] = None
+) -> bool:
+    if profile is not None:
+        return profile.celsius_only_temperature
     if not model:
         return False
-    return model.strip().upper() in MODELS_CELSIUS_ONLY_TEMPERATURE
+    model_upper = model.strip().upper()
+    if model_upper in MODELS_CELSIUS_ONLY_TEMPERATURE:
+        return True
+    return any(
+        model_upper.startswith(prefix) for prefix in ("HRX-1620", "XRN-2010")
+    )
 
 
 def _finalize_disk_temperature(
-    temp: Optional[str], *, model: Optional[str] = None
+    temp: Optional[str],
+    *,
+    model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
 ) -> Optional[str]:
     if not temp:
         return None
-    if _model_uses_celsius_only_temperature(model):
+    if _model_uses_celsius_only_temperature(model, profile=profile):
         normalized = format_celsius_only_temperature(temp)
         if normalized:
             return normalized
@@ -251,29 +360,40 @@ def _finalize_disk_temperature(
 
 
 def extract_disk_temperature(
-    disk: dict, *, model: Optional[str] = None
+    disk: dict,
+    *,
+    model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
 ) -> Optional[str]:
     """Температура из storageinfo: плоские поля, Health или SMART.Attributes."""
     for key in ("TemperatureCelsius", "temperature_celsius"):
         val = disk.get(key)
         if val is not None and str(val).strip() != "":
-            return _finalize_disk_temperature(f"{val} °C", model=model)
+            return _finalize_disk_temperature(
+                f"{val} °C", model=model, profile=profile
+            )
 
     for key in ("Temperature", "temperature"):
         val = disk.get(key)
         if val is not None and str(val).strip() != "":
-            return _finalize_disk_temperature(str(val).strip(), model=model)
+            return _finalize_disk_temperature(
+                str(val).strip(), model=model, profile=profile
+            )
 
     for key in ("TemperatureInCelsius", "temperature_in_celsius"):
         val = disk.get(key)
         if val is not None and str(val).strip() != "":
-            return _finalize_disk_temperature(f"{val} °C", model=model)
+            return _finalize_disk_temperature(
+                f"{val} °C", model=model, profile=profile
+            )
 
     health = disk.get("Health")
     if isinstance(health, dict):
         t = health.get("TemperatureInCelsius")
         if t is not None:
-            return _finalize_disk_temperature(f"{t} °C", model=model)
+            return _finalize_disk_temperature(
+                f"{t} °C", model=model, profile=profile
+            )
 
     smart = disk.get("SMART")
     if isinstance(smart, dict):
@@ -286,22 +406,32 @@ def extract_disk_temperature(
                 if name in ("temperature", "hda temperature"):
                     val = attr.get("Value")
                     if val is not None:
-                        return _finalize_disk_temperature(f"{val} °C", model=model)
+                        return _finalize_disk_temperature(
+                            f"{val} °C", model=model, profile=profile
+                        )
     return None
 
 
-def normalize_disk_record(disk: dict, *, model: Optional[str] = None) -> dict:
+def normalize_disk_record(
+    disk: dict,
+    *,
+    model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
+) -> dict:
     out = dict(disk)
-    temp = extract_disk_temperature(disk, model=model)
+    temp = extract_disk_temperature(disk, model=model, profile=profile)
     if temp:
         out["Temperature"] = temp
     return out
 
 
 def normalize_storage_disks(
-    disks: list[dict], *, model: Optional[str] = None
+    disks: list[dict],
+    *,
+    model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
 ) -> list[dict]:
-    return [normalize_disk_record(d, model=model) for d in disks]
+    return [normalize_disk_record(d, model=model, profile=profile) for d in disks]
 
 
 _TEMPERATURE_SMART_RE = re.compile(
@@ -427,22 +557,35 @@ async def enrich_storage_temperatures(
     disks: list[dict],
     *,
     device_model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
     timeout: float = 20.0,
     max_detail_fetches: int = 16,
 ) -> list[dict]:
-    normalized = normalize_storage_disks(disks, model=device_model)
+    normalized = normalize_storage_disks(
+        disks, model=device_model, profile=profile
+    )
     if normalized and all(d.get("Temperature") for d in normalized):
+        return normalized
+
+    if profile is not None and not profile.supports_diskutility:
         return normalized
 
     list_url = build_url(recorder, "recording.cgi", "diskutility")
     status, body, _ = await _fetch(recorder, credentials, list_url, timeout)
-    if status != 200 or not body.strip():
+    if status != 200 or not body.strip() or _is_diskutility_error(body):
         return normalized
 
     utility_disks = parse_diskutility_list(body, model=device_model)
-    missing_temp = [u for u in utility_disks if not u.get("Temperature")]
+    still_missing_storage = any(not d.get("Temperature") for d in normalized)
+    missing_temp = [
+        u for u in utility_disks if not u.get("Temperature")
+    ]
 
-    if missing_temp and len(missing_temp) <= max_detail_fetches:
+    if (
+        still_missing_storage
+        and missing_temp
+        and len(missing_temp) <= max_detail_fetches
+    ):
 
         async def fetch_one(index) -> dict:
             detail_url = build_url(
@@ -471,7 +614,12 @@ async def enrich_storage_temperatures(
     return merge_disk_temperatures(normalized, utility_disks, model=device_model)
 
 
-def parse_storage(body: str, *, model: Optional[str] = None) -> StorageInfo:
+def parse_storage(
+    body: str,
+    *,
+    model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
+) -> StorageInfo:
     data = try_parse_json(body)
     info = StorageInfo()
     if isinstance(data, dict):
@@ -483,7 +631,9 @@ def parse_storage(body: str, *, model: Optional[str] = None) -> StorageInfo:
             info.used_percent = round(used / total * 100, 1)
         storages = data.get("Storages") or []
         if isinstance(storages, list):
-            info.disks = normalize_storage_disks(storages, model=model)
+            info.disks = normalize_storage_disks(
+                storages, model=model, profile=profile
+            )
             info.worst_status = _worst_disk_status(storages)
         return info
 
@@ -493,7 +643,7 @@ def parse_storage(body: str, *, model: Optional[str] = None) -> StorageInfo:
     if info.used_space_mb is not None and info.total_space_mb and info.total_space_mb > 0:
         info.used_percent = round(info.used_space_mb / info.total_space_mb * 100, 1)
     disks = parse_storage_indexed(fields)
-    info.disks = normalize_storage_disks(disks, model=model)
+    info.disks = normalize_storage_disks(disks, model=model, profile=profile)
     info.worst_status = _worst_disk_status(disks)
     return info
 
@@ -839,6 +989,21 @@ def _period_has_archive_data(period: RecordingPeriodInfo) -> bool:
     )
 
 
+def _clone_global_period_for_channels(
+    channel_nos: list[int],
+    global_period: RecordingPeriodInfo,
+) -> dict[int, RecordingPeriodInfo]:
+    return {
+        ch_no: RecordingPeriodInfo(
+            start_time=global_period.start_time,
+            end_time=global_period.end_time,
+            archive_days=global_period.archive_days,
+            channel_no=ch_no,
+        )
+        for ch_no in channel_nos
+    }
+
+
 async def fetch_channel_recording_periods(
     recorder: Recorder,
     credentials: Credentials,
@@ -848,12 +1013,51 @@ async def fetch_channel_recording_periods(
     timeout: float = 20.0,
     max_channels: int = 64,
     max_concurrent: int = 8,
+    detailed_archive: bool = False,
+    sample_verify_count: int = 3,
 ) -> dict[int, RecordingPeriodInfo]:
     if not channel_nos:
         return {}
 
-    sem = asyncio.Semaphore(max_concurrent)
     nos = channel_nos[:max_channels]
+    global_sig = _period_signature(global_period)
+    has_global = global_period is not None and _period_has_archive_data(global_period)
+
+    if has_global and not detailed_archive:
+        sample_nos = nos[:sample_verify_count]
+        if not sample_nos:
+            return _clone_global_period_for_channels(nos, global_period)
+
+        sem = asyncio.Semaphore(max_concurrent)
+
+        async def fetch_sample(ch_no: int) -> tuple[int, Optional[RecordingPeriodInfo]]:
+            async with sem:
+                url = build_url(
+                    recorder,
+                    "recording.cgi",
+                    "searchrecordingperiod",
+                    Channel=str(ch_no),
+                )
+                status, body, _ = await _fetch(
+                    recorder, credentials, url, timeout
+                )
+                if status != 200 or not body.strip():
+                    return ch_no, None
+                period = parse_recording_period(body, channel_no=ch_no)
+                if _period_has_archive_data(period):
+                    return ch_no, period
+                return ch_no, None
+
+        sample_results = await asyncio.gather(
+            *(fetch_sample(n) for n in sample_nos)
+        )
+        sample_periods = [p for _, p in sample_results if p is not None]
+        if sample_periods and all(
+            _period_signature(p) == global_sig for p in sample_periods
+        ):
+            return _clone_global_period_for_channels(nos, global_period)
+
+    sem = asyncio.Semaphore(max_concurrent)
 
     async def fetch_one(ch_no: int) -> tuple[int, Optional[RecordingPeriodInfo]]:
         async with sem:
@@ -876,7 +1080,7 @@ async def fetch_channel_recording_periods(
     for ch_no, period in results:
         if period is not None:
             periods[ch_no] = period
-        elif global_period and _period_has_archive_data(global_period):
+        elif has_global:
             periods[ch_no] = RecordingPeriodInfo(
                 start_time=global_period.start_time,
                 end_time=global_period.end_time,
@@ -983,8 +1187,25 @@ def parse_eventstatus(body: str) -> EventStatusResult:
 def _to_float(value) -> Optional[float]:
     if value is None:
         return None
+    text = str(value).strip().replace(",", ".")
+    if not text:
+        return None
+    m = _SIZE_UNIT_RE.match(text)
+    if m:
+        try:
+            number = float(m.group(1))
+        except ValueError:
+            return None
+        unit = (m.group(2) or "").upper()
+        if unit in ("TB", "ТБ"):
+            return number * 1024 * 1024
+        if unit in ("GB", "ГБ"):
+            return number * 1024
+        if unit in ("MB", "МБ", "КБ", "KB"):
+            return number
+        return number
     try:
-        return float(value)
+        return float(text)
     except (TypeError, ValueError):
         return None
 
@@ -1013,6 +1234,7 @@ async def poll_recorder(
         return result
 
     result.online = True
+    profile = NvrApiProfile.from_device(result.device)
 
     if include_inventory:
         cam_url = build_url(recorder, "media.cgi", "cameraregister")
@@ -1028,18 +1250,22 @@ async def poll_recorder(
             vs_channels = parse_videosource_channels(b)
 
         result.channels = merge_channels(cam_channels, vs_channels)
+        result.channels_polled = True
 
     storage_url = build_url(recorder, "system.cgi", "storageinfo")
     st, b, _ = await _fetch(recorder, credentials, storage_url, timeout)
     device_model = result.device.model if result.device else None
     if st == 200:
-        result.storage = parse_storage(b, model=device_model)
+        result.storage = parse_storage(
+            b, model=device_model, profile=profile
+        )
         if result.storage and result.storage.disks:
             result.storage.disks = await enrich_storage_temperatures(
                 recorder,
                 credentials,
                 result.storage.disks,
                 device_model=device_model,
+                profile=profile,
                 timeout=timeout,
             )
 
@@ -1060,6 +1286,7 @@ async def poll_recorder(
             [ch.channel_no for ch in result.channels],
             result.recording_period,
             timeout=timeout,
+            detailed_archive=include_inventory,
         )
 
     event_url = build_url(recorder, "eventstatus.cgi", "eventstatus", action="check")

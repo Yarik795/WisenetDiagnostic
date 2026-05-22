@@ -9,7 +9,7 @@ from typing import Optional
 from .config_store import ConfigStore, RecorderStatusUpdate
 from .health import HealthStatus, worst_status
 from .models import CheckStatus, MonitoringSettings, Recorder
-from .state_store import StateStore
+from .state_store import ChannelRow, StateStore
 from .sunapi import check_recorder
 from .sunapi_extended import (
     ChannelInfo,
@@ -17,6 +17,8 @@ from .sunapi_extended import (
     RecorderPollData,
     RecordingPeriodInfo,
     enable_recorder_ntp,
+    is_register_status_error,
+    normalize_register_status,
     poll_recorder,
 )
 from .ui.metrics_helpers import (
@@ -48,8 +50,13 @@ def evaluate_channel_health(
     if event and event.connected is False:
         return HealthStatus.ERROR.value, "Камера не подключена"
 
-    reg = (ch.register_status or "").lower()
-    if reg and reg not in ("success", "ok"):
+    reg_key = normalize_register_status(ch.register_status)
+    if state == "on" and is_register_status_error(ch.register_status):
+        return (
+            HealthStatus.ERROR.value,
+            f"Статус регистрации: {ch.register_status}",
+        )
+    if reg_key and reg_key not in ("success", "ok"):
         return HealthStatus.WARN.value, f"Статус регистрации: {ch.register_status}"
     if ch.camera_ip and state == "on":
         return HealthStatus.OK.value, "Канал активен"
@@ -195,6 +202,51 @@ def evaluate_recorder_health(
     return status, "; ".join(reasons)
 
 
+def _channel_info_from_row(row: ChannelRow) -> ChannelInfo:
+    return ChannelInfo(
+        channel_no=row.channel_no,
+        name=row.name,
+        source_state=row.source_state,
+        camera_ip=row.camera_ip,
+        camera_model=row.camera_model,
+    )
+
+
+def _upsert_channel_from_poll(
+    state: StateStore,
+    recorder_id: str,
+    ch: ChannelInfo,
+    event: Optional[EventChannelStatus],
+    settings: MonitoringSettings,
+    polled_at: datetime,
+    period: Optional[RecordingPeriodInfo],
+) -> str:
+    h_status, h_reason = evaluate_channel_health(ch, event, settings)
+    state.upsert_channel(
+        recorder_id,
+        ch.channel_no,
+        name=ch.name,
+        camera_ip=ch.camera_ip,
+        camera_model=ch.camera_model,
+        source_state=ch.source_state,
+        health_status=h_status,
+        health_reason=h_reason,
+        video_loss=event.video_loss if event else None,
+        last_polled_at=polled_at,
+        archive_start=period.start_time if period else None,
+        archive_end=period.end_time if period else None,
+        archive_days=period.archive_days if period else None,
+    )
+    state.record_history(
+        "channel",
+        f"{recorder_id}:{ch.channel_no}",
+        h_status,
+        h_reason,
+        polled_at,
+    )
+    return h_status
+
+
 def apply_poll_result(
     store: ConfigStore,
     state: StateStore,
@@ -211,36 +263,39 @@ def apply_poll_result(
 
     periods = poll.channel_recording_periods
 
-    for ch in poll.channels:
-        event = events_map.get(ch.channel_no)
-        h_status, h_reason = evaluate_channel_health(ch, event, settings)
-        channel_statuses.append(h_status)
-        channel_nos.append(ch.channel_no)
-        period = periods.get(ch.channel_no)
-        state.upsert_channel(
-            recorder.id,
-            ch.channel_no,
-            name=ch.name,
-            camera_ip=ch.camera_ip,
-            camera_model=ch.camera_model,
-            source_state=ch.source_state,
-            health_status=h_status,
-            health_reason=h_reason,
-            video_loss=event.video_loss if event else None,
-            last_polled_at=polled_at,
-            archive_start=period.start_time if period else None,
-            archive_end=period.end_time if period else None,
-            archive_days=period.archive_days if period else None,
-        )
-        state.record_history(
-            "channel",
-            f"{recorder.id}:{ch.channel_no}",
-            h_status,
-            h_reason,
-            polled_at,
-        )
-
-    state.remove_channels_not_in(recorder.id, channel_nos)
+    if poll.channels_polled:
+        for ch in poll.channels:
+            event = events_map.get(ch.channel_no)
+            period = periods.get(ch.channel_no)
+            h_status = _upsert_channel_from_poll(
+                state,
+                recorder.id,
+                ch,
+                event,
+                settings,
+                polled_at,
+                period,
+            )
+            channel_statuses.append(h_status)
+            channel_nos.append(ch.channel_no)
+        state.remove_channels_not_in(recorder.id, channel_nos)
+    else:
+        for row in state.list_channels(recorder.id):
+            ch = _channel_info_from_row(row)
+            event = events_map.get(ch.channel_no)
+            if event is not None:
+                h_status = _upsert_channel_from_poll(
+                    state,
+                    recorder.id,
+                    ch,
+                    event,
+                    settings,
+                    polled_at,
+                    periods.get(ch.channel_no),
+                )
+                channel_statuses.append(h_status)
+            else:
+                channel_statuses.append(row.health_status)
 
     archive_min_days, archive_max_days = archive_bounds(periods)
     if archive_min_days is None and poll.recording_period:
@@ -254,7 +309,28 @@ def apply_poll_result(
         archive_min_days=archive_min_days,
         archive_max_days=archive_max_days,
     )
-    counts = _count_statuses(channel_statuses)
+    if poll.channels_polled:
+        counts = _count_statuses(channel_statuses)
+        channel_count = len(poll.channels)
+        channels_ok = counts["ok"]
+        channels_warn = counts["warn"]
+        channels_error = counts["error"]
+        channels_unknown = counts["unknown"]
+    else:
+        existing = state.get_recorder_metrics(recorder.id)
+        if existing and existing.channel_count > 0:
+            channel_count = existing.channel_count
+            channels_ok = existing.channels_ok
+            channels_warn = existing.channels_warn
+            channels_error = existing.channels_error
+            channels_unknown = existing.channels_unknown
+        else:
+            counts = _count_statuses(channel_statuses)
+            channel_count = len(channel_statuses)
+            channels_ok = counts["ok"]
+            channels_warn = counts["warn"]
+            channels_error = counts["error"]
+            channels_unknown = counts["unknown"]
 
     storage_pct = poll.storage.used_percent if poll.storage else None
     storage_st = poll.storage.worst_status if poll.storage else None
@@ -279,11 +355,11 @@ def apply_poll_result(
         archive_days=archive_days,
         archive_min_days=archive_min_days,
         archive_max_days=archive_max_days,
-        channel_count=len(poll.channels),
-        channels_ok=counts["ok"],
-        channels_warn=counts["warn"],
-        channels_error=counts["error"],
-        channels_unknown=counts["unknown"],
+        channel_count=channel_count,
+        channels_ok=channels_ok,
+        channels_warn=channels_warn,
+        channels_error=channels_error,
+        channels_unknown=channels_unknown,
         last_polled_at=polled_at,
         local_time=poll.date_time.local_time if poll.date_time else None,
         utc_time=poll.date_time.utc_time if poll.date_time else None,

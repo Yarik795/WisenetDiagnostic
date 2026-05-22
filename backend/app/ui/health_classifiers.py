@@ -158,7 +158,7 @@ def classify_channels_health(
             f"Неисправно {err} из {total} каналов ({error_pct:.0f}%)",
         )
     if err > 0:
-        return "error", f"Неисправно {err} из {total} каналов"
+        return "warn", f"Неисправно {err} из {total} каналов"
     if warn > 0:
         return "warn", f"Деградация на {warn} из {total} каналов"
     if unknown == total:

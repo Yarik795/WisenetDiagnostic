@@ -107,3 +107,11 @@ def test_classify_channels_mass_failure() -> None:
     status, reason = classify_category("channels", _rec(), metrics, settings)
     assert status == "error"
     assert "50" in reason or "2" in reason
+
+
+def test_classify_channels_single_error_is_warn() -> None:
+    settings = MonitoringSettings(channels_error_threshold_percent=25)
+    metrics = _metrics(channel_count=10, channels_error=1, channels_ok=9)
+    status, reason = classify_category("channels", _rec(), metrics, settings)
+    assert status == "warn"
+    assert "1" in reason
