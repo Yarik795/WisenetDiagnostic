@@ -111,22 +111,12 @@ def evaluate_recorder_health(
         status = _apply_system_event_health(poll.system_events, status, reasons)
 
     if poll.storage:
-        pct = poll.storage.used_percent
         if poll.storage.worst_status and str(poll.storage.worst_status).lower() in (
             "error",
             "fail",
-            "full",
         ):
             status = HealthStatus.ERROR.value
             reasons.append(f"Диск: {poll.storage.worst_status}")
-        elif pct is not None:
-            if pct >= settings.disk_usage_error_percent:
-                status = HealthStatus.ERROR.value
-                reasons.append(f"Заполнение диска {pct}%")
-            elif pct >= settings.disk_usage_warn_percent:
-                if status != HealthStatus.ERROR.value:
-                    status = HealthStatus.WARN.value
-                reasons.append(f"Заполнение диска {pct}%")
         if poll.storage.disks:
             max_temp = max_disk_temperature_celsius_from_disks(poll.storage.disks)
             if max_temp is not None:

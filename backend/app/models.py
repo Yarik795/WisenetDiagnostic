@@ -60,8 +60,6 @@ class MonitoringSettings(BaseModel):
     archive_days_required: int = Field(default=30, ge=1, le=365)
     time_skew_warn_seconds: int = Field(default=60, ge=1)
     time_skew_error_seconds: int = Field(default=300, ge=1)
-    disk_usage_warn_percent: int = Field(default=85, ge=1, le=100)
-    disk_usage_error_percent: int = Field(default=95, ge=1, le=100)
     hdd_temperature_warn_celsius: int = Field(default=50, ge=1, le=120)
     hdd_temperature_error_celsius: int = Field(default=60, ge=1, le=120)
     archive_days_error_threshold: int = Field(default=7, ge=0, le=365)

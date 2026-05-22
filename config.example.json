@@ -10,8 +10,6 @@
     "archive_days_required": 30,
     "time_skew_warn_seconds": 60,
     "time_skew_error_seconds": 300,
-    "disk_usage_warn_percent": 85,
-    "disk_usage_error_percent": 95,
     "hdd_temperature_warn_celsius": 50,
     "hdd_temperature_error_celsius": 60,
     "archive_days_error_threshold": 7,

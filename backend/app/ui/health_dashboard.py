@@ -202,10 +202,7 @@ def category_meta_text(category: HealthCategory, settings: MonitoringSettings) -
             f" · критично ≥ {settings.hdd_temperature_error_celsius} °C"
         )
     if category == "storage":
-        return (
-            f"Заполнение: предупреждение ≥ {settings.disk_usage_warn_percent}%"
-            f" · критично ≥ {settings.disk_usage_error_percent}%"
-        )
+        return "Сбои HDD (HDDFail, HDDError); заполнение диска не контролируется"
     if category == "fans":
         return "Источник: SystemEvent (CPUFanError, FrameFanError и др.)"
     if category == "channels":

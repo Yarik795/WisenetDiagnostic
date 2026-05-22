@@ -267,7 +267,6 @@ SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
     "RightFanError": "Правый вентилятор",
     "HDDFail": "Сбой HDD",
     "HDDError": "Ошибка HDD",
-    "HDDFull": "HDD заполнен",
     "BatteryFail": "Сбой батареи",
     "MemoryError": "Ошибка памяти",
     "RecordingError": "Ошибка записи",

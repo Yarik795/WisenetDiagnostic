@@ -649,7 +649,7 @@ def parse_storage(
 
 
 def _worst_disk_status(disks: list[dict]) -> Optional[str]:
-    error_states = {"Error", "Fail", "Formatting", "Lock", "Full", "PWError"}
+    error_states = {"Error", "Fail", "Formatting", "Lock", "PWError"}
     statuses = []
     for d in disks:
         st = d.get("Status")

@@ -39,7 +39,7 @@ BADGE_CODES: dict[HealthCategory, str] = {
     "archive": "ARCH",
 }
 
-_DISK_ERROR_STATUSES = frozenset({"error", "fail", "full", "failed"})
+_DISK_ERROR_STATUSES = frozenset({"error", "fail", "failed"})
 
 
 def _recorder_has_poll_data(
@@ -87,16 +87,6 @@ def classify_storage_health(
         status = "error"
         reasons.append(f"Статус массива: {metrics.storage_status}")
 
-    pct = metrics.storage_used_percent
-    if pct is not None:
-        if pct >= settings.disk_usage_error_percent:
-            status = "error"
-            reasons.append(f"Заполнение {pct:.1f}%")
-        elif pct >= settings.disk_usage_warn_percent:
-            if status != "error":
-                status = "warn"
-            reasons.append(f"Заполнение {pct:.1f}%")
-
     for disk in parse_disks_json(metrics.disks_json):
         disk_status = (disk_field(disk, "Status", "status") or "").strip().lower()
         if disk_status in _DISK_ERROR_STATUSES:
@@ -105,14 +95,15 @@ def classify_storage_health(
             reasons.append(f"Слот {slot}: {disk_field(disk, 'Status', 'status')}")
 
     events = parse_system_events_json(metrics.system_events_json)
-    for key in ("HDDFail", "HDDError", "HDDFull"):
+    for key in ("HDDFail", "HDDError"):
         if events.get(key):
             status = "error"
             reasons.append(SYSTEM_EVENT_ERROR_LABELS.get(key, key))
 
     if not reasons:
+        pct = metrics.storage_used_percent
         if pct is not None:
-            return "ok", f"Заполнение {pct:.1f}%"
+            return "ok", f"Заполнение {pct:.1f}% (норма для видеонаблюдения)"
         return "unknown", "Нет данных по накопителям"
     return status, "; ".join(dict.fromkeys(reasons))
 
