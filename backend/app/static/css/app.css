@@ -649,6 +649,111 @@ a:hover {
   animation: spin 0.7s linear infinite;
 }
 
+.poll-job-panel {
+  min-width: 280px;
+  max-width: 420px;
+  padding: 12px 14px;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.poll-job-panel--idle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  min-width: auto;
+  max-width: none;
+}
+
+.poll-job-panel--running {
+  border-color: var(--accent);
+}
+
+.poll-job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.poll-job-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.poll-job-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.poll-job-status--running {
+  color: var(--accent);
+}
+
+.poll-job-status--completed {
+  color: var(--status-ok);
+}
+
+.poll-job-status--failed {
+  color: var(--status-error);
+}
+
+.poll-job-progress {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.poll-job-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 300ms ease;
+}
+
+.poll-job-counter,
+.poll-job-current,
+.poll-job-message,
+.poll-job-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.poll-job-current {
+  color: var(--text-primary);
+}
+
+.poll-job-results {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.poll-job-result--fail {
+  color: var(--status-error);
+}
+
+.poll-job-form {
+  display: inline;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

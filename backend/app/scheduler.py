@@ -5,16 +5,22 @@ import logging
 from datetime import datetime, timezone
 
 from .config_store import ConfigStore
-from .monitoring import run_inventory_cycle, run_poll_cycle
+from .poll_jobs import PollJobManager
 from .state_store import StateStore
 
 logger = logging.getLogger("scheduler")
 
 
 class MonitoringScheduler:
-    def __init__(self, config_store: ConfigStore, state_store: StateStore) -> None:
+    def __init__(
+        self,
+        config_store: ConfigStore,
+        state_store: StateStore,
+        poll_jobs: PollJobManager | None = None,
+    ) -> None:
         self.config_store = config_store
         self.state_store = state_store
+        self.poll_jobs = poll_jobs or PollJobManager()
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._last_full: datetime | None = None
@@ -62,19 +68,24 @@ class MonitoringScheduler:
             or (now - self._last_inventory).total_seconds() >= inventory_hours * 3600
         )
         if do_inventory:
-            await run_inventory_cycle(self.config_store, self.state_store)
-            self._last_inventory = now
-            self._last_full = now
+            ran = await self.poll_jobs.try_run_scheduled(
+                self.config_store,
+                self.state_store,
+                include_inventory=True,
+            )
+            if ran:
+                self._last_inventory = now
+                self._last_full = now
             return
 
         do_full = (
             self._last_full is None
             or (now - self._last_full).total_seconds() >= full_min * 60
         )
-        await run_poll_cycle(
+        ran = await self.poll_jobs.try_run_scheduled(
             self.config_store,
             self.state_store,
             include_inventory=do_full,
         )
-        if do_full:
+        if ran and do_full:
             self._last_full = now

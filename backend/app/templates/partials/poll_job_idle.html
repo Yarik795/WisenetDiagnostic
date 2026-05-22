@@ -1,0 +1,20 @@
+<div id="poll-job-panel" class="poll-job-panel poll-job-panel--idle">
+  <form
+    class="poll-job-form"
+    hx-post="{{ poll_post_url }}"
+    hx-target="#poll-job-panel"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="refresh_url" value="{{ refresh_url }}">
+    <input type="hidden" name="refresh_target" value="{{ refresh_target }}">
+    {% if refresh_select %}<input type="hidden" name="refresh_select" value="{{ refresh_select }}">{% endif %}
+    <button
+      type="submit"
+      class="btn btn-outline"
+      {% if poll_button_title %}title="{{ poll_button_title }}"{% endif %}
+    >{{ poll_button_label }}</button>
+  </form>
+  {% if schedule_hint %}
+  <p class="poll-job-hint">{{ schedule_hint }}</p>
+  {% endif %}
+</div>

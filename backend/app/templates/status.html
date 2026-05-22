@@ -2,10 +2,7 @@
 {% block title %}Статус мониторинга — Wisenet Диагностика{% endblock %}
 {% block page_title %}Статус мониторинга{% endblock %}
 {% block page_actions %}
-<button type="button" class="btn btn-outline"
-  hx-post="/monitoring/poll-all"
-  hx-swap="none"
->Опросить все</button>
+{% include "partials/poll_page_actions.html" %}
 {% endblock %}
 {% block content %}
 <form class="toolbar" style="flex-wrap:wrap;gap:8px;"

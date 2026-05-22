@@ -4,7 +4,10 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .poll_jobs import PollJobTracker
 
 from .config_store import ConfigStore, RecorderStatusUpdate
 from .health import HealthStatus, worst_status
@@ -416,9 +419,12 @@ async def run_poll_cycle(
     state_store: StateStore,
     *,
     include_inventory: bool = False,
+    tracker: Optional["PollJobTracker"] = None,
 ) -> None:
     config = config_store.load()
     recorders = [r for r in config.recorders if r.enabled]
+    if tracker:
+        await tracker.set_total(len(recorders))
     if not recorders:
         return
 
@@ -426,6 +432,8 @@ async def run_poll_cycle(
     status_updates: list[RecorderStatusUpdate] = []
 
     async def _one(rec: Recorder) -> None:
+        if tracker:
+            await tracker.recorder_started(rec)
         async with sem:
             try:
                 update = await poll_single_recorder(
@@ -437,8 +445,14 @@ async def run_poll_cycle(
                 )
                 if update is not None:
                     status_updates.append(update)
-            except Exception:
+                if tracker:
+                    await tracker.recorder_finished(rec, success=True)
+            except Exception as exc:
                 logger.exception("poll failed for %s", rec.id)
+                if tracker:
+                    await tracker.recorder_finished(
+                        rec, success=False, error=str(exc)
+                    )
 
     await asyncio.gather(*[_one(r) for r in recorders])
     if status_updates:

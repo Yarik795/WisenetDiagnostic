@@ -12,15 +12,11 @@ from pydantic import ValidationError
 from ..config_store import ConfigStore
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
-from ..monitoring import (
-    poll_single_recorder,
-    run_inventory_cycle,
-    run_ntp_fix_all,
-    run_poll_cycle,
-)
+from ..monitoring import poll_single_recorder, run_ntp_fix_all
+from ..poll_jobs import PollJob, PollJobManager
 from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
-from ..ui.dependencies import get_state_store, get_store
+from ..ui.dependencies import get_poll_job_manager, get_state_store, get_store
 from ..ui.grouping import (
     SortMode,
     effective_status,
@@ -322,6 +318,7 @@ def objects_page(
     sort: SortMode = "status",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
 ) -> HTMLResponse:
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
@@ -338,6 +335,12 @@ def objects_page(
             "sort": sort,
             "toast": toast,
             **_health_dashboard_ctx(store, state),
+            **_poll_ui_ctx(
+                poll_jobs,
+                store,
+                refresh_url="/objects/partials/health-dashboard",
+                refresh_target="#health-dashboard-stack",
+            ),
         },
     )
 
@@ -490,9 +493,11 @@ def time_page(
     problems_only: str = "true",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
 ) -> HTMLResponse:
     only_problems = problems_only.lower() not in ("false", "0", "no")
     qs = urlencode({"search": search, "problems_only": "true" if only_problems else "false"})
+    dash_url = f"/time/partials/dashboard?{qs}"
     return templates.TemplateResponse(
         request,
         "time.html",
@@ -507,7 +512,13 @@ def time_page(
                 search=search,
                 problems_only=only_problems,
                 show_all_table=not only_problems,
-                refresh_url=f"/time/partials/dashboard?{qs}",
+                refresh_url=dash_url,
+            ),
+            **_poll_ui_ctx(
+                poll_jobs,
+                store,
+                refresh_url=dash_url,
+                refresh_target="#time-dashboard",
             ),
         },
     )
@@ -542,6 +553,7 @@ def status_page(
     category: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
 ) -> HTMLResponse:
     only_problems = problems_only.lower() not in ("false", "0", "no")
     category_filter: Optional[HealthCategory] = None
@@ -554,6 +566,7 @@ def status_page(
     if category_filter:
         enc["category"] = category_filter
     qs = urlencode(enc)
+    dash_url = f"/status/partials/dashboard?{qs}"
     return templates.TemplateResponse(
         request,
         "status.html",
@@ -570,7 +583,13 @@ def status_page(
                 search=search,
                 problems_only=only_problems,
                 highlight_category=category_filter,
-                refresh_url=f"/status/partials/dashboard?{qs}",
+                refresh_url=dash_url,
+            ),
+            **_poll_ui_ctx(
+                poll_jobs,
+                store,
+                refresh_url=dash_url,
+                refresh_target="#health-dashboard-stack",
             ),
         },
     )
@@ -1016,11 +1035,81 @@ def _toast_from_query(request: Request) -> Optional[dict[str, str]]:
     return None
 
 
+def _poll_schedule_hint(store: ConfigStore) -> str:
+    m = store.load().monitoring
+    return (
+        f"Автоопрос: каждые {m.poll_interval_minutes} мин; "
+        f"полный — каждые {m.full_poll_interval_minutes} мин; "
+        f"инвентаризация — раз в 24 ч"
+    )
+
+
+def _poll_ui_ctx(
+    poll_jobs: PollJobManager,
+    store: ConfigStore,
+    *,
+    refresh_url: str,
+    refresh_target: str,
+    refresh_select: str = "",
+    inventory: bool = False,
+) -> dict:
+    ctx: dict = {
+        "schedule_hint": _poll_schedule_hint(store),
+        "refresh_url": refresh_url,
+        "refresh_target": refresh_target,
+        "refresh_select": refresh_select,
+        "poll_job": poll_jobs.get_active_job(),
+    }
+    if inventory:
+        ctx.update(
+            {
+                "poll_post_url": "/monitoring/inventory-all",
+                "poll_button_label": "Инвентаризация всех",
+                "poll_button_title": "Перечитывает список камер на всех NVR",
+            }
+        )
+    else:
+        ctx.update(
+            {
+                "poll_post_url": "/monitoring/poll-all",
+                "poll_button_label": "Опросить все NVR",
+                "poll_button_title": (
+                    "Обновляет статус, диски, архив и время; "
+                    "список каналов — через инвентаризацию"
+                ),
+            }
+        )
+    return ctx
+
+
+def _poll_job_panel_response(
+    request: Request,
+    job: PollJob,
+    store: ConfigStore,
+    *,
+    refresh_url: str,
+    refresh_target: str,
+    refresh_select: str = "",
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/poll_job_panel.html",
+        {
+            "job": job,
+            "schedule_hint": _poll_schedule_hint(store),
+            "refresh_url": refresh_url,
+            "refresh_target": refresh_target,
+            "refresh_select": refresh_select,
+        },
+    )
+
+
 @router.get("/channels", response_class=HTMLResponse)
 def channels_page(
     request: Request,
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
     health: str = "",
     recorder_id: str = "",
 ) -> HTMLResponse:
@@ -1042,6 +1131,14 @@ def channels_page(
             "filter_health": health,
             "filter_recorder": recorder_id,
             "toast": _toast_from_query(request),
+            **_poll_ui_ctx(
+                poll_jobs,
+                store,
+                refresh_url="/channels",
+                refresh_target=".page-content",
+                refresh_select=".page-content",
+                inventory=True,
+            ),
         },
     )
 
@@ -1075,18 +1172,52 @@ def history_page(
 @router.post("/monitoring/poll-all", response_class=HTMLResponse)
 async def monitoring_poll_all(
     request: Request,
+    refresh_url: str = Form(default="/objects/partials/health-dashboard"),
+    refresh_target: str = Form(default="#health-dashboard-stack"),
+    refresh_select: str = Form(default=""),
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
-) -> Response:
-    await run_poll_cycle(store, state, include_inventory=False)
-    referer = request.headers.get("HX-Current-URL", "")
-    if "/status" in referer:
-        return _redirect("/status", "success", "Опрос регистраторов завершён")
-    if "/time" in referer:
-        return _redirect("/time", "success", "Опрос регистраторов завершён")
-    if "/recorders" in referer and "/objects" not in referer:
-        return _redirect("/recorders", "success", "Опрос регистраторов завершён")
-    return _redirect("/objects", "success", "Опрос регистраторов завершён")
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+) -> HTMLResponse:
+    job = poll_jobs.start_manual_poll(
+        store,
+        state,
+        include_inventory=False,
+        refresh_url=refresh_url or None,
+    )
+    return _poll_job_panel_response(
+        request,
+        job,
+        store,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+    )
+
+
+@router.get("/monitoring/jobs/{job_id}", response_class=HTMLResponse)
+def monitoring_job_status(
+    request: Request,
+    job_id: str,
+    store: ConfigStore = Depends(get_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+) -> HTMLResponse:
+    job = poll_jobs.get_job(job_id)
+    if not job:
+        return HTMLResponse("Задача не найдена", status_code=404)
+    refresh_url = request.query_params.get(
+        "refresh_url", job.refresh_url or "/objects/partials/health-dashboard"
+    )
+    refresh_target = request.query_params.get("refresh_target", "#health-dashboard-stack")
+    refresh_select = request.query_params.get("refresh_select", "")
+    return _poll_job_panel_response(
+        request,
+        job,
+        store,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+    )
 
 
 @router.post("/monitoring/ntp-fix-all", response_class=HTMLResponse)
@@ -1150,11 +1281,27 @@ async def monitoring_ntp_fix_all(
 @router.post("/monitoring/inventory-all", response_class=HTMLResponse)
 async def monitoring_inventory_all(
     request: Request,
+    refresh_url: str = Form(default="/channels"),
+    refresh_target: str = Form(default=".page-content"),
+    refresh_select: str = Form(default=".page-content"),
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
-) -> Response:
-    await run_inventory_cycle(store, state)
-    return _redirect("/channels", "success", "Инвентаризация каналов завершена")
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+) -> HTMLResponse:
+    job = poll_jobs.start_manual_poll(
+        store,
+        state,
+        include_inventory=True,
+        refresh_url=refresh_url or None,
+    )
+    return _poll_job_panel_response(
+        request,
+        job,
+        store,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+    )
 
 
 @router.post("/recorders/{recorder_id}/inventory", response_class=HTMLResponse)
