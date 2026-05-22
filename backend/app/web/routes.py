@@ -1053,12 +1053,14 @@ def _poll_ui_ctx(
     refresh_select: str = "",
     inventory: bool = False,
 ) -> dict:
+    active_job = poll_jobs.get_active_job()
     ctx: dict = {
         "schedule_hint": _poll_schedule_hint(store),
         "refresh_url": refresh_url,
         "refresh_target": refresh_target,
         "refresh_select": refresh_select,
-        "poll_job": poll_jobs.get_active_job(),
+        "poll_job": active_job,
+        "job": active_job,
     }
     if inventory:
         ctx.update(

@@ -1,5 +1,7 @@
 {% if poll_job %}
+{% with job=poll_job %}
 {% include "partials/poll_job_panel.html" %}
+{% endwith %}
 {% else %}
 {% include "partials/poll_job_idle.html" %}
 {% endif %}
