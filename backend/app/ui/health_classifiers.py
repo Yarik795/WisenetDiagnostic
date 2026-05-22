@@ -8,6 +8,7 @@ from .metrics_helpers import (
     SYSTEM_EVENT_ERROR_LABELS,
     active_fan_event_labels,
     disk_field,
+    is_manual_sync,
     max_disk_temperature_celsius,
     parse_disks_json,
     parse_system_events_json,
@@ -204,16 +205,23 @@ def classify_time_category(
 ) -> tuple[HealthCategoryStatus, str]:
     cat: TimeCategory = classify_time_health(recorder, metrics, settings)
     if cat == "error":
+        if metrics and (metrics.ntp_status or "").strip().lower() == "fail":
+            return "error", "NTP: Fail"
+        if metrics and is_manual_sync(metrics.sync_type):
+            return "error", f"Режим: {sync_type_label(metrics.sync_type)}"
+        if metrics and metrics.sync_type:
+            sync = metrics.sync_type.strip().lower()
+            if sync and sync != "ntp":
+                return "error", f"Режим: {sync_type_label(metrics.sync_type)}"
         skew = metrics.time_skew_seconds if metrics else None
         if skew is not None:
             return "error", f"Расхождение времени {int(skew)} с"
         return "error", "Критичное расхождение времени"
     if cat == "warn":
-        if metrics and (metrics.ntp_status or "").strip().lower() == "fail":
-            return "warn", "NTP: Fail"
-        if metrics and metrics.sync_type:
-            return "warn", f"Режим: {sync_type_label(metrics.sync_type)}"
-        return "warn", "Деградация времени / NTP"
+        skew = metrics.time_skew_seconds if metrics else None
+        if skew is not None:
+            return "warn", f"Расхождение времени {int(skew)} с"
+        return "warn", "Деградация времени"
     if cat == "unknown":
         return "unknown", "Нет данных по времени"
     return "ok", "Время и NTP в норме"

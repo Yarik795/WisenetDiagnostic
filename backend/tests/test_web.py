@@ -232,7 +232,38 @@ def test_time_page(client: TestClient) -> None:
     assert r.status_code == 200
     assert "Время и NTP" in r.text
     assert "time-dashboard" in r.text
-    assert "Исправить" in r.text
+    assert "Исправить" not in r.text
+    assert "К исправлению" not in r.text
+
+
+def test_time_page_ntp_fail_in_critical_kpi(client: TestClient) -> None:
+    from datetime import datetime, timezone
+
+    store = app.dependency_overrides[get_store]()
+    store.update_credentials("admin", "secret")
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    state = app.dependency_overrides[get_state_store]()
+    state.upsert_recorder_metrics(
+        rec.id,
+        device_online=True,
+        health_status="warn",
+        ntp_status="Fail",
+        sync_type="Manual",
+        last_polled_at=datetime.now(timezone.utc),
+    )
+
+    r = client.get("/time")
+    assert r.status_code == 200
+    assert 'time-kpi--error' in r.text
+    assert "time-problem-row--error" in r.text
 
 
 def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
@@ -288,44 +319,3 @@ def test_objects_page_has_category_dashboard_stack(client: TestClient) -> None:
     assert "category-dashboard-fans" in r.text
     assert "category-dashboard-channels" in r.text
     assert "category-dashboard-archive" in r.text
-
-
-def test_ntp_fix_all_no_targets(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.web import routes as web_routes
-
-    store = app.dependency_overrides[get_store]()
-    config = store.load()
-    config.monitoring = MonitoringSettings(ntp_server="203.248.240.140")
-    store.save(config)
-    store.update_credentials("admin", "secret")
-    store.create_recorder(
-        RecorderCreate(
-            object_name="Obj",
-            host="10.0.0.1",
-            port=80,
-            use_https=False,
-            enabled=True,
-        )
-    )
-
-    async def fake_fix(config_store, state_store):
-        from app.monitoring import NtpFixAllResult
-
-        return NtpFixAllResult(total=0, success=0, failed=0)
-
-    monkeypatch.setattr(web_routes, "run_ntp_fix_all", fake_fix)
-
-    r = client.post(
-        "/monitoring/ntp-fix-all",
-        headers={
-            "HX-Request": "true",
-            "HX-Target": "#health-dashboard-stack",
-            "HX-Current-URL": "http://127.0.0.1/objects",
-        },
-    )
-    assert r.status_code == 200
-    assert "health-dashboard" in r.text
-    trigger = r.headers.get("HX-Trigger", "")
-    assert "success" in trigger

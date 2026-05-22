@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from ..models import MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
-from ..ui.metrics_helpers import is_manual_sync, show_ntp_action_button
+from ..ui.metrics_helpers import is_manual_sync
 from ..ui.grouping import effective_status
 
 TimeCategory = Literal["ok", "warn", "error", "unknown"]
@@ -18,7 +18,6 @@ class TimeDashboardStats:
     warn: int = 0
     error: int = 0
     unknown: int = 0
-    fixable: int = 0
     has_problems: bool = False
 
     @property
@@ -67,31 +66,20 @@ def classify_time_health(
 
     ntp = (metrics.ntp_status or "").strip().lower()
     if ntp == "fail":
-        return "warn"
+        return "error"
 
     if is_manual_sync(metrics.sync_type):
-        return "warn"
+        return "error"
 
     sync = (metrics.sync_type or "").strip().lower()
     if sync and sync != "ntp":
-        return "warn"
+        return "error"
 
     return "ok"
 
 
 def is_time_problem_category(category: TimeCategory) -> bool:
     return category in ("warn", "error")
-
-
-def is_fixable_recorder(
-    recorder: Recorder,
-    metrics: Optional[RecorderMetricsRow],
-) -> bool:
-    if not recorder.enabled:
-        return False
-    if metrics is None or not metrics.device_online:
-        return False
-    return show_ntp_action_button(metrics)
 
 
 def aggregate_time_stats(
@@ -116,8 +104,6 @@ def aggregate_time_stats(
             stats.has_problems = True
         else:
             stats.unknown += 1
-        if is_fixable_recorder(rec, metrics):
-            stats.fixable += 1
     return stats
 
 
@@ -158,17 +144,6 @@ def list_problem_rows(
         )
     )
     return rows
-
-
-def list_fixable_recorders(
-    recorders: list[Recorder],
-    metrics_map: dict[str, RecorderMetricsRow],
-) -> list[Recorder]:
-    return [
-        r
-        for r in recorders
-        if is_fixable_recorder(r, metrics_map.get(r.id))
-    ]
 
 
 def object_time_problem_count(

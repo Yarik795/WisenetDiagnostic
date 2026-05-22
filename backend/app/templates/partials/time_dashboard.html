@@ -26,23 +26,6 @@
         Обновить
       </button>
       {% endif %}
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        id="time-fix-all-btn"
-        {% if time_stats.fixable == 0 %}disabled{% endif %}
-        hx-post="/monitoring/ntp-fix-all"
-        hx-target="{{ time_hx_target|default('#time-dashboard') }}"
-        hx-swap="outerHTML"
-        hx-indicator="#time-fix-all-spinner"
-        hx-disabled-elt="this"
-        {% if time_stats.fixable > 0 %}
-        hx-confirm="Включить или обновить NTP на {{ time_stats.fixable }} регистратор(ах)? Сервер: {{ time_ntp_server }}"
-        {% endif %}
-      >
-        <span id="time-fix-all-spinner" class="htmx-indicator spinner"></span>
-        Исправить{% if time_stats.fixable > 0 %} ({{ time_stats.fixable }}){% endif %}
-      </button>
       {% if time_dashboard_compact %}
       <a href="/time" class="btn btn-ghost btn-sm">Подробнее →</a>
       {% endif %}
@@ -70,10 +53,6 @@
         <span class="time-kpi-dot"></span>
         <span class="time-kpi-value">{{ time_stats.unknown }}</span>
         <span class="time-kpi-label">Нет данных</span>
-      </div>
-      <div class="time-kpi time-kpi--fix">
-        <span class="time-kpi-value">{{ time_stats.fixable }}</span>
-        <span class="time-kpi-label">К исправлению</span>
       </div>
     </div>
 
@@ -112,9 +91,6 @@
             <th>Режим</th>
             <th>NTP</th>
             <th>Причина</th>
-            {% if time_show_actions|default(true) %}
-            <th></th>
-            {% endif %}
           </tr>
         </thead>
         <tbody>

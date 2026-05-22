@@ -399,7 +399,7 @@ async def run_ntp_fix_all(
     config_store: ConfigStore,
     state_store: StateStore,
 ) -> NtpFixAllResult:
-    from .ui.time_dashboard import list_fixable_recorders
+    from .ui.metrics_helpers import show_ntp_action_button
 
     config = config_store.load()
     credentials = config.credentials
@@ -417,7 +417,14 @@ async def run_ntp_fix_all(
     metrics_map = {
         m.recorder_id: m for m in state_store.list_recorder_metrics()
     }
-    fixable = list_fixable_recorders(config.recorders, metrics_map)
+    fixable = [
+        r
+        for r in config.recorders
+        if r.enabled
+        and (m := metrics_map.get(r.id))
+        and m.device_online
+        and show_ntp_action_button(m)
+    ]
     result.total = len(fixable)
     if not fixable:
         return result

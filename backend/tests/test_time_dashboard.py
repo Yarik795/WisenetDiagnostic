@@ -4,8 +4,6 @@ from app.models import MonitoringSettings
 from app.ui.time_dashboard import (
     aggregate_time_stats,
     classify_time_health,
-    is_fixable_recorder,
-    list_fixable_recorders,
     list_problem_rows,
     object_time_problem_count,
 )
@@ -51,32 +49,39 @@ def test_classify_error_skew() -> None:
     )
 
 
-def test_classify_warn_ntp_fail() -> None:
+def test_classify_error_ntp_fail() -> None:
     settings = MonitoringSettings()
     assert (
         classify_time_health(
             _rec(), _metrics(ntp_status="Fail"), settings
         )
-        == "warn"
+        == "error"
     )
 
 
-def test_aggregate_and_fixable() -> None:
+def test_classify_error_manual_sync() -> None:
+    settings = MonitoringSettings()
+    assert (
+        classify_time_health(
+            _rec(), _metrics(sync_type="Manual", time_skew_seconds=0.0), settings
+        )
+        == "error"
+    )
+
+
+def test_aggregate_ntp_fail_counts_as_error() -> None:
     settings = MonitoringSettings()
     r1, r2 = _rec(id="a"), _rec(id="b")
     metrics_map = {
         "a": _metrics(time_skew_seconds=0.5),
-        "b": _metrics(sync_type="Manual", time_skew_seconds=0.0),
+        "b": _metrics(ntp_status="Fail", time_skew_seconds=0.0),
     }
     stats = aggregate_time_stats([r1, r2], metrics_map, settings)
     assert stats.total_enabled == 2
     assert stats.ok == 1
-    assert stats.warn == 1
-    assert stats.fixable == 1
+    assert stats.error == 1
+    assert stats.warn == 0
     assert stats.has_problems is True
-    fixable = list_fixable_recorders([r1, r2], metrics_map)
-    assert len(fixable) == 1
-    assert fixable[0].id == "b"
 
 
 def test_problem_rows_sorted() -> None:

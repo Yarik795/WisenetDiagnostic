@@ -10,7 +10,7 @@
   {% set time_default_expanded = section.time_context.time_default_expanded %}
   {% set time_refresh_url = health_refresh_url|default('/objects/partials/health-dashboard') %}
   {% set time_hx_target = '#health-dashboard-stack' %}
-  {% set time_show_actions = true %}
+  {% set time_show_actions = false %}
   {% include "partials/time_dashboard.html" %}
   {% else %}
   {% include "partials/category_dashboard.html" %}

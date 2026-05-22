@@ -84,7 +84,7 @@ def _time_dashboard_ctx(
     )
     ctx["time_refresh_url"] = refresh_url
     ctx["time_server_now"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ctx["time_show_actions"] = True
+    ctx["time_show_actions"] = False
     return ctx
 
 
