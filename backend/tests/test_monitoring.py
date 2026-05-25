@@ -234,3 +234,42 @@ def test_recorder_archive_critical_error() -> None:
     )
     assert status == "error"
     assert "критично" in reason.lower()
+
+
+def test_apply_poll_result_records_category_history(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(
+        id="nvr1",
+        object_name="Obj",
+        host="10.0.0.1",
+        port=80,
+    )
+    polled_at = datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc)
+    poll = RecorderPollData(
+        online=True,
+        system_events={"CPUFanError": True},
+        channels_polled=False,
+    )
+    state.upsert_recorder_metrics(
+        "nvr1",
+        device_online=True,
+        last_polled_at=polled_at,
+    )
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        polled_at,
+        update_config=False,
+    )
+    history = state.list_category_history(recorder_id="nvr1")
+    categories = {row.category for row in history}
+    assert "fans" in categories
+    assert "time" in categories
+    fans_rows = [r for r in history if r.category == "fans"]
+    assert fans_rows[-1].status == "error"
+    assert state.get_category_problem_since("nvr1", "fans") == polled_at

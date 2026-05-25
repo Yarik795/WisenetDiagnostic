@@ -71,6 +71,19 @@ class HistoryRow:
     recorded_at: datetime
 
 
+@dataclass
+class CategoryStatusHistoryRow:
+    id: int
+    recorder_id: str
+    category: str
+    status: str
+    reason: Optional[str]
+    recorded_at: datetime
+
+
+_CATEGORY_PROBLEM_STATUSES = frozenset({"warn", "error"})
+
+
 class StateStore:
     def __init__(self, path: Optional[Path] = None) -> None:
         self.path = path or Path(os.environ.get("STATE_DB_PATH", DEFAULT_DB_PATH))
@@ -133,6 +146,18 @@ class StateStore:
 
                 CREATE INDEX IF NOT EXISTS idx_history_entity
                     ON status_history(entity_type, entity_id, recorded_at DESC);
+
+                CREATE TABLE IF NOT EXISTS category_status_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recorder_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    reason TEXT,
+                    recorded_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_category_history_entity
+                    ON category_status_history(recorder_id, category, recorded_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_channels_recorder
                     ON channels(recorder_id);
                 """
@@ -439,6 +464,83 @@ class StateStore:
             rows = conn.execute(sql, params).fetchall()
         return [_history_from_row(r) for r in rows]
 
+    def record_category_status(
+        self,
+        recorder_id: str,
+        category: str,
+        status: str,
+        reason: Optional[str] = None,
+        recorded_at: Optional[datetime] = None,
+    ) -> None:
+        ts = recorded_at or datetime.now(timezone.utc)
+        with self._connect() as conn:
+            last = conn.execute(
+                """
+                SELECT status FROM category_status_history
+                WHERE recorder_id = ? AND category = ?
+                ORDER BY recorded_at DESC LIMIT 1
+                """,
+                (recorder_id, category),
+            ).fetchone()
+            if last and last["status"] == status:
+                return
+            conn.execute(
+                """
+                INSERT INTO category_status_history (
+                    recorder_id, category, status, reason, recorded_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (recorder_id, category, status, reason, _iso(ts)),
+            )
+
+    def list_category_history(
+        self,
+        recorder_id: Optional[str] = None,
+        category: Optional[str] = None,
+        limit: int = 500,
+    ) -> list[CategoryStatusHistoryRow]:
+        sql = "SELECT * FROM category_status_history WHERE 1=1"
+        params: list = []
+        if recorder_id:
+            sql += " AND recorder_id = ?"
+            params.append(recorder_id)
+        if category:
+            sql += " AND category = ?"
+            params.append(category)
+        sql += " ORDER BY recorded_at ASC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [_category_history_from_row(r) for r in rows]
+
+    def get_category_problem_since(
+        self,
+        recorder_id: str,
+        category: str,
+    ) -> Optional[datetime]:
+        rows = self.list_category_history(
+            recorder_id=recorder_id,
+            category=category,
+        )
+        return _problem_episode_start(rows)
+
+    def category_problem_since_map(self) -> dict[tuple[str, str], datetime]:
+        with self._connect() as conn:
+            pairs = conn.execute(
+                """
+                SELECT DISTINCT recorder_id, category
+                FROM category_status_history
+                """
+            ).fetchall()
+        result: dict[tuple[str, str], datetime] = {}
+        for pair in pairs:
+            rid = pair["recorder_id"]
+            cat = pair["category"]
+            since = self.get_category_problem_since(rid, cat)
+            if since is not None:
+                result[(rid, cat)] = since
+        return result
+
     def delete_recorder_data(self, recorder_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM channels WHERE recorder_id = ?", (recorder_id,))
@@ -448,6 +550,10 @@ class StateStore:
             conn.execute(
                 "DELETE FROM status_history WHERE entity_id LIKE ?",
                 (f"{recorder_id}%",),
+            )
+            conn.execute(
+                "DELETE FROM category_status_history WHERE recorder_id = ?",
+                (recorder_id,),
             )
 
 
@@ -535,3 +641,31 @@ def _history_from_row(row: sqlite3.Row) -> HistoryRow:
         reason=row["reason"],
         recorded_at=_parse_iso(row["recorded_at"]) or datetime.now(timezone.utc),
     )
+
+
+def _category_history_from_row(row: sqlite3.Row) -> CategoryStatusHistoryRow:
+    return CategoryStatusHistoryRow(
+        id=row["id"],
+        recorder_id=row["recorder_id"],
+        category=row["category"],
+        status=row["status"],
+        reason=row["reason"],
+        recorded_at=_parse_iso(row["recorded_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _problem_episode_start(
+    rows: list[CategoryStatusHistoryRow],
+) -> Optional[datetime]:
+    if not rows:
+        return None
+    latest = rows[-1]
+    if latest.status not in _CATEGORY_PROBLEM_STATUSES:
+        return None
+    start = latest.recorded_at
+    for row in reversed(rows[:-1]):
+        if row.status in _CATEGORY_PROBLEM_STATUSES:
+            start = row.recorded_at
+        else:
+            break
+    return start

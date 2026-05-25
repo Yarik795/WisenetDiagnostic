@@ -488,6 +488,7 @@ def objects_export_errors_html(
         credentials=config.credentials,
         ntp_server=config.monitoring.ntp_server or "",
         device_auth="userinfo",
+        problem_since_map=state.category_problem_since_map(),
     )
     filename = (
         f"wisenet-dashboard-errors-{datetime.now().strftime('%Y%m%d-%H%M')}.html"

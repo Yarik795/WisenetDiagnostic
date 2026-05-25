@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from ..models import Credentials, MonitoringSettings, Recorder
@@ -33,6 +33,9 @@ class ErrorReportRow:
     value_display: str
     reason: str
     polled_at_display: str
+    problem_age_days_display: str = "—"
+    problem_since_display: str = "—"
+    problem_age_title: str = ""
 
 
 @dataclass
@@ -66,6 +69,26 @@ def _time_polled_at(metrics: Optional[RecorderMetricsRow]) -> str:
     return "—"
 
 
+def _problem_age_fields(
+    recorder_id: str,
+    category: str,
+    problem_since_map: dict[tuple[str, str], datetime],
+    *,
+    now: Optional[datetime] = None,
+) -> tuple[str, str, str]:
+    since = problem_since_map.get((recorder_id, category))
+    if since is None:
+        return "—", "—", ""
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    ref = now or datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    days = max(0, (ref - since).days)
+    since_display = since.strftime("%d.%m.%Y %H:%M")
+    return f"{days} сут.", since_display, f"С {since_display}"
+
+
 def _enrich_row(
     rec: Recorder,
     *,
@@ -76,7 +99,13 @@ def _enrich_row(
     value_display: str,
     reason: str,
     polled_at_display: str,
+    category_key: str,
+    problem_since_map: dict[tuple[str, str], datetime],
+    report_at: Optional[datetime] = None,
 ) -> ErrorReportRow:
+    days_display, since_display, age_title = _problem_age_fields(
+        rec.id, category_key, problem_since_map, now=report_at
+    )
     return ErrorReportRow(
         object_name=rec.object_name,
         recorder=rec,
@@ -91,6 +120,9 @@ def _enrich_row(
         value_display=value_display,
         reason=reason,
         polled_at_display=polled_at_display,
+        problem_age_days_display=days_display,
+        problem_since_display=since_display,
+        problem_age_title=age_title,
     )
 
 
@@ -99,6 +131,8 @@ def _row_from_health(
     *,
     credentials: Credentials | None,
     device_auth: DeviceAuthMode,
+    problem_since_map: dict[tuple[str, str], datetime],
+    report_at: Optional[datetime] = None,
 ) -> ErrorReportRow:
     rec = problem.recorder
     return _enrich_row(
@@ -110,6 +144,9 @@ def _row_from_health(
         value_display=problem.value_display,
         reason=problem.reason,
         polled_at_display=problem.polled_at_display,
+        category_key=problem.category,
+        problem_since_map=problem_since_map,
+        report_at=report_at,
     )
 
 
@@ -118,6 +155,8 @@ def _row_from_time(
     *,
     credentials: Credentials | None,
     device_auth: DeviceAuthMode,
+    problem_since_map: dict[tuple[str, str], datetime],
+    report_at: Optional[datetime] = None,
 ) -> ErrorReportRow:
     rec = problem.recorder
     metrics = problem.metrics
@@ -133,6 +172,9 @@ def _row_from_time(
         value_display=_time_value_display(metrics),
         reason=reason,
         polled_at_display=_time_polled_at(metrics),
+        category_key="time",
+        problem_since_map=problem_since_map,
+        report_at=report_at,
     )
 
 
@@ -141,7 +183,10 @@ def flatten_error_report_rows(
     *,
     credentials: Credentials | None = None,
     device_auth: DeviceAuthMode = "",
+    problem_since_map: dict[tuple[str, str], datetime] | None = None,
+    report_at: Optional[datetime] = None,
 ) -> list[ErrorReportRow]:
+    since_map = problem_since_map or {}
     rows: list[ErrorReportRow] = []
     for section in category_sections:
         if section.is_time and section.time_context:
@@ -151,6 +196,8 @@ def flatten_error_report_rows(
                         problem,
                         credentials=credentials,
                         device_auth=device_auth,
+                        problem_since_map=since_map,
+                        report_at=report_at,
                     )
                 )
             continue
@@ -160,6 +207,8 @@ def flatten_error_report_rows(
                     problem,
                     credentials=credentials,
                     device_auth=device_auth,
+                    problem_since_map=since_map,
+                    report_at=report_at,
                 )
             )
     return rows
@@ -173,7 +222,10 @@ def build_error_report_context(
     credentials: Credentials | None = None,
     ntp_server: str = "",
     device_auth: DeviceAuthMode = "",
+    problem_since_map: dict[tuple[str, str], datetime] | None = None,
+    report_at: Optional[datetime] = None,
 ) -> ErrorReportContext:
+    ref = report_at or datetime.now()
     dashboard = health_dashboard_context(
         recorders,
         metrics_map,
@@ -185,9 +237,13 @@ def build_error_report_context(
         dashboard["category_sections"],
         credentials=credentials,
         device_auth=device_auth,
+        problem_since_map=problem_since_map,
+        report_at=ref,
     )
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
     return ErrorReportContext(
-        generated_at=datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+        generated_at=ref.strftime("%d.%m.%Y %H:%M:%S"),
         problem_count=len(rows),
         rows=rows,
     )

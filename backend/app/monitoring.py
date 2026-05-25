@@ -24,6 +24,7 @@ from .sunapi_extended import (
     normalize_register_status,
     poll_recorder,
 )
+from .ui.health_classifiers import CATEGORY_LABELS, classify_category
 from .ui.metrics_helpers import (
     SYSTEM_EVENT_ERROR_LABELS,
     SYSTEM_EVENT_WARN_LABELS,
@@ -362,6 +363,18 @@ def apply_poll_result(
         disks=poll.storage.disks if poll.storage else None,
         system_events=poll.system_events or None,
     )
+    metrics = state.get_recorder_metrics(recorder.id)
+    for category in CATEGORY_LABELS:
+        cat_status, cat_reason = classify_category(
+            category, recorder, metrics, settings
+        )
+        state.record_category_status(
+            recorder.id,
+            category,
+            cat_status,
+            cat_reason,
+            polled_at,
+        )
     state.record_history("recorder", recorder.id, rec_status, rec_reason, polled_at)
 
     check_status = CheckStatus.ONLINE if poll.online else CheckStatus.OFFLINE

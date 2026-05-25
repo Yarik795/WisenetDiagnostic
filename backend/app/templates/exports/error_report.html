@@ -103,6 +103,7 @@
             <th>Статус</th>
             <th>Значение</th>
             <th>Причина</th>
+            <th>В проблеме</th>
             <th>Последний опрос</th>
           </tr>
         </thead>
@@ -126,6 +127,14 @@
             </td>
             <td>{{ row.value_display }}</td>
             <td>{{ row.reason }}</td>
+            <td title="{{ row.problem_age_title }}">
+              {% if row.problem_age_days_display != "—" %}
+              {{ row.problem_age_days_display }}
+              <span class="host-hint">с {{ row.problem_since_display }}</span>
+              {% else %}
+              —
+              {% endif %}
+            </td>
             <td>{{ row.polled_at_display }}</td>
           </tr>
           {% endfor %}
