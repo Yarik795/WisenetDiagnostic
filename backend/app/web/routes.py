@@ -55,26 +55,17 @@ def _metrics_map(state: StateStore):
 
 
 def _inventory_kpi_ctx(store: ConfigStore, state: StateStore) -> dict:
-    from ..ui.health_dashboard import (
-        object_category_problem_counts,
-        object_health_problem_count,
-    )
+    from ..ui.health_dashboard import fleet_overview_context
 
     config = store.load()
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
     settings = config.monitoring
-    enabled = sum(1 for r in recorders if r.enabled)
-    return {
-        "inventory_problem_nvr_count": object_health_problem_count(
-            recorders, metrics, settings
-        ),
-        "inventory_enabled_count": enabled,
-        "inventory_category_counts": object_category_problem_counts(
-            recorders, metrics, settings
-        ),
-        "health_category_options": list(CATEGORY_LABELS.items()),
-    }
+    ctx = fleet_overview_context(recorders, metrics, settings)
+    ctx["inventory_problem_nvr_count"] = ctx["fleet_problem_nvr_count"]
+    ctx["inventory_enabled_count"] = ctx["fleet_enabled_count"]
+    ctx["inventory_category_counts"] = ctx["fleet_category_counts"]
+    return ctx
 
 
 def _referer_has_table_view(referer: str) -> bool:

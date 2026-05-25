@@ -291,10 +291,13 @@ def test_objects_page_has_inventory_kpi_not_dashboard_stack(client: TestClient) 
     )
     r = client.get("/objects")
     assert r.status_code == 200
-    assert "inventory-kpi-strip" in r.text
+    assert "fleet-overview" in r.text
+    assert "object-health-matrix" in r.text
     assert "health-dashboard-stack" not in r.text
     assert "inventory-view-tabs" in r.text
     assert "Сводка мониторинга" in r.text
+    assert "Объектов" in r.text
+    assert "Исправность" in r.text
 
 
 def test_status_page_has_category_dashboard_stack(client: TestClient) -> None:
@@ -311,8 +314,75 @@ def test_status_page_has_category_dashboard_stack(client: TestClient) -> None:
     )
     r = client.get("/status")
     assert r.status_code == 200
+    assert "status-overview" in r.text
+    assert "Исправность парка" in r.text
     assert "health-dashboard-stack" in r.text
     assert "category-dashboard-temperature" in r.text
+
+
+def test_objects_fleet_category_chip_links(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timezone
+
+    store = app.dependency_overrides[get_store]()
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name="ВСП-1",
+            host="10.0.0.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    state = app.dependency_overrides[get_state_store]()
+    state.upsert_recorder_metrics(
+        rec.id,
+        device_online=True,
+        health_status="warn",
+        disks=[{"TemperatureCelsius": 55}],
+        last_polled_at=datetime.now(timezone.utc),
+    )
+
+    page = client.get("/objects")
+    assert "category=temperature" in page.text
+    assert "problems_only=true" in page.text
+    assert "TEMP:" in page.text
+
+    status = client.get("/status?category=temperature&problems_only=true")
+    assert status.status_code == 200
+    assert "category-dashboard-temperature" in status.text
+
+
+def test_status_top_problem_objects(
+    client: TestClient,
+) -> None:
+    from datetime import datetime, timezone
+
+    store = app.dependency_overrides[get_store]()
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name="Проблемный объект",
+            host="10.0.0.9",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    state = app.dependency_overrides[get_state_store]()
+    state.upsert_recorder_metrics(
+        rec.id,
+        device_online=True,
+        health_status="error",
+        ntp_status="Fail",
+        sync_type="Manual",
+        last_polled_at=datetime.now(timezone.utc),
+    )
+
+    r = client.get("/status")
+    assert "top-problem-objects" in r.text
+    assert "Проблемный объект" in r.text
+    assert 'href="/objects?object=' in r.text
 
 
 def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
@@ -410,3 +480,5 @@ def test_objects_table_view(client: TestClient) -> None:
     assert "recorders-table-body" in r.text
     assert "Таблица NVR" in r.text
     assert "data-object-group" not in r.text
+    assert "fleet-overview" in r.text
+    assert "object-health-matrix" not in r.text

@@ -1,0 +1,84 @@
+{% if fleet_nvr_count is defined %}
+<section class="fleet-overview card" aria-label="Обзор парка оборудования">
+  <div class="fleet-kpi-grid">
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ fleet_object_count }}</span>
+      <span class="fleet-kpi-label">Объектов</span>
+    </div>
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ fleet_nvr_count }}</span>
+      <span class="fleet-kpi-label">NVR всего</span>
+    </div>
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ fleet_enabled_count }}</span>
+      <span class="fleet-kpi-label">Включено</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--warn">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_problem_nvr_count }}</span>
+      <span class="fleet-kpi-label">С проблемами</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--unknown">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_no_data_count }}</span>
+      <span class="fleet-kpi-label">Нет данных</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--ok">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_health_percent }}%</span>
+      <span class="fleet-kpi-label">Исправность</span>
+    </div>
+  </div>
+
+  {% if fleet_status_counts and fleet_status_counts.stacked_total > 0 %}
+  <div class="fleet-status-section">
+    <div class="fleet-status-legend" aria-hidden="true">
+      <span><span class="legend-dot legend-dot--ok"></span> В норме {{ fleet_status_counts.ok }}</span>
+      <span><span class="legend-dot legend-dot--warn"></span> Деградация {{ fleet_status_counts.warn }}</span>
+      <span><span class="legend-dot legend-dot--error"></span> Критично {{ fleet_status_counts.error }}</span>
+      <span><span class="legend-dot legend-dot--unknown"></span> Нет данных {{ fleet_status_counts.unknown }}</span>
+      {% if fleet_status_counts.disabled > 0 %}
+      <span><span class="legend-dot legend-dot--disabled"></span> Выключено {{ fleet_status_counts.disabled }}</span>
+      {% endif %}
+    </div>
+    <div
+      class="time-severity-stack fleet-severity-stack"
+      role="img"
+      aria-label="Распределение NVR по состоянию"
+    >
+      {% for label, count, css_class in fleet_status_counts.stacked_segments %}
+      {% if count > 0 %}
+      <div
+        class="time-severity-segment {{ css_class }}"
+        style="flex-grow: {{ count }};"
+        title="{{ count }} — {{ label }}"
+      ></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="fleet-overview-footer">
+    {% if fleet_category_counts %}
+    <div class="fleet-category-chips" role="list" aria-label="Проблемы по категориям">
+      {% for cat, label in health_category_options %}
+      {% set cnt = fleet_category_counts.get(cat, 0) %}
+      {% if cnt > 0 %}
+      <a
+        href="/status?category={{ cat }}&problems_only=true"
+        class="fleet-category-chip"
+        role="listitem"
+        title="{{ label }}: {{ cnt }} NVR"
+      >{{ category_badge_code(cat) }}: {{ cnt }}</a>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    <p class="fleet-meta">
+      Последний опрос: <span class="time-mono">{{ fleet_last_polled_display }}</span>
+    </p>
+    <a href="/status" class="btn btn-outline btn-sm fleet-summary-link">Сводка мониторинга →</a>
+  </div>
+</section>
+{% endif %}

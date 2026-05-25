@@ -25,6 +25,7 @@
   </label>
   <button type="submit" class="btn btn-outline btn-sm">Применить</button>
 </form>
+{% include "partials/status_overview.html" %}
 {% set health_refresh_url = '/status/partials/dashboard' %}
 {% include "partials/health_dashboard_stack.html" %}
 {% endblock %}

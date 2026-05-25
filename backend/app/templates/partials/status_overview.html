@@ -1,0 +1,106 @@
+{% if fleet_nvr_count is defined %}
+<section class="status-overview card" aria-label="Обзор состояния мониторинга">
+  <div class="status-overview-kpi">
+    <div class="fleet-kpi fleet-kpi--error">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_critical_count }}</span>
+      <span class="fleet-kpi-label">Критично</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--warn">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_warn_count }}</span>
+      <span class="fleet-kpi-label">Деградация</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--unknown">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_unknown_count }}</span>
+      <span class="fleet-kpi-label">Нет данных</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--ok">
+      <span class="fleet-kpi-dot" aria-hidden="true"></span>
+      <span class="fleet-kpi-value">{{ fleet_health_percent }}%</span>
+      <span class="fleet-kpi-label">Исправность парка</span>
+    </div>
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ fleet_object_count }}</span>
+      <span class="fleet-kpi-label">Объектов</span>
+    </div>
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ fleet_enabled_count }}</span>
+      <span class="fleet-kpi-label">NVR включено</span>
+    </div>
+  </div>
+
+  <div class="status-overview-grid">
+    <div class="status-overview-panel">
+      <h3 class="status-overview-subtitle">Проблемы по типам</h3>
+      {% if category_problem_bars %}
+      {% set ns = namespace(has_problems=false) %}
+      {% for bar in category_problem_bars %}
+      {% if bar.problem_count > 0 %}{% set ns.has_problems = true %}{% endif %}
+      {% endfor %}
+      {% if ns.has_problems %}
+      <ul class="category-bars" role="list">
+        {% for bar in category_problem_bars %}
+        {% if bar.problem_count > 0 %}
+        <li class="category-bar-row">
+          <a
+            href="/status?category={{ bar.category }}&problems_only=true"
+            class="category-bar-label"
+            title="{{ bar.label }}"
+          >{{ bar.code }}</a>
+          <div class="category-bar-track" role="presentation">
+            {% if bar.error_count > 0 %}
+            <span
+              class="category-bar-segment category-bar-segment--error"
+              style="flex-grow: {{ bar.error_count }};"
+              title="Критично: {{ bar.error_count }}"
+            ></span>
+            {% endif %}
+            {% if bar.warn_count > 0 %}
+            <span
+              class="category-bar-segment category-bar-segment--warn"
+              style="flex-grow: {{ bar.warn_count }};"
+              title="Деградация: {{ bar.warn_count }}"
+            ></span>
+            {% endif %}
+          </div>
+          <span class="category-bar-count">{{ bar.problem_count }}</span>
+        </li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="status-overview-empty">Нет активных проблем по категориям.</p>
+      {% endif %}
+      {% else %}
+      <p class="status-overview-empty">Нет данных по категориям.</p>
+      {% endif %}
+    </div>
+
+    <div class="status-overview-panel">
+      <h3 class="status-overview-subtitle">Топ проблемных объектов</h3>
+      {% if top_problem_objects %}
+      <ol class="top-problem-objects">
+        {% for item in top_problem_objects %}
+        <li class="top-problem-object top-problem-object--{{ item.worst_status }}">
+          <a href="/objects?object={{ item.object_name|urlencode }}">{{ item.object_name }}</a>
+          <span class="top-problem-object-meta">
+            <span class="status-dot {{ item.worst_status }}" aria-hidden="true"></span>
+            {{ item.problem_nvr_count }} из {{ item.nvr_count }} NVR
+          </span>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p class="status-overview-empty">Проблемных объектов не обнаружено.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="fleet-meta status-overview-meta">
+    Опрос: <span class="time-mono">{{ fleet_last_polled_display }}</span>
+    · <a href="/objects">Инвентарь объектов →</a>
+  </p>
+</section>
+{% endif %}

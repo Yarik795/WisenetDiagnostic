@@ -6,13 +6,15 @@ from typing import Any, Optional
 
 from ..models import MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
-from .grouping import effective_status
+from .grouping import aggregate_status, effective_status
 from .health_classifiers import (
+    BADGE_CODES,
     CATEGORY_LABELS,
     HealthCategory,
     HealthCategoryStatus,
     classify_category,
     is_problem_status,
+    worst_category_status,
 )
 from .time_dashboard import time_dashboard_context
 
@@ -311,6 +313,409 @@ def object_category_problem_counts(
     return counts
 
 
+_STATUS_ORDER = {"error": 4, "offline": 4, "warn": 3, "unknown": 2, "ok": 1, "online": 1, "disabled": 0}
+
+
+@dataclass
+class FleetStatusCounts:
+    ok: int = 0
+    warn: int = 0
+    error: int = 0
+    unknown: int = 0
+    disabled: int = 0
+
+    @property
+    def stacked_segments(self) -> list[tuple[str, int, str]]:
+        return [
+            ("ok", self.ok, "time-stack-ok"),
+            ("warn", self.warn, "time-stack-warn"),
+            ("error", self.error, "time-stack-error"),
+            ("unknown", self.unknown, "time-stack-unknown"),
+            ("disabled", self.disabled, "fleet-stack-disabled"),
+        ]
+
+    @property
+    def stacked_total(self) -> int:
+        return self.ok + self.warn + self.error + self.unknown + self.disabled
+
+
+@dataclass
+class CategoryProblemBar:
+    category: HealthCategory
+    label: str
+    code: str
+    problem_count: int
+    error_count: int
+    warn_count: int
+
+
+@dataclass
+class TopProblemObject:
+    object_name: str
+    nvr_count: int
+    problem_nvr_count: int
+    worst_status: str
+
+
+@dataclass
+class ObjectMatrixCell:
+    column: str
+    status: str
+    problem_count: int
+    title: str
+
+
+@dataclass
+class ObjectMatrixRow:
+    object_name: str
+    nvr_count: int
+    problem_nvr_count: int
+    aggregate_status: str
+    cells: list[ObjectMatrixCell]
+
+
+_MATRIX_COLUMNS: list[tuple[str, Optional[HealthCategory]]] = [
+    ("nvr", None),
+    ("time", "time"),
+    ("storage", "storage"),
+    ("temperature", "temperature"),
+    ("fans", "fans"),
+    ("channels", "channels"),
+    ("archive", "archive"),
+]
+
+_MATRIX_HEADERS: dict[str, str] = {
+    "nvr": "NVR",
+    "time": "NTP",
+    "storage": "HDD",
+    "temperature": "TEMP",
+    "fans": "FAN",
+    "channels": "CH",
+    "archive": "ARCH",
+}
+
+
+def _status_rank(status: str) -> int:
+    return _STATUS_ORDER.get(status, 0)
+
+
+def _recorder_has_poll_data(
+    recorder: Recorder,
+    metrics: Optional[RecorderMetricsRow],
+) -> bool:
+    if not recorder.enabled:
+        return False
+    if metrics is None or metrics.last_polled_at is None:
+        return False
+    return metrics.device_online
+
+
+def aggregate_fleet_status_counts(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+) -> FleetStatusCounts:
+    counts = FleetStatusCounts()
+    for rec in recorders:
+        if not rec.enabled:
+            counts.disabled += 1
+            continue
+        status = effective_status(rec, metrics_map.get(rec.id))
+        if status in ("ok", "online"):
+            counts.ok += 1
+        elif status == "warn":
+            counts.warn += 1
+        elif status in ("error", "offline"):
+            counts.error += 1
+        else:
+            counts.unknown += 1
+    return counts
+
+
+def count_nvr_without_poll_data(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+) -> int:
+    n = 0
+    for rec in recorders:
+        if not rec.enabled:
+            continue
+        if not _recorder_has_poll_data(rec, metrics_map.get(rec.id)):
+            n += 1
+    return n
+
+
+def recorder_has_health_problems(
+    recorder: Recorder,
+    metrics: Optional[RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> bool:
+    if not recorder.enabled:
+        return False
+    statuses = [
+        classify_category(c, recorder, metrics, settings)[0]
+        for c in CATEGORY_LABELS
+    ]
+    eff = effective_status(recorder, metrics)
+    return eff in ("warn", "error", "offline") or any(
+        is_problem_status(s) for s in statuses
+    )
+
+
+def fleet_health_percent(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> int:
+    enabled = [r for r in recorders if r.enabled]
+    if not enabled:
+        return 100
+    healthy = sum(
+        1
+        for r in enabled
+        if not recorder_has_health_problems(r, metrics_map.get(r.id), settings)
+    )
+    return round(100 * healthy / len(enabled))
+
+
+def build_category_problem_bars(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> list[CategoryProblemBar]:
+    bars: list[CategoryProblemBar] = []
+    for cat, label in CATEGORY_LABELS.items():
+        stats = aggregate_category_stats(cat, recorders, metrics_map, settings)
+        bars.append(
+            CategoryProblemBar(
+                category=cat,
+                label=label,
+                code=BADGE_CODES[cat],
+                problem_count=stats.warn + stats.error,
+                error_count=stats.error,
+                warn_count=stats.warn,
+            )
+        )
+    bars.sort(key=lambda b: (-b.problem_count, b.label))
+    return bars
+
+
+def build_top_problem_objects(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    settings: MonitoringSettings,
+    *,
+    limit: int = 8,
+) -> list[TopProblemObject]:
+    by_object: dict[str, list[Recorder]] = {}
+    for rec in recorders:
+        by_object.setdefault(rec.object_name, []).append(rec)
+
+    rows: list[TopProblemObject] = []
+    for name, recs in by_object.items():
+        problem_nvr = sum(
+            1
+            for r in recs
+            if r.enabled
+            and recorder_has_health_problems(r, metrics_map.get(r.id), settings)
+        )
+        if problem_nvr == 0:
+            continue
+        agg = aggregate_status(recs, metrics_map)
+        rows.append(
+            TopProblemObject(
+                object_name=name,
+                nvr_count=len(recs),
+                problem_nvr_count=problem_nvr,
+                worst_status=agg,
+            )
+        )
+    rows.sort(
+        key=lambda row: (
+            -_status_rank(row.worst_status),
+            -row.problem_nvr_count,
+            row.object_name.lower(),
+        )
+    )
+    return rows[:limit]
+
+
+def _cell_for_column(
+    column: str,
+    category: Optional[HealthCategory],
+    recs: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> ObjectMatrixCell:
+    enabled = [r for r in recs if r.enabled]
+    if not enabled:
+        return ObjectMatrixCell(
+            column=column,
+            status="disabled",
+            problem_count=0,
+            title="Все NVR выключены",
+        )
+
+    if category is None:
+        statuses = [
+            effective_status(r, metrics_map.get(r.id)) for r in enabled
+        ]
+        worst = max(statuses, key=_status_rank) if statuses else "unknown"
+        problems = sum(
+            1
+            for r in enabled
+            if effective_status(r, metrics_map.get(r.id))
+            in ("warn", "error", "offline", "unknown")
+        )
+        return ObjectMatrixCell(
+            column=column,
+            status=worst,
+            problem_count=problems,
+            title=f"{problems} из {len(enabled)} NVR с отклонением",
+        )
+
+    statuses: list[HealthCategoryStatus] = []
+    problems = 0
+    for rec in enabled:
+        st, reason = classify_category(
+            category, rec, metrics_map.get(rec.id), settings
+        )
+        statuses.append(st)
+        if is_problem_status(st):
+            problems += 1
+    worst = worst_category_status(*statuses) if statuses else "unknown"
+    label = CATEGORY_LABELS[category]
+    if problems:
+        title = f"{label}: {problems} из {len(enabled)} NVR"
+    else:
+        title = f"{label}: в норме"
+    return ObjectMatrixCell(
+        column=column,
+        status=worst,
+        problem_count=problems,
+        title=title,
+    )
+
+
+def build_object_health_matrix(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> list[ObjectMatrixRow]:
+    by_object: dict[str, list[Recorder]] = {}
+    for rec in recorders:
+        by_object.setdefault(rec.object_name, []).append(rec)
+
+    rows: list[ObjectMatrixRow] = []
+    for name, recs in by_object.items():
+        enabled = [r for r in recs if r.enabled]
+        problem_nvr = sum(
+            1
+            for r in enabled
+            if recorder_has_health_problems(r, metrics_map.get(r.id), settings)
+        )
+        cells = [
+            _cell_for_column(col, cat, recs, metrics_map, settings)
+            for col, cat in _MATRIX_COLUMNS
+        ]
+        rows.append(
+            ObjectMatrixRow(
+                object_name=name,
+                nvr_count=len(recs),
+                problem_nvr_count=problem_nvr,
+                aggregate_status=aggregate_status(recs, metrics_map),
+                cells=cells,
+            )
+        )
+
+    rows.sort(
+        key=lambda row: (
+            -_status_rank(row.aggregate_status),
+            -row.problem_nvr_count,
+            row.object_name.lower(),
+        )
+    )
+    return rows
+
+
+def _fleet_last_polled_display(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+) -> str:
+    latest: Optional[Any] = None
+    for rec in recorders:
+        if not rec.enabled:
+            continue
+        metrics = metrics_map.get(rec.id)
+        if metrics and metrics.last_polled_at:
+            if latest is None or metrics.last_polled_at > latest:
+                latest = metrics.last_polled_at
+    if latest is None:
+        return "—"
+    return latest.strftime("%Y-%m-%d %H:%M")
+
+
+def fleet_overview_context(
+    recorders: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> dict:
+    object_names = {r.object_name for r in recorders}
+    enabled_recs = [r for r in recorders if r.enabled]
+    status_counts = aggregate_fleet_status_counts(recorders, metrics_map)
+    category_counts = object_category_problem_counts(
+        recorders, metrics_map, settings
+    )
+    critical_nvr = 0
+    warn_nvr = 0
+    for rec in enabled_recs:
+        metrics = metrics_map.get(rec.id)
+        eff = effective_status(rec, metrics)
+        cat_statuses = [
+            classify_category(c, rec, metrics, settings)[0]
+            for c in CATEGORY_LABELS
+        ]
+        is_critical = eff in ("error", "offline") or any(s == "error" for s in cat_statuses)
+        is_warn = not is_critical and (
+            eff == "warn" or any(s == "warn" for s in cat_statuses)
+        )
+        if is_critical:
+            critical_nvr += 1
+        elif is_warn:
+            warn_nvr += 1
+
+    return {
+        "fleet_object_count": len(object_names),
+        "fleet_nvr_count": len(recorders),
+        "fleet_enabled_count": len(enabled_recs),
+        "fleet_problem_nvr_count": object_health_problem_count(
+            recorders, metrics_map, settings
+        ),
+        "fleet_no_data_count": count_nvr_without_poll_data(recorders, metrics_map),
+        "fleet_status_counts": status_counts,
+        "fleet_category_counts": category_counts,
+        "fleet_health_percent": fleet_health_percent(
+            recorders, metrics_map, settings
+        ),
+        "fleet_last_polled_display": _fleet_last_polled_display(
+            recorders, metrics_map
+        ),
+        "fleet_critical_count": critical_nvr,
+        "fleet_warn_count": warn_nvr,
+        "fleet_unknown_count": status_counts.unknown,
+        "health_category_options": list(CATEGORY_LABELS.items()),
+        "object_matrix_rows": build_object_health_matrix(
+            recorders, metrics_map, settings
+        ),
+        "object_matrix_headers": _MATRIX_HEADERS,
+        "top_problem_objects": build_top_problem_objects(
+            recorders, metrics_map, settings
+        ),
+        "category_problem_bars": build_category_problem_bars(
+            recorders, metrics_map, settings
+        ),
+    }
+
+
 def health_dashboard_context(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
@@ -341,4 +746,5 @@ def health_dashboard_context(
         "category_sections": sections,
         "health_dashboard_compact": compact,
         "health_highlight_category": highlight_category,
+        **fleet_overview_context(recorders, metrics_map, settings),
     }
