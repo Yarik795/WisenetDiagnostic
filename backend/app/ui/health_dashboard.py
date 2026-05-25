@@ -331,6 +331,12 @@ def health_dashboard_context(
         problems_only=problems_only,
         search=search,
     )
+    if highlight_category:
+        for section in sections:
+            if section.is_time and highlight_category == "time":
+                section.default_expanded = True
+            elif section.category == highlight_category:
+                section.default_expanded = True
     return {
         "category_sections": sections,
         "health_dashboard_compact": compact,

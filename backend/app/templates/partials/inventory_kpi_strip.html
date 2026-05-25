@@ -1,0 +1,18 @@
+{% if inventory_problem_nvr_count is defined %}
+<div class="inventory-kpi-strip">
+  <span>
+    NVR с проблемами:
+    <strong>{{ inventory_problem_nvr_count }}</strong>
+    из {{ inventory_enabled_count }}
+  </span>
+  {% if inventory_category_counts %}
+  {% for cat, label in health_category_options %}
+  {% set cnt = inventory_category_counts.get(cat, 0) %}
+  {% if cnt > 0 %}
+  <a href="/status?category={{ cat }}&problems_only=true">{{ label }}: {{ cnt }}</a>
+  {% endif %}
+  {% endfor %}
+  {% endif %}
+  <a href="/status" class="btn btn-outline btn-sm" style="margin-left:auto;">Сводка мониторинга →</a>
+</div>
+{% endif %}

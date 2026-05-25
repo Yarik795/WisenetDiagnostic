@@ -73,7 +73,9 @@ def test_recorders_crud_via_forms(client: TestClient) -> None:
     assert "ВСП-045" in page.text
     assert "10.1.2.3" in page.text
 
-    list_page = client.get("/recorders")
+    list_page = client.get("/recorders", follow_redirects=True)
+    assert list_page.url.path == "/objects"
+    assert "view=table" in str(list_page.url.query)
     assert "ВСП-045" in list_page.text
 
 
@@ -227,16 +229,25 @@ def test_enable_ntp_success(
     assert "\\u043e\\u0431\\u043d\\u043e\\u0432" in trigger  # "обнов" в JSON (ensure_ascii)
 
 
-def test_time_page(client: TestClient) -> None:
-    r = client.get("/time")
-    assert r.status_code == 200
-    assert "Время и NTP" in r.text
-    assert "time-dashboard" in r.text
-    assert "Исправить" not in r.text
-    assert "К исправлению" not in r.text
+def test_time_redirects_to_status(client: TestClient) -> None:
+    r = client.get("/time", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"].startswith("/status?")
+    assert "category=time" in r.headers["location"]
+
+    page = client.get("/time", follow_redirects=True)
+    assert page.status_code == 200
+    assert "Сводка" in page.text
+    assert "time-dashboard" in page.text
 
 
-def test_time_page_ntp_fail_in_critical_kpi(client: TestClient) -> None:
+def test_recorders_redirects_to_objects_table(client: TestClient) -> None:
+    r = client.get("/recorders", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/objects?view=table"
+
+
+def test_status_time_category_ntp_fail_in_critical_kpi(client: TestClient) -> None:
     from datetime import datetime, timezone
 
     store = app.dependency_overrides[get_store]()
@@ -260,10 +271,48 @@ def test_time_page_ntp_fail_in_critical_kpi(client: TestClient) -> None:
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/time")
+    r = client.get("/status?category=time&problems_only=true")
     assert r.status_code == 200
     assert 'time-kpi--error' in r.text
     assert "time-problem-row--error" in r.text
+
+
+def test_objects_page_has_inventory_kpi_not_dashboard_stack(client: TestClient) -> None:
+    store = app.dependency_overrides[get_store]()
+    store.update_credentials("admin", "secret")
+    store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    r = client.get("/objects")
+    assert r.status_code == 200
+    assert "inventory-kpi-strip" in r.text
+    assert "health-dashboard-stack" not in r.text
+    assert "inventory-view-tabs" in r.text
+    assert "Сводка мониторинга" in r.text
+
+
+def test_status_page_has_category_dashboard_stack(client: TestClient) -> None:
+    store = app.dependency_overrides[get_store]()
+    store.update_credentials("admin", "secret")
+    store.create_recorder(
+        RecorderCreate(
+            object_name="Obj",
+            host="10.0.0.1",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    r = client.get("/status")
+    assert r.status_code == 200
+    assert "health-dashboard-stack" in r.text
+    assert "category-dashboard-temperature" in r.text
 
 
 def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
@@ -295,7 +344,9 @@ def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
     assert r.status_code == 200
     assert "NVR-корпус" in r.text
     assert "192.168.1.10" in r.text
-    assert "category-dashboard-temperature" in r.text
+
+    status_page = client.get("/status?category=temperature")
+    assert "category-dashboard-temperature" in status_page.text
 
 
 def test_objects_export_errors_html(client: TestClient) -> None:
@@ -343,24 +394,19 @@ def test_objects_export_errors_html(client: TestClient) -> None:
     assert "Экспорт с авто-входом" not in page.text
 
 
-def test_objects_page_has_category_dashboard_stack(client: TestClient) -> None:
+def test_objects_table_view(client: TestClient) -> None:
     store = app.dependency_overrides[get_store]()
-    store.update_credentials("admin", "secret")
     store.create_recorder(
         RecorderCreate(
-            object_name="Obj",
-            host="10.0.0.1",
+            object_name="ВСП-1",
+            host="10.0.0.2",
             port=80,
             use_https=False,
             enabled=True,
         )
     )
-    r = client.get("/objects")
+    r = client.get("/objects?view=table")
     assert r.status_code == 200
-    assert "health-dashboard-stack" in r.text
-    assert "time-dashboard" in r.text
-    assert "category-dashboard-temperature" in r.text
-    assert "category-dashboard-storage" in r.text
-    assert "category-dashboard-fans" in r.text
-    assert "category-dashboard-channels" in r.text
-    assert "category-dashboard-archive" in r.text
+    assert "recorders-table-body" in r.text
+    assert "Таблица NVR" in r.text
+    assert "data-object-group" not in r.text

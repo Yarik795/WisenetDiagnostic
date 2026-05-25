@@ -54,6 +54,34 @@ def _metrics_map(state: StateStore):
     return metrics_map_from_list(state.list_recorder_metrics())
 
 
+def _inventory_kpi_ctx(store: ConfigStore, state: StateStore) -> dict:
+    from ..ui.health_dashboard import (
+        object_category_problem_counts,
+        object_health_problem_count,
+    )
+
+    config = store.load()
+    recorders = store.list_recorders()
+    metrics = _metrics_map(state)
+    settings = config.monitoring
+    enabled = sum(1 for r in recorders if r.enabled)
+    return {
+        "inventory_problem_nvr_count": object_health_problem_count(
+            recorders, metrics, settings
+        ),
+        "inventory_enabled_count": enabled,
+        "inventory_category_counts": object_category_problem_counts(
+            recorders, metrics, settings
+        ),
+        "health_category_options": list(CATEGORY_LABELS.items()),
+    }
+
+
+def _referer_has_table_view(referer: str) -> bool:
+    parsed = urlparse(referer or "")
+    return parse_qs(parsed.query).get("view", [""])[0] == "table"
+
+
 def _time_dashboard_ctx(
     store: ConfigStore,
     state: StateStore,
@@ -88,7 +116,12 @@ def _time_dashboard_ctx(
 def _wants_time_dashboard_response(request: Request) -> bool:
     target = request.headers.get("HX-Target", "")
     referer = request.headers.get("HX-Current-URL", "")
-    return "#time-dashboard" in target or (
+    parsed = urlparse(referer or "")
+    status_time = (
+        "/status" in parsed.path
+        and parse_qs(parsed.query).get("category", [""])[0] == "time"
+    )
+    return "#time-dashboard" in target or status_time or (
         "/time" in referer and "#health-dashboard" not in target
     )
 
@@ -180,7 +213,7 @@ def _health_params_from_referer(referer: str) -> dict:
     highlight_category: Optional[HealthCategory] = None
     if category_raw in CATEGORY_LABELS:
         highlight_category = category_raw  # type: ignore[assignment]
-    compact = "/recorders" in parsed.path and "/status" not in parsed.path
+    compact = False
     if "/status" in parsed.path:
         enc_parts = {
             "search": search,
@@ -189,8 +222,6 @@ def _health_params_from_referer(referer: str) -> dict:
         if highlight_category:
             enc_parts["category"] = highlight_category
         refresh_url = f"/status/partials/dashboard?{urlencode(enc_parts)}"
-    elif compact:
-        refresh_url = "/recorders/partials/health-dashboard"
     else:
         refresh_url = "/objects/partials/health-dashboard"
     return {
@@ -211,19 +242,27 @@ def _time_params_from_referer(referer: str) -> dict:
         "0",
         "no",
     )
-    compact = "/recorders" in parsed.path and "/time" not in parsed.path
-    if "/time" in parsed.path:
+    compact = False
+    if "/time" in parsed.path or (
+        "/status" in parsed.path
+        and parse_qs(parsed.query).get("category", [""])[0] == "time"
+    ):
         enc = urlencode(
             {
                 "search": search,
                 "problems_only": "true" if problems_only else "false",
             }
         )
-        refresh_url = f"/time/partials/dashboard?{enc}"
+        if "/status" in parsed.path:
+            enc_status = {
+                "search": search,
+                "problems_only": "true" if problems_only else "false",
+                "category": "time",
+            }
+            refresh_url = f"/status/partials/dashboard?{urlencode(enc_status)}"
+        else:
+            refresh_url = f"/time/partials/dashboard?{enc}"
         show_all = not problems_only
-    elif compact:
-        refresh_url = "/recorders/partials/time-dashboard"
-        show_all = False
     else:
         refresh_url = "/objects/partials/time-dashboard"
         show_all = False
@@ -271,7 +310,10 @@ def _time_dashboard_response(
 
 
 def _recorder_partial_template(referer: str) -> str:
-    if "/recorders" in referer and "/objects" not in referer:
+    parsed = urlparse(referer or "")
+    if _referer_has_table_view(referer) or (
+        "/recorders" in parsed.path and "/objects" not in parsed.path
+    ):
         return "partials/recorder_table_row.html"
     if "/channels" in referer:
         return "partials/recorder_metrics_panel.html"
@@ -316,30 +358,47 @@ def health() -> dict[str, str]:
 def objects_page(
     request: Request,
     sort: SortMode = "status",
+    view: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
 ) -> HTMLResponse:
+    inventory_view = "table" if view.strip().lower() == "table" else "groups"
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
-    groups = group_by_object(recorders, "", sort, metrics)
+    if inventory_view == "table":
+        recorders_display = sorted(
+            recorders,
+            key=lambda r: (r.object_name.lower(), r.host),
+        )
+        groups = []
+    else:
+        recorders_display = recorders
+        groups = group_by_object(recorders, "", sort, metrics)
     toast = _toast_from_query(request)
+    if inventory_view == "table":
+        poll_refresh_url = "/objects/partials/table"
+        poll_refresh_target = "#inventory-table-root"
+    else:
+        poll_refresh_url = "/objects/partials/groups"
+        poll_refresh_target = "#object-groups"
     return templates.TemplateResponse(
         request,
         "objects.html",
         {
             "active_nav": "objects",
+            "inventory_view": inventory_view,
             "groups": groups,
-            "recorders": recorders,
+            "recorders": recorders_display,
             "metrics_map": metrics,
             "sort": sort,
             "toast": toast,
-            **_health_dashboard_ctx(store, state),
+            **_inventory_kpi_ctx(store, state),
             **_poll_ui_ctx(
                 poll_jobs,
                 store,
-                refresh_url="/objects/partials/health-dashboard",
-                refresh_target="#health-dashboard-stack",
+                refresh_url=poll_refresh_url,
+                refresh_target=poll_refresh_target,
             ),
         },
     )
@@ -370,6 +429,26 @@ def objects_time_dashboard_partial(
         store,
         state,
         refresh_url="/objects/partials/time-dashboard",
+    )
+
+
+@router.get("/objects/partials/table", response_class=HTMLResponse)
+def objects_table_partial(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    recorders = sorted(
+        store.list_recorders(),
+        key=lambda r: (r.object_name.lower(), r.host),
+    )
+    return templates.TemplateResponse(
+        request,
+        "partials/objects_table.html",
+        {
+            "recorders": recorders,
+            "metrics_map": _metrics_map(state),
+        },
     )
 
 
@@ -424,32 +503,9 @@ def objects_export_errors_html(
     return response
 
 
-@router.get("/recorders", response_class=HTMLResponse)
-def recorders_page(
-    request: Request,
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
-) -> HTMLResponse:
-    recorders = sorted(
-        store.list_recorders(),
-        key=lambda r: (r.object_name.lower(), r.host),
-    )
-    return templates.TemplateResponse(
-        request,
-        "recorders.html",
-        {
-            "active_nav": "recorders",
-            "recorders": recorders,
-            "metrics_map": _metrics_map(state),
-            "toast": _toast_from_query(request),
-            **_health_dashboard_ctx(
-                store,
-                state,
-                compact=True,
-                refresh_url="/recorders/partials/health-dashboard",
-            ),
-        },
-    )
+@router.get("/recorders", include_in_schema=False)
+def recorders_page() -> RedirectResponse:
+    return RedirectResponse(url="/objects?view=table", status_code=302)
 
 
 @router.get("/recorders/partials/health-dashboard", response_class=HTMLResponse)
@@ -482,42 +538,20 @@ def recorders_time_dashboard_partial(
     )
 
 
-@router.get("/time", response_class=HTMLResponse)
+@router.get("/time", include_in_schema=False)
 def time_page(
-    request: Request,
     search: str = "",
     problems_only: str = "true",
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
-    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
-) -> HTMLResponse:
+) -> RedirectResponse:
     only_problems = problems_only.lower() not in ("false", "0", "no")
-    qs = urlencode({"search": search, "problems_only": "true" if only_problems else "false"})
-    dash_url = f"/time/partials/dashboard?{qs}"
-    return templates.TemplateResponse(
-        request,
-        "time.html",
+    qs = urlencode(
         {
-            "active_nav": "time",
-            "time_search": search,
-            "time_problems_only": only_problems,
-            "toast": _toast_from_query(request),
-            **_time_dashboard_ctx(
-                store,
-                state,
-                search=search,
-                problems_only=only_problems,
-                show_all_table=not only_problems,
-                refresh_url=dash_url,
-            ),
-            **_poll_ui_ctx(
-                poll_jobs,
-                store,
-                refresh_url=dash_url,
-                refresh_target="#time-dashboard",
-            ),
-        },
+            "search": search,
+            "problems_only": "true" if only_problems else "false",
+            "category": "time",
+        }
     )
+    return RedirectResponse(url=f"/status?{qs}", status_code=302)
 
 
 @router.get("/time/partials/dashboard", response_class=HTMLResponse)

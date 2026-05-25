@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% block title %}Объекты — Wisenet Диагностика{% endblock %}
-{% block page_title %}Объекты{% endblock %}
+{% block page_title %}Инвентарь{% endblock %}
 {% block page_actions %}
 <a
   href="/objects/export/errors.html"
@@ -16,8 +16,18 @@
 >+ Добавить регистратор</button>
 {% endblock %}
 {% block content %}
-{% set health_refresh_url = '/objects/partials/health-dashboard' %}
-{% include "partials/health_dashboard_stack.html" %}
+{% include "partials/inventory_kpi_strip.html" %}
+
+<nav class="inventory-view-tabs" aria-label="Вид инвентаря">
+  <a href="/objects{% if sort != 'status' %}?sort={{ sort }}{% endif %}" class="{% if inventory_view != 'table' %}active{% endif %}">По объектам</a>
+  <a href="/objects?view=table{% if sort != 'status' %}&sort={{ sort }}{% endif %}" class="{% if inventory_view == 'table' %}active{% endif %}">Таблица NVR</a>
+</nav>
+
+{% if inventory_view == 'table' %}
+<div id="inventory-table-root">
+{% include "partials/objects_table.html" %}
+</div>
+{% else %}
 <div class="toolbar">
   <input type="search" id="objects-search" class="input" placeholder="Поиск по объекту, IP, имени…" aria-label="Поиск">
   <button type="button" class="btn btn-outline" id="objects-collapse-all">Свернуть все</button>
@@ -36,4 +46,5 @@
 <div id="object-groups">
   {% include "partials/object_groups.html" %}
 </div>
+{% endif %}
 {% endblock %}
