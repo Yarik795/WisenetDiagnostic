@@ -124,7 +124,12 @@ def test_poll_all_endpoint_returns_progress_panel(tmp_path: Path) -> None:
         )
         assert r.status_code == 200
         assert "poll-job-panel" in r.text
-        assert "Опрос регистраторов" in r.text
+        assert "poll-job-panel--compact" in r.text
+        assert "poll-job-line" in r.text
+        assert "Опросить все NVR" in r.text
+        assert "poll-job-results" not in r.text
+        assert "Сейчас:" not in r.text
+        assert "Автоматический опрос" not in r.text
     finally:
         app.dependency_overrides.clear()
 

@@ -1,6 +1,16 @@
+{% if job.kind.value == 'inventory' %}
+{% set poll_action_hint = "Перечитывает список камер на всех NVR" %}
+{% else %}
+{% set poll_action_hint = "Обновляет статус, диски, архив и время. Список каналов — через инвентаризацию." %}
+{% endif %}
+{% if schedule_hint %}
+{% set button_title = schedule_hint ~ ". " ~ poll_action_hint %}
+{% else %}
+{% set button_title = poll_action_hint %}
+{% endif %}
 <div
   id="poll-job-panel"
-  class="poll-job-panel card{% if job.status.value == 'running' %} poll-job-panel--running{% endif %}"
+  class="poll-job-panel poll-job-panel--compact card{% if job.status.value == 'running' %} poll-job-panel--running{% endif %}"
   {% if job.status.value == 'running' %}
   hx-get="/monitoring/jobs/{{ job.job_id }}?refresh_url={{ refresh_url|urlencode }}&refresh_target={{ refresh_target|urlencode }}{% if refresh_select %}&refresh_select={{ refresh_select|urlencode }}{% endif %}"
   hx-trigger="every 1s"
@@ -13,62 +23,48 @@
   hx-trigger="load"
   {% endif %}
 >
-  <div class="poll-job-header">
-    {% if job.kind.value == 'inventory' %}
-    <span class="poll-job-title">Инвентаризация каналов</span>
-    {% elif job.kind.value in ('scheduled_short', 'scheduled_inventory') %}
-    <span class="poll-job-title">Автоматический опрос</span>
-    {% else %}
-    <span class="poll-job-title">Опрос регистраторов</span>
+  <div class="poll-job-body">
+    <div class="poll-job-status-row">
+      <span class="poll-job-status poll-job-status--{{ job.status.value }}">
+        {% if job.status.value == 'pending' %}Запуск…
+        {% elif job.status.value == 'running' %}Выполняется
+        {% elif job.status.value == 'completed' %}Завершён
+        {% elif job.status.value == 'failed' %}Ошибка
+        {% elif job.status.value == 'skipped' %}Пропущен
+        {% else %}{{ job.status.value }}{% endif %}
+      </span>
+      {% if job.total > 0 %}
+      <span class="poll-job-percent">{{ job.percent }}%</span>
+      {% endif %}
+    </div>
+
+    {% if job.status.value in ('pending', 'running', 'completed', 'failed') %}
+    <div class="poll-job-progress" role="progressbar" aria-valuenow="{{ job.percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="poll-job-progress-bar" style="width: {{ job.percent }}%;"></div>
+    </div>
     {% endif %}
-    <span class="poll-job-status poll-job-status--{{ job.status.value }}">
-      {% if job.status.value == 'pending' %}Запуск…
-      {% elif job.status.value == 'running' %}Выполняется
-      {% elif job.status.value == 'completed' %}Завершён
-      {% elif job.status.value == 'failed' %}Ошибка
-      {% elif job.status.value == 'skipped' %}Пропущен
-      {% else %}{{ job.status.value }}{% endif %}
-    </span>
+
+    <p class="poll-job-line{% if job.status.value in ('failed', 'skipped') %} poll-job-line--error{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}">
+      {% if job.status.value == 'running' %}
+        {% if job.total > 0 %}
+        {{ job.done }}/{{ job.total }} · ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}
+        {% set ns = namespace(err='') %}
+        {% for r in job.recent_results %}
+          {% if not r.success and not ns.err %}
+            {% if r.error %}{% set ns.err = r.error %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        {% if job.failed and ns.err %} · {{ ns.err|truncate(40, True, '…') }}{% endif %}
+        {% else %}
+        Нет включённых регистраторов
+        {% endif %}
+      {% elif job.status.value in ('completed', 'failed', 'skipped') %}
+        {% if job.message %}{{ job.message }}{% elif job.total == 0 %}Нет включённых регистраторов{% endif %}
+      {% elif job.status.value == 'pending' %}
+        {% if job.total > 0 %}Подготовка…{% else %}Нет включённых регистраторов{% endif %}
+      {% endif %}
+    </p>
   </div>
-
-  {% if job.status.value == 'running' or job.status.value == 'completed' or job.status.value == 'failed' %}
-  <div class="poll-job-progress" role="progressbar" aria-valuenow="{{ job.percent }}" aria-valuemin="0" aria-valuemax="100">
-    <div class="poll-job-progress-bar" style="width: {{ job.percent }}%;"></div>
-  </div>
-  <p class="poll-job-counter">
-    {% if job.total > 0 %}
-    {{ job.done }} из {{ job.total }}
-    ({{ job.percent }}%)
-    {% else %}
-    Нет включённых регистраторов
-    {% endif %}
-    {% if job.status.value == 'running' and job.success or job.failed %}
-    · успешно {{ job.success }}{% if job.failed %}, ошибок {{ job.failed }}{% endif %}
-    {% endif %}
-  </p>
-  {% endif %}
-
-  {% if job.status.value == 'running' and job.running_names %}
-  <p class="poll-job-current">Сейчас: {{ job.running_names|join(', ') }}</p>
-  {% endif %}
-
-  {% if job.message and job.status.value != 'running' %}
-  <p class="poll-job-message">{{ job.message }}</p>
-  {% endif %}
-
-  {% if job.recent_results and job.status.value == 'running' %}
-  <ul class="poll-job-results">
-    {% for r in job.recent_results[:6] %}
-    <li class="poll-job-result poll-job-result--{% if r.success %}ok{% else %}fail{% endif %}">
-      {{ r.display_name }}{% if not r.success and r.error %}: {{ r.error }}{% elif not r.success %}: ошибка{% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-
-  {% if schedule_hint %}
-  <p class="poll-job-hint">{{ schedule_hint }}</p>
-  {% endif %}
 
   <div class="poll-job-actions">
     {% if job.kind.value != 'inventory' %}
@@ -83,9 +79,9 @@
       {% if refresh_select %}<input type="hidden" name="refresh_select" value="{{ refresh_select }}">{% endif %}
       <button
         type="submit"
-        class="btn btn-outline"
+        class="btn btn-outline btn-sm poll-job-btn"
         {% if job.is_active %}disabled{% endif %}
-        title="Обновляет статус, диски, архив и время. Список каналов — через инвентаризацию."
+        title="{{ button_title }}"
       >Опросить все NVR</button>
     </form>
     {% else %}
@@ -98,9 +94,12 @@
       <input type="hidden" name="refresh_url" value="{{ refresh_url }}">
       <input type="hidden" name="refresh_target" value="{{ refresh_target }}">
       {% if refresh_select %}<input type="hidden" name="refresh_select" value="{{ refresh_select }}">{% endif %}
-      <button type="submit" class="btn btn-outline" {% if job.is_active %}disabled{% endif %}>
-        Инвентаризация всех
-      </button>
+      <button
+        type="submit"
+        class="btn btn-outline btn-sm poll-job-btn"
+        {% if job.is_active %}disabled{% endif %}
+        title="{{ button_title }}"
+      >Инвентаризация всех</button>
     </form>
     {% endif %}
   </div>

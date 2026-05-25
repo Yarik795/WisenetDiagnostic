@@ -1,3 +1,10 @@
+{% if schedule_hint and poll_button_title %}
+{% set button_title = schedule_hint ~ ". " ~ poll_button_title %}
+{% elif schedule_hint %}
+{% set button_title = schedule_hint %}
+{% else %}
+{% set button_title = poll_button_title %}
+{% endif %}
 <div id="poll-job-panel" class="poll-job-panel poll-job-panel--idle">
   <form
     class="poll-job-form"
@@ -11,10 +18,7 @@
     <button
       type="submit"
       class="btn btn-outline"
-      {% if poll_button_title %}title="{{ poll_button_title }}"{% endif %}
+      {% if button_title %}title="{{ button_title }}"{% endif %}
     >{{ poll_button_label }}</button>
   </form>
-  {% if schedule_hint %}
-  <p class="poll-job-hint">{{ schedule_hint }}</p>
-  {% endif %}
 </div>
