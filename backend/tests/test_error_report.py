@@ -39,4 +39,4 @@ def test_device_web_link_title() -> None:
 def test_build_error_report_empty() -> None:
     ctx = build_error_report_context([], {}, MonitoringSettings())
     assert ctx.problem_count == 0
-    assert ctx.device_auth_warning == ""
+    assert ctx.rows == []

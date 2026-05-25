@@ -40,9 +40,6 @@ class ErrorReportContext:
     generated_at: str
     problem_count: int
     rows: list[ErrorReportRow]
-    device_auth_mode: DeviceAuthMode
-    device_auth_warning: str
-    link_mode_label: str
 
 
 def _status_label(status: str) -> str:
@@ -189,22 +186,8 @@ def build_error_report_context(
         credentials=credentials,
         device_auth=device_auth,
     )
-    warning = ""
-    if device_auth == "userinfo":
-        warning = (
-            "Автоавторизация включена: HTML содержит учётные данные. "
-            "Не пересылайте файл вне доверенного контура."
-        )
-    link_label = (
-        "Ссылки с автоматическим входом (логин и пароль в URL)"
-        if device_auth == "userinfo"
-        else "Ссылки на web-интерфейс без передачи пароля"
-    )
     return ErrorReportContext(
         generated_at=datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
         problem_count=len(rows),
         rows=rows,
-        device_auth_mode=device_auth,
-        device_auth_warning=warning,
-        link_mode_label=link_label,
     )

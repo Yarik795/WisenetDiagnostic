@@ -329,45 +329,18 @@ def test_objects_export_errors_html(client: TestClient) -> None:
     assert "attachment" in r.headers.get("content-disposition", "").lower()
     assert "Отчёт по ошибкам дашбордов" in r.text
     assert "NVR-main" in r.text
-    assert 'href="http://10.1.2.3"' in r.text
+    assert 'href="http://admin:s3cret@10.1.2.3"' in r.text
     assert "Открыть web-интерфейс NVR" in r.text
     assert "Температура" in r.text
-    assert "s3cret" not in r.text
-    assert "admin@" not in r.text
+    assert "Автоавторизация включена" not in r.text
+    assert "Не пересылайте файл" not in r.text
+    assert "Режим ссылок на NVR" not in r.text
 
     page = client.get("/objects")
-    assert "Экспорт отчёта по ошибкам (HTML)" in page.text
+    assert "Экспорт отчета" in page.text
     assert "/objects/export/errors.html" in page.text
-
-
-def test_objects_export_errors_userinfo_auth(client: TestClient) -> None:
-    from datetime import datetime, timezone
-
-    store = app.dependency_overrides[get_store]()
-    store.update_credentials("admin", "s3cret")
-    rec = store.create_recorder(
-        RecorderCreate(
-            object_name="Obj",
-            host="10.0.0.5",
-            port=80,
-            use_https=False,
-            enabled=True,
-        )
-    )
-    state = app.dependency_overrides[get_state_store]()
-    state.upsert_recorder_metrics(
-        rec.id,
-        device_online=True,
-        health_status="warn",
-        disks=[{"TemperatureCelsius": 55}],
-        last_polled_at=datetime.now(timezone.utc),
-    )
-
-    r = client.get("/objects/export/errors.html?device_auth=userinfo")
-    assert r.status_code == 200
-    assert 'href="http://admin:s3cret@10.0.0.5"' in r.text
-    assert "Автоавторизация включена" in r.text
-    assert "Не пересылайте файл" in r.text
+    assert "Экспорт отчёта по ошибкам" not in page.text
+    assert "Экспорт с авто-входом" not in page.text
 
 
 def test_objects_page_has_category_dashboard_stack(client: TestClient) -> None:
