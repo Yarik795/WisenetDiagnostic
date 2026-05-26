@@ -17,6 +17,60 @@ def parse_disks_json(raw: Optional[str]) -> list[dict[str, Any]]:
     return [d for d in data if isinstance(d, dict)]
 
 
+def _disk_mb_value(raw: Any) -> Optional[float]:
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def disk_space_mb(disk: dict[str, Any]) -> tuple[Optional[float], Optional[float]]:
+    """Used/total in MB from storageinfo slot fields (incl. *InBytes)."""
+    used = _disk_mb_value(disk_field(disk, "UsedSpace", "used_space"))
+    total = _disk_mb_value(disk_field(disk, "TotalSpace", "total_space"))
+    if used is None:
+        used_bytes = _disk_mb_value(
+            disk_field(disk, "UsedSpaceInBytes", "used_space_in_bytes")
+        )
+        if used_bytes is not None:
+            used = used_bytes / (1024 * 1024)
+    if total is None:
+        total_bytes = _disk_mb_value(
+            disk_field(disk, "TotalSpaceInBytes", "total_space_in_bytes")
+        )
+        if total_bytes is not None:
+            total = total_bytes / (1024 * 1024)
+    return used, total
+
+
+def aggregate_storage_from_disks(
+    disks: list[dict[str, Any]],
+) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """
+    Sum per-slot UsedSpace/TotalSpace when API omits root UsedSpace (XRN-3210/6410).
+    Returns (used_mb, total_mb, used_percent).
+    """
+    used_sum = 0.0
+    total_sum = 0.0
+    has_slot = False
+    for disk in disks:
+        used, total = disk_space_mb(disk)
+        if total is None or total <= 0:
+            continue
+        has_slot = True
+        used_sum += used or 0.0
+        total_sum += total
+    if not has_slot or total_sum <= 0:
+        return None, None, None
+    pct = round(used_sum / total_sum * 100, 1)
+    return round(used_sum, 1), round(total_sum, 1), pct
+
+
 def format_mb(value: Optional[float]) -> str:
     if value is None:
         return "—"
@@ -170,27 +224,18 @@ def disk_field(disk: dict[str, Any], *keys: str) -> Optional[str]:
     return None
 
 
-def _disk_number(disk: dict[str, Any], *keys: str) -> Optional[float]:
-    raw = disk_field(disk, *keys)
-    if raw is None:
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        return None
-
-
 def disk_used_display(disk: dict[str, Any]) -> str:
-    return format_mb(_disk_number(disk, "UsedSpace", "used_space"))
+    used, _ = disk_space_mb(disk)
+    return format_mb(used)
 
 
 def disk_total_display(disk: dict[str, Any]) -> str:
-    return format_mb(_disk_number(disk, "TotalSpace", "total_space"))
+    _, total = disk_space_mb(disk)
+    return format_mb(total)
 
 
 def disk_percent_display(disk: dict[str, Any]) -> str:
-    used = _disk_number(disk, "UsedSpace", "used_space")
-    total = _disk_number(disk, "TotalSpace", "total_space")
+    used, total = disk_space_mb(disk)
     if used is None or total is None or total <= 0:
         return "—"
     return format_percent(used / total * 100)

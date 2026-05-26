@@ -7,6 +7,7 @@ from ..state_store import RecorderMetricsRow
 from .metrics_helpers import (
     SYSTEM_EVENT_ERROR_LABELS,
     active_fan_event_labels,
+    aggregate_storage_from_disks,
     disk_field,
     is_manual_sync,
     max_disk_temperature_celsius,
@@ -102,8 +103,21 @@ def classify_storage_health(
 
     if not reasons:
         pct = metrics.storage_used_percent
+        disks = parse_disks_json(metrics.disks_json)
+        if pct is None and disks:
+            _, _, pct = aggregate_storage_from_disks(disks)
         if pct is not None:
             return "ok", f"Заполнение {pct:.1f}% (норма для видеонаблюдения)"
+        if disks:
+            normal = 0
+            for disk in disks:
+                st = (disk_field(disk, "Status", "status") or "").strip().lower()
+                if st in _DISK_ERROR_STATUSES:
+                    continue
+                if st in ("", "normal", "ok", "active"):
+                    normal += 1
+            if normal == len(disks):
+                return "ok", f"Накопители: {normal} слот(ов), статус Normal"
         return "unknown", "Нет данных по накопителям"
     return status, "; ".join(dict.fromkeys(reasons))
 

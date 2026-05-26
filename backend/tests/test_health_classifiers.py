@@ -5,6 +5,7 @@ from app.models import MonitoringSettings
 from app.ui.health_classifiers import (
     classify_archive_health,
     classify_category,
+    classify_storage_health,
     classify_fans_health,
     classify_temperature_health,
     recorder_problem_badges,
@@ -107,6 +108,27 @@ def test_classify_channels_mass_failure() -> None:
     status, reason = classify_category("channels", _rec(), metrics, settings)
     assert status == "error"
     assert "50" in reason or "2" in reason
+
+
+def test_classify_storage_ok_from_disks_without_aggregate_percent() -> None:
+    disks = [
+        {
+            "Storage": "1",
+            "Status": "Normal",
+            "UsedSpace": 5877391,
+            "TotalSpace": 5877391,
+        },
+        {
+            "Storage": "2",
+            "Status": "Normal",
+            "UsedSpace": 5925804,
+            "TotalSpace": 5925804,
+        },
+    ]
+    metrics = _metrics(storage_used_percent=None, disks_json=json.dumps(disks))
+    status, reason = classify_storage_health(_rec(), metrics, _settings())
+    assert status == "ok"
+    assert "94.3" in reason or "Заполнение" in reason
 
 
 def test_classify_channels_single_error_is_warn() -> None:

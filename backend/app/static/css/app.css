@@ -1070,8 +1070,9 @@ a:hover {
 
 .poll-job-panel--compact {
   box-sizing: border-box;
-  width: 300px;
-  height: 84px;
+  min-width: 300px;
+  max-width: 360px;
+  min-height: 96px;
   padding: 8px 10px;
   margin: 0;
   border: 1px solid var(--border-subtle);
@@ -1079,7 +1080,6 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  overflow: hidden;
   flex-shrink: 0;
 }
 
@@ -1094,6 +1094,7 @@ a:hover {
 
 .poll-job-panel--running {
   border-color: var(--accent);
+  min-height: 104px;
 }
 
 .poll-job-body {
@@ -1102,7 +1103,6 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  overflow: hidden;
 }
 
 .poll-job-status-row {
@@ -1124,6 +1124,13 @@ a:hover {
 }
 
 .poll-job-percent {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.poll-job-counter {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
@@ -1167,6 +1174,15 @@ a:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+}
+
+.poll-job-panel--compact:not(.poll-job-panel--running) .poll-job-line {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .poll-job-line--error {

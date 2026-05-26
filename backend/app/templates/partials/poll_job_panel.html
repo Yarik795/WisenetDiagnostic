@@ -33,6 +33,9 @@
         {% elif job.status.value == 'skipped' %}Пропущен
         {% else %}{{ job.status.value }}{% endif %}
       </span>
+      {% if job.status.value == 'running' and job.total > 0 %}
+      <span class="poll-job-counter">{{ job.done }}/{{ job.total }}</span>
+      {% endif %}
       {% if job.total > 0 %}
       <span class="poll-job-percent">{{ job.percent }}%</span>
       {% endif %}
@@ -44,17 +47,18 @@
     </div>
     {% endif %}
 
-    <p class="poll-job-line{% if job.status.value in ('failed', 'skipped') %} poll-job-line--error{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}">
+    {% set ns = namespace(err='') %}
+    {% if job.status.value == 'running' and job.failed %}
+      {% for r in job.recent_results %}
+        {% if not r.success and not ns.err %}
+          {% if r.error %}{% set ns.err = r.error %}{% endif %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    <p class="poll-job-line{% if job.status.value in ('failed', 'skipped') %} poll-job-line--error{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}"{% if ns.err %} title="{{ ns.err }}"{% endif %}>
       {% if job.status.value == 'running' %}
         {% if job.total > 0 %}
-        {{ job.done }}/{{ job.total }} · ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}
-        {% set ns = namespace(err='') %}
-        {% for r in job.recent_results %}
-          {% if not r.success and not ns.err %}
-            {% if r.error %}{% set ns.err = r.error %}{% endif %}
-          {% endif %}
-        {% endfor %}
-        {% if job.failed and ns.err %} · {{ ns.err|truncate(40, True, '…') }}{% endif %}
+        ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}
         {% else %}
         Нет включённых регистраторов
         {% endif %}

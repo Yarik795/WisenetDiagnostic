@@ -454,10 +454,17 @@ def objects_groups_partial(
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
     groups = group_by_object(recorders, search, sort, metrics)
+    ctx = {
+        "groups": groups,
+        "recorders": recorders,
+        "metrics_map": metrics,
+        "inventory_view": "groups",
+        **_inventory_kpi_ctx(store, state),
+    }
     return templates.TemplateResponse(
         request,
-        "partials/object_groups.html",
-        {"groups": groups, "recorders": recorders, "metrics_map": metrics},
+        "partials/objects_groups_refresh.html",
+        ctx,
     )
 
 

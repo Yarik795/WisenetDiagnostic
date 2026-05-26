@@ -1,0 +1,6 @@
+<div id="inventory-header">
+{% include "partials/inventory_kpi_strip.html" %}
+{% if inventory_view != 'table' %}
+{% include "partials/object_health_matrix.html" %}
+{% endif %}
+</div>

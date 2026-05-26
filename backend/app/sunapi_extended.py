@@ -14,6 +14,7 @@ import httpx
 
 from .models import Credentials, Recorder
 from .sunapi import DeviceInfo, SunapiCheckOutcome, build_deviceinfo_url, parse_deviceinfo_response
+from .ui.metrics_helpers import aggregate_storage_from_disks
 from .sunapi_parsing import (
     parse_channel_indexed,
     parse_datetime_local,
@@ -614,6 +615,19 @@ async def enrich_storage_temperatures(
     return merge_disk_temperatures(normalized, utility_disks, model=device_model)
 
 
+def _fill_storage_aggregate_from_disks(info: StorageInfo) -> None:
+    if info.used_percent is not None or not info.disks:
+        return
+    used_mb, total_mb, pct = aggregate_storage_from_disks(info.disks)
+    if pct is None:
+        return
+    if info.used_space_mb is None:
+        info.used_space_mb = used_mb
+    if info.total_space_mb is None:
+        info.total_space_mb = total_mb
+    info.used_percent = pct
+
+
 def parse_storage(
     body: str,
     *,
@@ -635,6 +649,10 @@ def parse_storage(
                 storages, model=model, profile=profile
             )
             info.worst_status = _worst_disk_status(storages)
+        root_status = data.get("Status")
+        if root_status and not info.worst_status:
+            info.worst_status = str(root_status)
+        _fill_storage_aggregate_from_disks(info)
         return info
 
     fields = parse_key_value_body(body)
@@ -645,6 +663,10 @@ def parse_storage(
     disks = parse_storage_indexed(fields)
     info.disks = normalize_storage_disks(disks, model=model, profile=profile)
     info.worst_status = _worst_disk_status(disks)
+    root_status = fields.get("Status")
+    if root_status and not info.worst_status:
+        info.worst_status = root_status
+    _fill_storage_aggregate_from_disks(info)
     return info
 
 

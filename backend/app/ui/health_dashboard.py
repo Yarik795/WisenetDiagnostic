@@ -586,6 +586,8 @@ def _cell_for_column(
     label = CATEGORY_LABELS[category]
     if problems:
         title = f"{label}: {problems} из {len(enabled)} NVR"
+    elif worst == "unknown":
+        title = f"{label}: нет суммарных данных API"
     else:
         title = f"{label}: в норме"
     return ObjectMatrixCell(

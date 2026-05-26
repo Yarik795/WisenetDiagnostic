@@ -16,11 +16,7 @@
 >+ Добавить регистратор</button>
 {% endblock %}
 {% block content %}
-{% include "partials/inventory_kpi_strip.html" %}
-
-{% if inventory_view != 'table' %}
-{% include "partials/object_health_matrix.html" %}
-{% endif %}
+{% include "partials/inventory_header.html" %}
 
 <nav class="inventory-view-tabs" aria-label="Вид инвентаря">
   <a href="/objects{% if sort != 'status' %}?sort={{ sort }}{% endif %}" class="{% if inventory_view != 'table' %}active{% endif %}">По объектам</a>

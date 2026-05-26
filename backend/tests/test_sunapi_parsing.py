@@ -120,6 +120,50 @@ Storage.2.TotalSpace=9895484
     assert len(info.disks) == 2
     assert info.disks[0]["Temperature"] == "38 °C"
     assert info.disks[1]["Temperature"] == "40 °C"
+    assert info.used_percent is not None
+    assert info.used_percent > 0
+
+
+def test_parse_storage_xrn6410_slots_without_root_totals() -> None:
+    """Реальный ответ XRN-6410B2: нет корневых UsedSpace, только Storage.N.* (MB)."""
+    body = """
+Status=Normal
+Storage.1.SlotNumber=1
+Storage.1.Model=WDC WD64PURZ-85B
+Storage.1.UsedSpace=5877391
+Storage.1.TotalSpace=5877391
+Storage.1.Status=Normal
+Storage.1.TemperatureCelsius=26
+Storage.2.SlotNumber=2
+Storage.2.Model=WDC WD64PURZ-85B
+Storage.2.UsedSpace=5925804
+Storage.2.TotalSpace=5925804
+Storage.2.Status=Normal
+Storage.3.UsedSpace=4912900
+Storage.3.TotalSpace=5925804
+Storage.3.Status=Normal
+"""
+    info = parse_storage(body, model="XRN-6410B2")
+    assert len(info.disks) == 3
+    assert info.used_percent == 94.3
+    assert info.used_space_mb is not None
+    assert info.total_space_mb is not None
+    assert info.worst_status == "Normal"
+
+
+def test_parse_storage_xrn3210_partial_slots() -> None:
+    """XRN-3210B2: слот 1 с разным used/total, слоты без UsedSpace — в сумму не входят."""
+    body = """
+Status=Normal
+Storage.1.UsedSpace=4112723
+Storage.1.TotalSpace=5940384
+Storage.1.Status=Normal
+Storage.2.TemperatureCelsius=24
+Storage.2.Status=Normal
+"""
+    info = parse_storage(body, model="XRN-3210B2")
+    assert len(info.disks) == 2
+    assert info.used_percent == 69.2
 
 
 def test_normalize_disk_health_temperature() -> None:
