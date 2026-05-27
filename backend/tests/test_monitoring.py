@@ -97,7 +97,7 @@ def test_deactive_with_disconnect_is_unknown() -> None:
     assert status == "unknown"
 
 
-def test_on_connectfail_is_error() -> None:
+def test_on_connectfail_is_error_without_live_event() -> None:
     ch = ChannelInfo(
         channel_no=0,
         source_state="On",
@@ -107,6 +107,83 @@ def test_on_connectfail_is_error() -> None:
     status, reason = evaluate_channel_health(ch, None, _settings())
     assert status == "error"
     assert "ConnectFail" in reason
+
+
+def test_on_connectfail_is_error_on_unsupported_model() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        source_state="On",
+        camera_ip="10.0.0.5",
+        register_status="ConnectFail",
+        data_rate=2.9,
+    )
+    event = EventChannelStatus(channel_no=0, connected=True, video_loss=False)
+    status, reason = evaluate_channel_health(
+        ch, event, _settings(), device_model="XRN-3210B2"
+    )
+    assert status == "error"
+    assert "ConnectFail" in reason
+
+
+def test_stale_connectfail_xrn2010_live_stream_is_ok() -> None:
+    ch = ChannelInfo(
+        channel_no=8,
+        source_state="On",
+        camera_ip="100.111.2.123",
+        register_status="ConnectFail",
+        data_rate=2.911,
+    )
+    event = EventChannelStatus(channel_no=8, connected=True, video_loss=False)
+    status, reason = evaluate_channel_health(
+        ch, event, _settings(), device_model="XRN-2010"
+    )
+    assert status == "ok"
+    assert "ConnectFail" in reason
+    assert "поток в норме" in reason
+
+
+def test_stale_connectfail_hrx1620_live_stream_is_ok() -> None:
+    ch = ChannelInfo(
+        channel_no=4,
+        source_state="On",
+        register_status="ConnectFail",
+        data_rate=1.2,
+    )
+    event = EventChannelStatus(channel_no=4, connected=True, video_loss=False)
+    status, _ = evaluate_channel_health(
+        ch, event, _settings(), device_model="HRX-1620"
+    )
+    assert status == "ok"
+
+
+def test_stale_connectfail_zero_datarate_still_error() -> None:
+    ch = ChannelInfo(
+        channel_no=8,
+        source_state="On",
+        register_status="ConnectFail",
+        data_rate=0.0,
+    )
+    event = EventChannelStatus(channel_no=8, connected=True, video_loss=False)
+    status, reason = evaluate_channel_health(
+        ch, event, _settings(), device_model="XRN-2010P"
+    )
+    assert status == "error"
+    assert "ConnectFail" in reason
+
+
+def test_stale_connectfail_video_loss_still_error() -> None:
+    ch = ChannelInfo(
+        channel_no=8,
+        source_state="On",
+        register_status="ConnectFail",
+        data_rate=2.9,
+    )
+    event = EventChannelStatus(channel_no=8, connected=True, video_loss=True)
+    status, reason = evaluate_channel_health(
+        ch, event, _settings(), device_model="XRN-2010"
+    )
+    assert status == "error"
+    assert "VideoLoss" in reason
 
 
 def test_on_disconnected_is_error() -> None:

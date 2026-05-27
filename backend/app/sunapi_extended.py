@@ -35,6 +35,8 @@ NTP_LOCAL_UTC_OFFSET = timedelta(hours=3)
 MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset(
     {"XRN-2010", "XRN-2010A", "XRN-2010P", "HRX-1620"}
 )
+# ConnectFail в cameraregister при живом потоке (eventstatus) — устаревшее поле Status
+MODELS_STALE_CONNECTFAIL_PREFIXES = ("HRX-1620", "XRN-2010")
 
 _CGI_VERSION_RE = re.compile(r"(\d+)\.(\d+)")
 _SIZE_UNIT_RE = re.compile(
@@ -56,6 +58,52 @@ def normalize_register_status(status: Optional[str]) -> str:
 def is_register_status_error(status: Optional[str]) -> bool:
     return normalize_register_status(status) in _REGISTER_STATUS_ERROR
 
+
+def is_connectfail_register_status(status: Optional[str]) -> bool:
+    return normalize_register_status(status) == "connectfail"
+
+
+def model_ignores_stale_connectfail(model: Optional[str]) -> bool:
+    if not model:
+        return False
+    model_upper = model.strip().upper()
+    if model_upper in MODELS_CELSIUS_ONLY_TEMPERATURE:
+        return True
+    return any(
+        model_upper.startswith(prefix) for prefix in MODELS_STALE_CONNECTFAIL_PREFIXES
+    )
+
+
+def channel_stream_appears_live(
+    ch: "ChannelInfo",
+    event: Optional["EventChannelStatus"],
+) -> bool:
+    if event is None:
+        return False
+    if event.video_loss is True:
+        return False
+    if event.connected is not True:
+        return False
+    if ch.data_rate is not None and ch.data_rate <= 0:
+        return False
+    return True
+
+
+def is_stale_connectfail_on_live_channel(
+    ch: "ChannelInfo",
+    event: Optional["EventChannelStatus"],
+    *,
+    device_model: Optional[str] = None,
+) -> bool:
+    if not model_ignores_stale_connectfail(device_model):
+        return False
+    if (ch.source_state or "").lower() != "on":
+        return False
+    if not is_connectfail_register_status(ch.register_status):
+        return False
+    return channel_stream_appears_live(ch, event)
+
+
 _COMBINED_TEMP_RE = re.compile(
     r"^(\d+)\s*(?:&#?\d+;|\u00b0|\°|.)?\s*C",
     re.IGNORECASE,
@@ -70,6 +118,7 @@ class ChannelInfo:
     camera_ip: Optional[str] = None
     camera_model: Optional[str] = None
     register_status: Optional[str] = None
+    data_rate: Optional[float] = None
 
 
 @dataclass
@@ -257,6 +306,18 @@ def parse_videosource_channels(body: str) -> list[ChannelInfo]:
     ]
 
 
+def _parse_data_rate(raw) -> Optional[float]:
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_cameraregister(body: str) -> list[ChannelInfo]:
     data = try_parse_json(body)
     if isinstance(data, dict) and "RegisteredCameras" in data:
@@ -272,6 +333,7 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
                     camera_ip=item.get("IPAddress"),
                     camera_model=item.get("Model"),
                     register_status=item.get("Status"),
+                    data_rate=_parse_data_rate(item.get("DataRate")),
                     name=name,
                 )
             )
@@ -288,6 +350,7 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
                 camera_ip=attrs.get("IPAddress"),
                 camera_model=attrs.get("Model"),
                 register_status=attrs.get("Status"),
+                data_rate=_parse_data_rate(attrs.get("DataRate")),
                 name=name,
             )
         )
@@ -308,6 +371,7 @@ def merge_channels(*sources: list[ChannelInfo]) -> list[ChannelInfo]:
                 "camera_ip",
                 "camera_model",
                 "register_status",
+                "data_rate",
             ):
                 if getattr(existing, attr) is None and getattr(ch, attr) is not None:
                     setattr(existing, attr, getattr(ch, attr))

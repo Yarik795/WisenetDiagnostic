@@ -244,6 +244,7 @@ def test_parse_cameraregister_kv_connectfail() -> None:
 Channel.0.IPAddress=10.0.0.5
 Channel.0.Model=XNV-6080
 Channel.0.Status=ConnectFail
+Channel.0.DataRate=2.911000
 Channel.1.IPAddress=10.0.0.6
 Channel.1.Model=XNV-6081
 Channel.1.Status=Success
@@ -253,6 +254,7 @@ Channel.1.Status=Success
     assert by_no[0].camera_ip == "10.0.0.5"
     assert by_no[0].camera_model == "XNV-6080"
     assert by_no[0].register_status == "ConnectFail"
+    assert by_no[0].data_rate == 2.911
     assert by_no[1].register_status == "Success"
 
 

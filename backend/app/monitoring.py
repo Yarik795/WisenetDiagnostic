@@ -21,6 +21,7 @@ from .sunapi_extended import (
     RecordingPeriodInfo,
     enable_recorder_ntp,
     is_register_status_error,
+    is_stale_connectfail_on_live_channel,
     normalize_register_status,
     poll_recorder,
 )
@@ -39,6 +40,8 @@ def evaluate_channel_health(
     ch: ChannelInfo,
     event: Optional[EventChannelStatus],
     settings: MonitoringSettings,
+    *,
+    device_model: Optional[str] = None,
 ) -> tuple[str, str]:
     state = (ch.source_state or "").lower()
 
@@ -53,6 +56,12 @@ def evaluate_channel_health(
         return HealthStatus.ERROR.value, "Потеря видео (VideoLoss)"
     if event and event.connected is False:
         return HealthStatus.ERROR.value, "Камера не подключена"
+
+    if is_stale_connectfail_on_live_channel(ch, event, device_model=device_model):
+        return (
+            HealthStatus.OK.value,
+            "Канал активен (в API регистрации ConnectFail, поток в норме)",
+        )
 
     reg_key = normalize_register_status(ch.register_status)
     if state == "on" and is_register_status_error(ch.register_status):
@@ -214,8 +223,12 @@ def _upsert_channel_from_poll(
     settings: MonitoringSettings,
     polled_at: datetime,
     period: Optional[RecordingPeriodInfo],
+    *,
+    device_model: Optional[str] = None,
 ) -> str:
-    h_status, h_reason = evaluate_channel_health(ch, event, settings)
+    h_status, h_reason = evaluate_channel_health(
+        ch, event, settings, device_model=device_model
+    )
     state.upsert_channel(
         recorder_id,
         ch.channel_no,
@@ -256,6 +269,7 @@ def apply_poll_result(
     channel_nos: list[int] = []
 
     periods = poll.channel_recording_periods
+    device_model = poll.device.model if poll.device else None
 
     if poll.channels_polled:
         for ch in poll.channels:
@@ -269,6 +283,7 @@ def apply_poll_result(
                 settings,
                 polled_at,
                 period,
+                device_model=device_model,
             )
             channel_statuses.append(h_status)
             channel_nos.append(ch.channel_no)
@@ -286,6 +301,7 @@ def apply_poll_result(
                     settings,
                     polled_at,
                     periods.get(ch.channel_no),
+                    device_model=device_model,
                 )
                 channel_statuses.append(h_status)
             else:
