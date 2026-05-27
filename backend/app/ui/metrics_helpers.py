@@ -304,6 +304,13 @@ def active_fan_event_labels(events: dict[str, bool]) -> list[str]:
     return active_system_event_labels(events, labels=FAN_EVENT_LABELS)
 
 
+STORAGE_SYSTEM_EVENT_KEYS: tuple[str, ...] = (
+    "HDDFail",
+    "HDDError",
+    "HDDNone",
+    "HDDFull",
+)
+
 SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
     "CPUFanError": "Вентилятор CPU",
     "FrameFanError": "Вентилятор корпуса",
@@ -312,6 +319,8 @@ SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
     "RightFanError": "Правый вентилятор",
     "HDDFail": "Сбой HDD",
     "HDDError": "Ошибка HDD",
+    "HDDNone": "Накопитель отсутствует",
+    "HDDFull": "Диск заполнен",
     "BatteryFail": "Сбой батареи",
     "MemoryError": "Ошибка памяти",
     "RecordingError": "Ошибка записи",
@@ -345,6 +354,17 @@ def parse_system_events_json(raw: Optional[str]) -> dict[str, bool]:
     if not isinstance(data, dict):
         return {}
     return {k: bool(v) for k, v in data.items()}
+
+
+def active_storage_system_event_labels(events: dict[str, bool]) -> list[str]:
+    return active_system_event_labels(
+        events,
+        labels={
+            k: SYSTEM_EVENT_ERROR_LABELS[k]
+            for k in STORAGE_SYSTEM_EVENT_KEYS
+            if k in SYSTEM_EVENT_ERROR_LABELS
+        },
+    )
 
 
 def active_system_event_labels(

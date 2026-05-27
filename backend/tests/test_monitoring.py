@@ -260,6 +260,16 @@ def test_recorder_cpu_fan_error() -> None:
     assert "Вентилятор CPU" in reason
 
 
+def test_recorder_hdd_none_error() -> None:
+    poll = RecorderPollData(
+        online=True,
+        system_events={"HDDNone": True},
+    )
+    status, reason = evaluate_recorder_health(poll, ["ok"], _settings())
+    assert status == "error"
+    assert "Накопитель отсутствует" in reason
+
+
 def test_recorder_hdd_fail_and_cpu_overload_warn() -> None:
     poll = RecorderPollData(
         online=True,

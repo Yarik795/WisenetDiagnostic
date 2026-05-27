@@ -35,6 +35,9 @@ def _metrics(**kwargs):
         ntp_status="Success",
         time_skew_seconds=0.0,
         sync_type="ntp",
+        storageinfo_ok=False,
+        archive_poll_error=None,
+        recording_storage_enable=None,
     )
     base.update(kwargs)
     return SimpleNamespace(**base)
@@ -129,6 +132,67 @@ def test_classify_storage_ok_from_disks_without_aggregate_percent() -> None:
     status, reason = classify_storage_health(_rec(), metrics, _settings())
     assert status == "ok"
     assert "94.3" in reason or "Заполнение" in reason
+
+
+def test_classify_storage_hdd_none() -> None:
+    events = json.dumps({"HDDNone": True, "HDDFail": False})
+    metrics = _metrics(
+        disks_json=json.dumps([]),
+        storage_status=None,
+        storageinfo_ok=True,
+        system_events_json=events,
+    )
+    status, reason = classify_storage_health(_rec(), metrics, _settings())
+    assert status == "error"
+    assert "отсутствует" in reason.lower()
+
+
+def test_classify_storage_no_slots_storageinfo_ok() -> None:
+    metrics = _metrics(
+        disks_json=json.dumps([]),
+        storage_status=None,
+        storageinfo_ok=True,
+        system_events_json=json.dumps({}),
+    )
+    status, reason = classify_storage_health(_rec(), metrics, _settings())
+    assert status == "error"
+    assert "не обнаружены" in reason.lower()
+
+
+def test_classify_storage_recording_disabled() -> None:
+    metrics = _metrics(
+        disks_json=json.dumps([]),
+        storageinfo_ok=True,
+        recording_storage_enable=False,
+        system_events_json=json.dumps({}),
+    )
+    status, reason = classify_storage_health(_rec(), metrics, _settings())
+    assert status == "error"
+    assert "отключена" in reason.lower()
+
+
+def test_classify_archive_hdd_none() -> None:
+    events = json.dumps({"HDDNone": True})
+    metrics = _metrics(
+        archive_min_days=None,
+        system_events_json=events,
+    )
+    status, reason = classify_archive_health(_rec(), metrics, _settings())
+    assert status == "error"
+    assert "недоступны" in reason.lower()
+
+
+def test_classify_archive_poll_error_604() -> None:
+    metrics = _metrics(
+        archive_min_days=None,
+        archive_days=None,
+        archive_max_days=None,
+        archive_poll_error="604",
+        system_events_json=json.dumps({"HDDNone": False}),
+    )
+    status, reason = classify_archive_health(_rec(), metrics, _settings())
+    assert status == "error"
+    assert "604" in reason or "API" in reason
 
 
 def test_classify_channels_single_error_is_warn() -> None:

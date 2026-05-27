@@ -5,8 +5,8 @@ from typing import Literal, Optional
 from ..models import MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
 from .metrics_helpers import (
-    SYSTEM_EVENT_ERROR_LABELS,
     active_fan_event_labels,
+    active_storage_system_event_labels,
     aggregate_storage_from_disks,
     disk_field,
     is_manual_sync,
@@ -96,14 +96,19 @@ def classify_storage_health(
             reasons.append(f"Слот {slot}: {disk_field(disk, 'Status', 'status')}")
 
     events = parse_system_events_json(metrics.system_events_json)
-    for key in ("HDDFail", "HDDError"):
-        if events.get(key):
-            status = "error"
-            reasons.append(SYSTEM_EVENT_ERROR_LABELS.get(key, key))
+    for label in active_storage_system_event_labels(events):
+        status = "error"
+        reasons.append(label)
+
+    disks = parse_disks_json(metrics.disks_json)
+    if not disks and metrics.recording_storage_enable is False:
+        status = "error"
+        reasons.append("Запись на накопитель отключена")
 
     if not reasons:
+        if not disks and metrics.storageinfo_ok:
+            return "error", "Накопители не обнаружены"
         pct = metrics.storage_used_percent
-        disks = parse_disks_json(metrics.disks_json)
         if pct is None and disks:
             _, _, pct = aggregate_storage_from_disks(disks)
         if pct is not None:
@@ -182,6 +187,17 @@ def classify_archive_health(
     min_days = metrics.archive_min_days
     if min_days is None:
         min_days = metrics.archive_days
+
+    events = parse_system_events_json(metrics.system_events_json)
+    if events.get("HDDNone"):
+        return "error", "Запись/архив недоступны: накопитель отсутствует"
+
+    poll_err = (metrics.archive_poll_error or "").strip()
+    if poll_err and min_days is None:
+        if poll_err == "604" or poll_err.upper() == "NG":
+            return "error", "Запись/архив недоступны (ошибка API записи)"
+        return "error", f"Запись/архив недоступны (ошибка API: {poll_err})"
+
     if min_days is None:
         return "unknown", "Глубина архива не определена"
 

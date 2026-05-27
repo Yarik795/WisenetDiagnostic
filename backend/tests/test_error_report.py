@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -116,3 +117,48 @@ def test_build_error_report_includes_problem_age() -> None:
     temp_row = next(r for r in ctx.rows if r.category_label == "Температура HDD")
     assert temp_row.problem_age_days_display == "3 сут."
     assert "17.05.2026" in temp_row.problem_since_display
+
+
+def test_build_error_report_hrx_no_hdd() -> None:
+    polled = datetime(2026, 5, 27, 12, 0, tzinfo=timezone.utc)
+    rec = _rec(id="hrx-no-hdd")
+    metrics = RecorderMetricsRow(
+        recorder_id="hrx-no-hdd",
+        model="HRX-1634",
+        firmware_version=None,
+        device_online=True,
+        health_status="error",
+        health_reason=None,
+        ntp_status="Success",
+        time_skew_seconds=0.0,
+        storage_used_percent=None,
+        storage_status=None,
+        archive_start=None,
+        archive_end=None,
+        archive_days=None,
+        channel_count=18,
+        channels_ok=13,
+        channels_warn=0,
+        channels_error=0,
+        channels_unknown=5,
+        last_polled_at=polled,
+        disks_json="[]",
+        system_events_json=json.dumps({"HDDNone": True, "HDDFail": False}),
+        storageinfo_ok=True,
+        archive_poll_error="604",
+        recording_storage_enable=False,
+        archive_min_days=None,
+        archive_max_days=None,
+    )
+    ctx = build_error_report_context(
+        [rec],
+        {"hrx-no-hdd": metrics},
+        MonitoringSettings(),
+        report_at=polled,
+    )
+    storage_rows = [r for r in ctx.rows if r.category_label == "Накопители"]
+    assert len(storage_rows) == 1
+    assert storage_rows[0].status == "error"
+    archive_rows = [r for r in ctx.rows if r.category_label == "Глубина архива"]
+    assert len(archive_rows) == 1
+    assert archive_rows[0].status == "error"

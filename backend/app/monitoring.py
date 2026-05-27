@@ -378,6 +378,9 @@ def apply_poll_result(
         storage_total_mb=poll.storage.total_space_mb if poll.storage else None,
         disks=poll.storage.disks if poll.storage else None,
         system_events=poll.system_events or None,
+        storageinfo_ok=bool(poll.storage and poll.storage.storageinfo_ok),
+        archive_poll_error=poll.recording_period_error,
+        recording_storage_enable=poll.recording_storage_enable,
     )
     metrics = state.get_recorder_metrics(recorder.id)
     for category in CATEGORY_LABELS:

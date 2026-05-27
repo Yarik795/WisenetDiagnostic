@@ -14,7 +14,9 @@ from app.sunapi_extended import (
     parse_diskutility_list,
     parse_eventstatus,
     parse_recording_period,
+    parse_recording_storage,
     parse_storage,
+    parse_sunapi_error_body,
     parse_temperature_from_smart,
     parse_videosource_channels,
 )
@@ -306,6 +308,24 @@ def test_format_celsius_only_temperature() -> None:
 def test_is_diskutility_error_response() -> None:
     body = "NG\nError Code: 600\nSubmenu Not Found\n"
     assert _is_diskutility_error(body) is True
+
+
+def test_parse_sunapi_error_body_604() -> None:
+    body = "NG\nError Code: 604\nError Details:\nInvalid Input Value(s)\n"
+    assert parse_sunapi_error_body(body) == "604"
+    assert parse_sunapi_error_body("Status=Normal\n") is None
+
+
+def test_parse_recording_storage_enable_false() -> None:
+    body = "Enable=False\nOverWrite=False\n"
+    assert parse_recording_storage(body) is False
+
+
+def test_parse_storage_no_disks_skips_root_status() -> None:
+    body = "Status=Normal\n"
+    info = parse_storage(body, model="HRX-1634")
+    assert info.disks == []
+    assert info.worst_status is None
 
 
 def test_normalize_disk_combined_temp_xrn_2010a() -> None:

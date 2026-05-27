@@ -59,6 +59,9 @@ class RecorderMetricsRow:
     system_events_json: Optional[str] = None
     archive_min_days: Optional[float] = None
     archive_max_days: Optional[float] = None
+    storageinfo_ok: bool = False
+    archive_poll_error: Optional[str] = None
+    recording_storage_enable: Optional[bool] = None
 
 
 @dataclass
@@ -180,6 +183,9 @@ class StateStore:
             ("archive_min_days", "REAL"),
             ("archive_max_days", "REAL"),
             ("system_events_json", "TEXT"),
+            ("storageinfo_ok", "INTEGER NOT NULL DEFAULT 0"),
+            ("archive_poll_error", "TEXT"),
+            ("recording_storage_enable", "INTEGER"),
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -323,6 +329,9 @@ class StateStore:
         storage_total_mb: Optional[float] = None,
         disks: Optional[list[dict[str, Any]]] = None,
         system_events: Optional[dict[str, bool]] = None,
+        storageinfo_ok: bool = False,
+        archive_poll_error: Optional[str] = None,
+        recording_storage_enable: Optional[bool] = None,
     ) -> None:
         disks_json = json.dumps(disks, ensure_ascii=False) if disks else None
         system_events_json = (
@@ -339,9 +348,10 @@ class StateStore:
                     channel_count, channels_ok, channels_warn,
                     channels_error, channels_unknown, last_polled_at,
                     local_time, utc_time, sync_type,
-                    storage_used_mb, storage_total_mb, disks_json, system_events_json
+                    storage_used_mb, storage_total_mb, disks_json, system_events_json,
+                    storageinfo_ok, archive_poll_error, recording_storage_enable
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -369,7 +379,10 @@ class StateStore:
                     storage_used_mb=excluded.storage_used_mb,
                     storage_total_mb=excluded.storage_total_mb,
                     disks_json=excluded.disks_json,
-                    system_events_json=excluded.system_events_json
+                    system_events_json=excluded.system_events_json,
+                    storageinfo_ok=excluded.storageinfo_ok,
+                    archive_poll_error=excluded.archive_poll_error,
+                    recording_storage_enable=excluded.recording_storage_enable
                 """,
                 (
                     recorder_id,
@@ -400,6 +413,9 @@ class StateStore:
                     storage_total_mb,
                     disks_json,
                     system_events_json,
+                    int(storageinfo_ok),
+                    archive_poll_error,
+                    _bool_int(recording_storage_enable),
                 ),
             )
 
@@ -636,6 +652,16 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
         disks_json=row["disks_json"] if "disks_json" in row.keys() else None,
         system_events_json=(
             row["system_events_json"] if "system_events_json" in row.keys() else None
+        ),
+        storageinfo_ok=bool(row["storageinfo_ok"]) if "storageinfo_ok" in row.keys() else False,
+        archive_poll_error=(
+            row["archive_poll_error"] if "archive_poll_error" in row.keys() else None
+        ),
+        recording_storage_enable=(
+            None
+            if "recording_storage_enable" not in row.keys()
+            or row["recording_storage_enable"] is None
+            else bool(row["recording_storage_enable"])
         ),
     )
 

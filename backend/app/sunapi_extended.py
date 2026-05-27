@@ -44,6 +44,7 @@ _SIZE_UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 _DISKUTILITY_ERROR_MARKERS = ("NG", "Error Code:", "Submenu Not Found")
+_SUNAPI_ERROR_CODE_RE = re.compile(r"Error\s+Code:\s*(\d+)", re.IGNORECASE)
 _REGISTER_STATUS_ERROR = frozenset(
     {"connectfail", "disconnected", "fail", "failed", "error"}
 )
@@ -128,6 +129,7 @@ class StorageInfo:
     used_percent: Optional[float] = None
     disks: list[dict] = field(default_factory=list)
     worst_status: Optional[str] = None
+    storageinfo_ok: bool = False
 
 
 @dataclass
@@ -218,6 +220,8 @@ class RecorderPollData:
     channels: list[ChannelInfo] = field(default_factory=list)
     events: list[EventChannelStatus] = field(default_factory=list)
     system_events: dict[str, bool] = field(default_factory=dict)
+    recording_period_error: Optional[str] = None
+    recording_storage_enable: Optional[bool] = None
 
 
 def build_base_url(recorder: Recorder, cgi: str) -> str:
@@ -246,6 +250,31 @@ def _is_diskutility_error(body: str) -> bool:
         return True
     upper = text.upper()
     return any(marker.upper() in upper for marker in _DISKUTILITY_ERROR_MARKERS)
+
+
+def parse_sunapi_error_body(body: str) -> Optional[str]:
+    """Код ошибки SUNAPI (NG / Error Code: NNN) или None, если ответ не ошибка."""
+    text = (body or "").strip()
+    if not text:
+        return None
+    upper = text.upper()
+    if not upper.startswith("NG") and "ERROR CODE:" not in upper:
+        return None
+    m = _SUNAPI_ERROR_CODE_RE.search(text)
+    if m:
+        return m.group(1)
+    return "NG"
+
+
+def parse_recording_storage(body: str) -> Optional[bool]:
+    """Enable из recording.cgi?msubmenu=storage."""
+    data = try_parse_json(body)
+    if isinstance(data, dict) and "Enable" in data:
+        return _parse_bool_value(data["Enable"])
+    fields = parse_key_value_body(body)
+    if "Enable" in fields:
+        return _parse_bool_value(fields["Enable"])
+    return None
 
 
 def _period_signature(period: Optional[RecordingPeriodInfo]) -> Optional[tuple[str, str]]:
@@ -714,7 +743,7 @@ def parse_storage(
             )
             info.worst_status = _worst_disk_status(storages)
         root_status = data.get("Status")
-        if root_status and not info.worst_status:
+        if root_status and not info.worst_status and info.disks:
             info.worst_status = str(root_status)
         _fill_storage_aggregate_from_disks(info)
         return info
@@ -728,7 +757,7 @@ def parse_storage(
     info.disks = normalize_storage_disks(disks, model=model, profile=profile)
     info.worst_status = _worst_disk_status(disks)
     root_status = fields.get("Status")
-    if root_status and not info.worst_status:
+    if root_status and not info.worst_status and info.disks:
         info.worst_status = root_status
     _fill_storage_aggregate_from_disks(info)
     return info
@@ -1342,18 +1371,22 @@ async def poll_recorder(
     st, b, _ = await _fetch(recorder, credentials, storage_url, timeout)
     device_model = result.device.model if result.device else None
     if st == 200:
-        result.storage = parse_storage(
-            b, model=device_model, profile=profile
-        )
-        if result.storage and result.storage.disks:
-            result.storage.disks = await enrich_storage_temperatures(
-                recorder,
-                credentials,
-                result.storage.disks,
-                device_model=device_model,
-                profile=profile,
-                timeout=timeout,
+        if parse_sunapi_error_body(b):
+            result.storage = StorageInfo(storageinfo_ok=False)
+        else:
+            result.storage = parse_storage(
+                b, model=device_model, profile=profile
             )
+            result.storage.storageinfo_ok = True
+            if result.storage.disks:
+                result.storage.disks = await enrich_storage_temperatures(
+                    recorder,
+                    credentials,
+                    result.storage.disks,
+                    device_model=device_model,
+                    profile=profile,
+                    timeout=timeout,
+                )
 
     date_url = build_url(recorder, "system.cgi", "date")
     st, b, _ = await _fetch(recorder, credentials, date_url, timeout)
@@ -1363,7 +1396,16 @@ async def poll_recorder(
     period_url = build_url(recorder, "recording.cgi", "searchrecordingperiod")
     st, b, _ = await _fetch(recorder, credentials, period_url, timeout)
     if st == 200:
-        result.recording_period = parse_recording_period(b)
+        period_err = parse_sunapi_error_body(b)
+        if period_err:
+            result.recording_period_error = period_err
+        else:
+            result.recording_period = parse_recording_period(b)
+
+    rec_storage_url = build_url(recorder, "recording.cgi", "storage")
+    st, b, _ = await _fetch(recorder, credentials, rec_storage_url, timeout)
+    if st == 200 and not parse_sunapi_error_body(b):
+        result.recording_storage_enable = parse_recording_storage(b)
 
     if result.channels:
         result.channel_recording_periods = await fetch_channel_recording_periods(
