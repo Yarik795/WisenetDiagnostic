@@ -66,9 +66,36 @@ def test_temperature_warn_and_error() -> None:
 
 
 def test_temperature_unknown_without_data() -> None:
-    status, reason = classify_temperature_health(_rec(), _metrics(disks_json=None), _settings())
+    disks = [{"Storage": "1", "Status": "Normal"}]
+    status, reason = classify_temperature_health(
+        _rec(), _metrics(disks_json=json.dumps(disks)), _settings()
+    )
     assert status == "unknown"
     assert "не возвращается" in reason.lower()
+
+
+def test_temperature_not_applicable_hdd_none() -> None:
+    events = json.dumps({"HDDNone": True, "HDDFail": False})
+    metrics = _metrics(
+        disks_json=json.dumps([]),
+        storageinfo_ok=True,
+        system_events_json=events,
+    )
+    status, reason = classify_temperature_health(_rec(), metrics, _settings())
+    assert status == "ok"
+    assert "не применим" in reason.lower()
+
+
+def test_temperature_not_applicable_no_slots() -> None:
+    metrics = _metrics(
+        disks_json=json.dumps([]),
+        storage_status=None,
+        storageinfo_ok=True,
+        system_events_json=json.dumps({}),
+    )
+    status, reason = classify_temperature_health(_rec(), metrics, _settings())
+    assert status == "ok"
+    assert "не применим" in reason.lower()
 
 
 def test_fans_error() -> None:

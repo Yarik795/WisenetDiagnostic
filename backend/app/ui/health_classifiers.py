@@ -54,6 +54,17 @@ def _recorder_has_poll_data(
     return metrics.device_online
 
 
+def recorder_has_hdd_for_temperature(metrics: RecorderMetricsRow) -> bool:
+    if parse_disks_json(metrics.disks_json):
+        return True
+    events = parse_system_events_json(metrics.system_events_json)
+    if events.get("HDDNone"):
+        return False
+    if metrics.storageinfo_ok and not parse_disks_json(metrics.disks_json):
+        return False
+    return True
+
+
 def classify_temperature_health(
     recorder: Recorder,
     metrics: Optional[RecorderMetricsRow],
@@ -62,6 +73,8 @@ def classify_temperature_health(
     if not _recorder_has_poll_data(recorder, metrics):
         return "unknown", "Нет данных опроса"
     assert metrics is not None
+    if not recorder_has_hdd_for_temperature(metrics):
+        return "ok", "Контроль температуры не применим: накопитель отсутствует"
     max_temp = max_disk_temperature_celsius(metrics.disks_json)
     if max_temp is None:
         return "unknown", "Температура HDD не возвращается устройством"

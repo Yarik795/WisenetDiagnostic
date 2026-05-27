@@ -5,6 +5,7 @@ from app.models import MonitoringSettings
 from app.ui.health_dashboard import (
     aggregate_category_stats,
     build_category_sections,
+    build_object_health_matrix,
     list_health_problem_rows,
     object_health_problem_count,
 )
@@ -41,6 +42,10 @@ def _metrics(**kwargs):
         ntp_status="Success",
         time_skew_seconds=0.0,
         sync_type="ntp",
+        storageinfo_ok=False,
+        archive_poll_error=None,
+        recording_storage_enable=None,
+        archive_days=30.0,
     )
     base.update(kwargs)
     return SimpleNamespace(**base)
@@ -99,3 +104,30 @@ def test_object_health_problem_count() -> None:
         ),
     }
     assert object_health_problem_count([r1, r2], metrics_map, settings) == 1
+
+
+def test_object_matrix_temperature_ok_when_one_nvr_has_no_hdd() -> None:
+    settings = MonitoringSettings()
+    r_no_hdd = _rec("a")
+    r_ok = _rec("b")
+    r_no_hdd.object_name = "MixedObj"
+    r_ok.object_name = "MixedObj"
+    events = json.dumps({"HDDNone": True})
+    metrics_map = {
+        "a": _metrics(
+            disks_json=json.dumps([]),
+            storageinfo_ok=True,
+            system_events_json=events,
+            storage_status=None,
+        ),
+        "b": _metrics(
+            disks_json=json.dumps([{"TemperatureCelsius": 40}]),
+            archive_min_days=31.0,
+            archive_max_days=31.0,
+        ),
+    }
+    rows = build_object_health_matrix([r_no_hdd, r_ok], metrics_map, settings)
+    assert len(rows) == 1
+    temp_cell = next(c for c in rows[0].cells if c.column == "temperature")
+    assert temp_cell.status == "ok"
+    assert temp_cell.problem_count == 0
