@@ -4,7 +4,11 @@ from types import SimpleNamespace
 from app.models import Credentials, MonitoringSettings
 from app.state_store import RecorderMetricsRow
 from app.ui.helpers import device_web_interface_url, device_web_link_title
-from app.ui.error_report import build_error_report_context, _problem_age_fields
+from app.ui.error_report import (
+    build_error_report_context,
+    format_problem_age_display,
+    _problem_age_fields,
+)
 
 
 def _rec(**kwargs):
@@ -53,9 +57,21 @@ def test_problem_age_fields() -> None:
         {("r1", "archive"): since},
         now=now,
     )
-    assert days == "5 сут."
+    assert days == "5 сут. 3 ч."
     assert since_disp == "10.05.2026 08:00"
-    assert title == "С 10.05.2026 08:00"
+    assert "10.05.2026" in title
+
+
+def test_format_problem_age_display_hours() -> None:
+    since = datetime(2026, 5, 26, 14, 33, tzinfo=timezone.utc)
+    now = since + timedelta(hours=17)
+    assert format_problem_age_display(since, now) == "17 ч."
+
+
+def test_format_problem_age_display_less_than_hour() -> None:
+    since = datetime(2026, 5, 26, 14, 0, tzinfo=timezone.utc)
+    now = since + timedelta(minutes=20)
+    assert format_problem_age_display(since, now) == "менее 1 ч."
 
 
 def test_build_error_report_includes_problem_age() -> None:

@@ -82,6 +82,8 @@ class CategoryStatusHistoryRow:
 
 
 _CATEGORY_PROBLEM_STATUSES = frozenset({"warn", "error"})
+# unknown между warn/error не завершает эпизод (пропуск опроса, нет метрик).
+_TRANSPARENT_GAP_STATUSES = frozenset({"unknown"})
 
 
 class StateStore:
@@ -484,6 +486,12 @@ class StateStore:
             ).fetchone()
             if last and last["status"] == status:
                 return
+            if (
+                status in _TRANSPARENT_GAP_STATUSES
+                and last
+                and last["status"] in _CATEGORY_PROBLEM_STATUSES
+            ):
+                return
             conn.execute(
                 """
                 INSERT INTO category_status_history (
@@ -666,6 +674,8 @@ def _problem_episode_start(
     for row in reversed(rows[:-1]):
         if row.status in _CATEGORY_PROBLEM_STATUSES:
             start = row.recorded_at
+        elif row.status in _TRANSPARENT_GAP_STATUSES:
+            continue
         else:
             break
     return start

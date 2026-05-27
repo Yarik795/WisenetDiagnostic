@@ -59,6 +59,45 @@ def test_problem_since_none_when_currently_ok(tmp_path: Path) -> None:
     assert ("nvr-1", "fans") not in store.category_problem_since_map()
 
 
+def test_unknown_after_warn_not_recorded(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    t0 = datetime(2026, 5, 25, 8, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 5, 26, 13, 54, tzinfo=timezone.utc)
+    store.record_category_status("nvr-1", "temperature", "warn", "hot", t0)
+    store.record_category_status(
+        "nvr-1", "temperature", "unknown", "Нет данных опроса", t1
+    )
+    rows = store.list_category_history(recorder_id="nvr-1", category="temperature")
+    assert len(rows) == 1
+    assert rows[0].status == "warn"
+
+
+def test_unknown_gap_does_not_reset_episode_start(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    t_warn = datetime(2026, 5, 25, 6, 57, tzinfo=timezone.utc)
+    t_unknown = datetime(2026, 5, 26, 13, 54, tzinfo=timezone.utc)
+    t_warn_again = datetime(2026, 5, 26, 14, 33, tzinfo=timezone.utc)
+    store.record_category_status("nvr-1", "temperature", "warn", "40C", t_warn)
+    with store._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO category_status_history (
+                recorder_id, category, status, reason, recorded_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "nvr-1",
+                "temperature",
+                "unknown",
+                "Нет данных опроса",
+                t_unknown.isoformat(),
+            ),
+        )
+    store.record_category_status("nvr-1", "temperature", "warn", "42C", t_warn_again)
+    since = store.get_category_problem_since("nvr-1", "temperature")
+    assert since == t_warn
+
+
 def test_delete_recorder_data_removes_category_history(tmp_path: Path) -> None:
     store = _store(tmp_path)
     t0 = datetime(2026, 5, 1, 8, 0, tzinfo=timezone.utc)

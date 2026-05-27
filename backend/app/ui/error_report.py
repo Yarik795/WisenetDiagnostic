@@ -69,6 +69,24 @@ def _time_polled_at(metrics: Optional[RecorderMetricsRow]) -> str:
     return "—"
 
 
+def format_problem_age_display(since: datetime, ref: datetime) -> str:
+    """Длительность эпизода: сутки и часы, без занижения коротких интервалов до «0 сут.»."""
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    total_seconds = max(0.0, (ref - since).total_seconds())
+    days = int(total_seconds // 86400)
+    hours = int((total_seconds % 86400) // 3600)
+    if days >= 1:
+        if hours > 0:
+            return f"{days} сут. {hours} ч."
+        return f"{days} сут."
+    if hours >= 1:
+        return f"{hours} ч."
+    return "менее 1 ч."
+
+
 def _problem_age_fields(
     recorder_id: str,
     category: str,
@@ -79,14 +97,10 @@ def _problem_age_fields(
     since = problem_since_map.get((recorder_id, category))
     if since is None:
         return "—", "—", ""
-    if since.tzinfo is None:
-        since = since.replace(tzinfo=timezone.utc)
     ref = now or datetime.now(timezone.utc)
-    if ref.tzinfo is None:
-        ref = ref.replace(tzinfo=timezone.utc)
-    days = max(0, (ref - since).days)
     since_display = since.strftime("%d.%m.%Y %H:%M")
-    return f"{days} сут.", since_display, f"С {since_display}"
+    age_display = format_problem_age_display(since, ref)
+    return age_display, since_display, f"С {since_display} ({age_display})"
 
 
 def _enrich_row(
@@ -225,7 +239,7 @@ def build_error_report_context(
     problem_since_map: dict[tuple[str, str], datetime] | None = None,
     report_at: Optional[datetime] = None,
 ) -> ErrorReportContext:
-    ref = report_at or datetime.now()
+    ref = report_at or datetime.now(timezone.utc)
     dashboard = health_dashboard_context(
         recorders,
         metrics_map,
