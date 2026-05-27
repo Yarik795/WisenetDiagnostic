@@ -22,7 +22,7 @@
         {% for row in object_matrix_rows %}
         <tr class="object-matrix-row object-matrix-row--{{ row.aggregate_status }}">
           <th scope="row" class="object-matrix-object">
-            <a href="/objects?object={{ row.object_name|urlencode }}#object-groups">{{ row.object_name }}</a>
+            <a href="/objects?object={{ row.object_name|urlencode }}">{{ row.object_name }}</a>
             {% if row.problem_nvr_count > 0 %}
             <span class="object-matrix-problems">{{ row.problem_nvr_count }}/{{ row.nvr_count }}</span>
             {% else %}

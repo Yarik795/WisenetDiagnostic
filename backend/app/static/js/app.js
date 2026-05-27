@@ -121,16 +121,24 @@ function initClientSearch() {
   });
 }
 
-function initHighlightObject() {
+function findObjectGroup(name) {
+  if (!name) return null;
+  for (const el of document.querySelectorAll("[data-object-group]")) {
+    if (el.getAttribute("data-object-group") === name) {
+      return el;
+    }
+  }
+  return null;
+}
+
+function highlightObjectFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const obj = params.get("object");
   if (obj) {
     const collapsed = loadCollapsed();
     collapsed.delete(obj);
     saveCollapsed(collapsed);
-    const group = document.querySelector(
-      `[data-object-group="${CSS.escape(obj)}"]`
-    );
+    const group = findObjectGroup(obj);
     if (group) {
       group.classList.remove("collapsed");
       group.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -295,7 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initGroupToggles();
   initMobileSidebar();
   initClientSearch();
-  initHighlightObject();
+  highlightObjectFromUrl();
   initTimeDashboard();
   initCategoryDashboards();
   scrollToHighlightedCategory();
@@ -303,6 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.body.addEventListener("htmx:afterSwap", () => {
   applyCollapsedState();
+  highlightObjectFromUrl();
   applyTimeDashboardState();
   applyCategoryDashboardState();
   scrollToHighlightedCategory();

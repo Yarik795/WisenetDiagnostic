@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -383,6 +384,40 @@ def test_status_top_problem_objects(
     assert "top-problem-objects" in r.text
     assert "Проблемный объект" in r.text
     assert 'href="/objects?object=' in r.text
+
+
+def test_objects_health_matrix_deep_link_without_object_groups_hash(
+    client: TestClient,
+) -> None:
+    from datetime import datetime, timezone
+
+    object_name = "г. Тест, ул. Пример, д. 1"
+    store = app.dependency_overrides[get_store]()
+    rec = store.create_recorder(
+        RecorderCreate(
+            object_name=object_name,
+            host="10.0.0.10",
+            port=80,
+            use_https=False,
+            enabled=True,
+        )
+    )
+    state = app.dependency_overrides[get_state_store]()
+    state.upsert_recorder_metrics(
+        rec.id,
+        device_online=True,
+        health_status="error",
+        ntp_status="Fail",
+        sync_type="Manual",
+        last_polled_at=datetime.now(timezone.utc),
+    )
+
+    r = client.get("/objects")
+    assert r.status_code == 200
+    assert "Проблемы по объектам" in r.text
+    expected_href = f'/objects?object={quote(object_name)}">'
+    assert expected_href in r.text
+    assert f'/objects?object={quote(object_name)}#object-groups">' not in r.text
 
 
 def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
