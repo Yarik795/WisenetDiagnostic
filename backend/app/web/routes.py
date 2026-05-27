@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime, timezone
 from typing import Literal, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -10,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from ..config_store import ConfigStore
+from ..display_time import format_for_display
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..monitoring import poll_single_recorder, run_ntp_fix_all
@@ -83,8 +85,6 @@ def _time_dashboard_ctx(
     show_all_table: bool = False,
     refresh_url: str = "/objects/partials/time-dashboard",
 ) -> dict:
-    from datetime import datetime
-
     config = store.load()
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
@@ -99,7 +99,9 @@ def _time_dashboard_ctx(
         show_all_table=show_all_table,
     )
     ctx["time_refresh_url"] = refresh_url
-    ctx["time_server_now"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ctx["time_server_now"] = format_for_display(
+        datetime.now(timezone.utc), "%Y-%m-%d %H:%M:%S"
+    )
     ctx["time_show_actions"] = False
     return ctx
 
@@ -127,8 +129,6 @@ def _health_dashboard_ctx(
     highlight_category: Optional[HealthCategory] = None,
     refresh_url: str = "/objects/partials/health-dashboard",
 ) -> dict:
-    from datetime import datetime
-
     config = store.load()
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
@@ -143,7 +143,9 @@ def _health_dashboard_ctx(
         highlight_category=highlight_category,
     )
     ctx["health_refresh_url"] = refresh_url
-    ctx["health_server_now"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ctx["health_server_now"] = format_for_display(
+        datetime.now(timezone.utc), "%Y-%m-%d %H:%M:%S"
+    )
     return ctx
 
 
@@ -474,8 +476,6 @@ def objects_export_errors_html(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
-    from datetime import datetime
-
     config = store.load()
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
@@ -489,7 +489,8 @@ def objects_export_errors_html(
         problem_since_map=state.category_problem_since_map(),
     )
     filename = (
-        f"wisenet-dashboard-errors-{datetime.now().strftime('%Y%m%d-%H%M')}.html"
+        "wisenet-dashboard-errors-"
+        f"{format_for_display(datetime.now(timezone.utc), '%Y%m%d-%H%M')}.html"
     )
     response = templates.TemplateResponse(
         request,

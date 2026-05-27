@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from urllib.parse import quote
 
+from ..display_time import format_for_display, to_display
 from ..models import Credentials, Recorder
 
 
@@ -49,12 +50,11 @@ def device_web_link_title(recorder: Recorder) -> str:
 
 
 def format_time(value: datetime | None) -> str:
-    if value is None:
+    local = to_display(value)
+    if local is None:
         return "—"
-    return value.strftime("%H:%M:%S")
+    return local.strftime("%H:%M:%S")
 
 
 def format_datetime(value: datetime | None) -> str:
-    if value is None:
-        return "—"
-    return value.strftime("%d.%m.%Y %H:%M:%S")
+    return format_for_display(value, "%d.%m.%Y %H:%M:%S")

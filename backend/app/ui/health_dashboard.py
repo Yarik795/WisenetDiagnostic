@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Optional
 
+from ..display_time import format_for_display
 from ..models import MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
 from .grouping import aggregate_status, effective_status
@@ -119,7 +120,7 @@ def list_health_problem_rows(
                 continue
         polled = "—"
         if metrics and metrics.last_polled_at:
-            polled = metrics.last_polled_at.strftime("%Y-%m-%d %H:%M")
+            polled = format_for_display(metrics.last_polled_at, "%Y-%m-%d %H:%M")
         rows.append(
             HealthProblemRow(
                 recorder=rec,
@@ -656,7 +657,7 @@ def _fleet_last_polled_display(
                 latest = metrics.last_polled_at
     if latest is None:
         return "—"
-    return latest.strftime("%Y-%m-%d %H:%M")
+    return format_for_display(latest, "%Y-%m-%d %H:%M")
 
 
 def fleet_overview_context(

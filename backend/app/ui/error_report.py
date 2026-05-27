@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
+from ..display_time import format_for_display
 from ..models import Credentials, MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
 from .grouping import STATUS_LABELS
@@ -65,7 +66,7 @@ def _time_value_display(metrics: Optional[RecorderMetricsRow]) -> str:
 
 def _time_polled_at(metrics: Optional[RecorderMetricsRow]) -> str:
     if metrics and metrics.last_polled_at:
-        return metrics.last_polled_at.strftime("%Y-%m-%d %H:%M")
+        return format_for_display(metrics.last_polled_at, "%Y-%m-%d %H:%M")
     return "—"
 
 
@@ -98,7 +99,7 @@ def _problem_age_fields(
     if since is None:
         return "—", "—", ""
     ref = now or datetime.now(timezone.utc)
-    since_display = since.strftime("%d.%m.%Y %H:%M")
+    since_display = format_for_display(since, "%d.%m.%Y %H:%M")
     age_display = format_problem_age_display(since, ref)
     return age_display, since_display, f"С {since_display} ({age_display})"
 
@@ -257,7 +258,7 @@ def build_error_report_context(
     if ref.tzinfo is None:
         ref = ref.replace(tzinfo=timezone.utc)
     return ErrorReportContext(
-        generated_at=ref.strftime("%d.%m.%Y %H:%M:%S"),
+        generated_at=format_for_display(ref, "%d.%m.%Y %H:%M:%S"),
         problem_count=len(rows),
         rows=rows,
     )

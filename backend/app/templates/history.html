@@ -36,7 +36,7 @@
     <tbody>
       {% for row in history %}
       <tr>
-        <td style="font-size:12px;white-space:nowrap;">{{ row.recorded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td style="font-size:12px;white-space:nowrap;">{{ format_datetime(row.recorded_at) }}</td>
         <td>{{ row.entity_type }}</td>
         <td class="recorder-row-host">{{ row.entity_id }}</td>
         <td>{% set status = row.status %}{% include "partials/status_badge.html" %}</td>

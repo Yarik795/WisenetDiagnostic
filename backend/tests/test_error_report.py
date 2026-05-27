@@ -59,7 +59,7 @@ def test_problem_age_fields() -> None:
         now=now,
     )
     assert days == "5 сут. 3 ч."
-    assert since_disp == "10.05.2026 08:00"
+    assert since_disp == "10.05.2026 11:00"
     assert "10.05.2026" in title
 
 

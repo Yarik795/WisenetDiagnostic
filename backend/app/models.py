@@ -66,6 +66,7 @@ class MonitoringSettings(BaseModel):
     channels_error_threshold_percent: int = Field(default=25, ge=1, le=100)
     ntp_server: str = ""
     ntp_posix_timezone: str = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
+    display_timezone: str = "Europe/Moscow"
 
     @field_validator("hdd_temperature_error_celsius")
     @classmethod

@@ -22,6 +22,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+BACKEND_DIR = Path(__file__).resolve().parents[1] / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from app.display_time import format_for_display  # noqa: E402
+
 # --- Настройки подключения (можно менять здесь или через env / CLI) ---
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "monitoring.db"
@@ -228,7 +234,7 @@ def diagnose_pair(
     if latest:
         print(
             f"Последний статус: {latest.status} @ "
-            f"{latest.recorded_at.strftime('%Y-%m-%d %H:%M:%S %Z')}"
+            f"{format_for_display(latest.recorded_at, '%Y-%m-%d %H:%M:%S')}"
         )
         if latest.reason:
             print(f"  причина: {latest.reason}")
@@ -242,8 +248,14 @@ def diagnose_pair(
             )
     else:
         age_display = format_problem_age_display(since_full, ref)
-        print(f"Начало эпизода (полная история): {since_full.strftime('%d.%m.%Y %H:%M')}")
-        print(f"Длительность до {ref.strftime('%d.%m.%Y %H:%M')} UTC:")
+        print(
+            "Начало эпизода (полная история): "
+            f"{format_for_display(since_full, '%d.%m.%Y %H:%M')}"
+        )
+        print(
+            "Длительность до "
+            f"{format_for_display(ref, '%d.%m.%Y %H:%M')}:"
+        )
         print(f"  как в HTML-отчёте:             {age_display}")
         delta = ref - since_full
         print(
@@ -254,7 +266,10 @@ def diagnose_pair(
     if since_app != since_full:
         print("!!! РАСХОЖДЕНИЕ: backend (limit=500 ASC) даёт другую дату начала:")
         if since_app:
-            print(f"    backend since: {since_app.strftime('%d.%m.%Y %H:%M')}")
+            print(
+                "    backend since: "
+                f"{format_for_display(since_app, '%d.%m.%Y %H:%M')}"
+            )
             print(f"    backend age:   {format_problem_age_display(since_app, ref)}")
         else:
             print("    backend since: — (проблема не определяется)")
@@ -266,7 +281,7 @@ def diagnose_pair(
     if verbose_history > 0 and full:
         print(f"\nПоследние {verbose_history} переходов:")
         for row in full[-verbose_history:]:
-            ts = row.recorded_at.strftime("%Y-%m-%d %H:%M")
+            ts = format_for_display(row.recorded_at, "%Y-%m-%d %H:%M")
             reason = f" — {row.reason}" if row.reason else ""
             print(f"  [{row.id:5d}] {ts}  {row.status:7s}{reason}")
 
@@ -311,6 +326,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.config.is_file():
+        os.environ["CONFIG_PATH"] = str(args.config.resolve())
+
     ref = (
         _parse_iso(args.at)
         if args.at
@@ -327,7 +345,10 @@ def main() -> int:
     category = args.category.strip() or None
 
     print(f"База: {args.db.resolve()}")
-    print(f"Момент отсчёта: {ref.isoformat()}")
+    print(
+        "Момент отсчёта: "
+        f"{format_for_display(ref, '%d.%m.%Y %H:%M:%S')} ({ref.isoformat()})"
+    )
     if category:
         print(f"Фильтр категории: {category} ({CATEGORY_LABELS.get(category, '?')})")
     print()
