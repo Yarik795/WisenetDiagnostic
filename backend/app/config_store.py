@@ -11,7 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from .models import AppConfig, CheckStatus, Credentials, Recorder, RecorderCreate, RecorderUpdate
+from .exclusions import migrate_config_raw, prune_exclusions
+from .models import AppConfig, CheckStatus, Credentials, ExclusionSettings, Recorder, RecorderCreate, RecorderUpdate
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.json"
 _CONFIG_LOCKS: dict[str, threading.Lock] = {}
@@ -50,13 +51,15 @@ class ConfigStore:
             return AppConfig()
         with open(self.path, encoding="utf-8") as f:
             data = json.load(f)
+        data = migrate_config_raw(data)
         return AppConfig.model_validate(data)
 
     def save(self, config: AppConfig) -> None:
         with self._file_lock():
-            self._save_unlocked(config)
+            self._save_unlocked(prune_exclusions(config))
 
     def _save_unlocked(self, config: AppConfig) -> None:
+        config = prune_exclusions(config)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = config.model_dump(mode="json")
         fd, tmp_path = tempfile.mkstemp(
@@ -125,8 +128,55 @@ class ConfigStore:
         config.recorders = [r for r in config.recorders if r.id != recorder_id]
         if len(config.recorders) == before:
             return False
+        ids = [rid for rid in config.exclusions.recorder_ids if rid != recorder_id]
+        config.exclusions = config.exclusions.model_copy(update={"recorder_ids": ids})
         self.save(config)
         return True
+
+    def list_exclusion_ids(self) -> list[str]:
+        return list(self.load().exclusions.recorder_ids)
+
+    def add_exclusion(self, recorder_id: str) -> bool:
+        if self.get_recorder(recorder_id) is None:
+            return False
+        with self._file_lock():
+            config = self._load_unlocked()
+            ids = list(config.exclusions.recorder_ids)
+            if recorder_id in ids:
+                return True
+            ids.append(recorder_id)
+            config.exclusions = config.exclusions.model_copy(
+                update={"recorder_ids": ids}
+            )
+            self._save_unlocked(config)
+        return True
+
+    def remove_exclusion(self, recorder_id: str) -> bool:
+        with self._file_lock():
+            config = self._load_unlocked()
+            ids = list(config.exclusions.recorder_ids)
+            if recorder_id not in ids:
+                return False
+            ids = [rid for rid in ids if rid != recorder_id]
+            config.exclusions = config.exclusions.model_copy(
+                update={"recorder_ids": ids}
+            )
+            self._save_unlocked(config)
+        return True
+
+    def set_exclusions(self, recorder_ids: list[str]) -> ExclusionSettings:
+        valid = {r.id for r in self.load().recorders}
+        unique: list[str] = []
+        seen: set[str] = set()
+        for rid in recorder_ids:
+            if rid in valid and rid not in seen:
+                unique.append(rid)
+                seen.add(rid)
+        with self._file_lock():
+            config = self._load_unlocked()
+            config.exclusions = ExclusionSettings(recorder_ids=unique)
+            self._save_unlocked(config)
+            return config.exclusions
 
     def update_recorder_status(
         self,

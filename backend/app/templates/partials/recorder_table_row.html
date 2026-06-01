@@ -1,4 +1,4 @@
-<tr id="recorder-row-{{ recorder.id }}" data-recorder-row>
+<tr id="recorder-row-{{ recorder.id }}" data-recorder-row class="{% if is_excluded %}recorder-row--excluded{% endif %}">
   <td>
     <a href="/objects?object={{ recorder.object_name|urlencode }}">{{ recorder.object_name }}</a>
   </td>
@@ -29,12 +29,25 @@
         type="button"
         class="btn btn-outline"
         style="min-height:36px;padding:0 12px;"
-        {% if not recorder.enabled %}disabled{% endif %}
+        {% if is_excluded %}disabled{% endif %}
         hx-post="/recorders/{{ recorder.id }}/check"
         hx-target="#recorder-row-{{ recorder.id }}"
         hx-swap="outerHTML"
       >Проверить</button>
       <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="min-height:36px;text-decoration:none;">Каналы</a>
+      {% if is_excluded %}
+      <button type="button" class="btn btn-ghost" style="min-height:36px;"
+        hx-post="/recorders/{{ recorder.id }}/unexclude"
+        hx-target="#recorder-row-{{ recorder.id }}"
+        hx-swap="outerHTML"
+      >Вернуть</button>
+      {% else %}
+      <button type="button" class="btn btn-ghost" style="min-height:36px;"
+        hx-post="/recorders/{{ recorder.id }}/exclude"
+        hx-target="#recorder-row-{{ recorder.id }}"
+        hx-swap="outerHTML"
+      >Исключить</button>
+      {% endif %}
       <button type="button" class="btn btn-ghost" style="min-height:36px;"
         hx-get="/recorders/{{ recorder.id }}/edit"
         hx-target="#drawer-root"

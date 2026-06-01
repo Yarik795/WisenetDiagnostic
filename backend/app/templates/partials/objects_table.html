@@ -25,6 +25,10 @@
     </thead>
     <tbody id="recorders-table-body">
       {% for recorder in recorders %}
+      {% set is_excluded = recorder.id in excluded_ids %}
+      {% set metrics = metrics_map.get(recorder.id) %}
+      {% set status = effective_status(recorder, metrics, excluded_ids=excluded_ids) %}
+      {% set error = metrics.health_reason if metrics else recorder.last_error %}
       {% include "partials/recorder_table_row.html" %}
       {% endfor %}
     </tbody>

@@ -233,12 +233,17 @@ a:hover {
 .legend-dot--error { background: var(--status-error); }
 .legend-dot--unknown { background: var(--status-unknown); }
 .legend-dot--disabled { background: var(--text-muted); }
+.legend-dot--excluded { background: var(--text-muted); }
 
 .fleet-severity-stack {
   margin-top: 4px;
 }
 
 .fleet-stack-disabled {
+  background: var(--text-muted);
+}
+
+.fleet-stack-excluded {
   background: var(--text-muted);
 }
 
@@ -708,6 +713,18 @@ a:hover {
   align-items: stretch;
 }
 
+.recorder-row--excluded,
+tr.recorder-row--excluded {
+  background: var(--bg-muted, #f4f4f5);
+  border-left: 3px solid var(--text-muted);
+  opacity: 0.88;
+}
+
+.recorder-row--excluded .recorder-row-name,
+.recorder-row--excluded .recorder-row-host {
+  color: var(--text-secondary);
+}
+
 .recorder-row-main {
   display: flex;
   flex-wrap: wrap;
@@ -855,6 +872,7 @@ a:hover {
 .status-dot.warn { background: var(--status-warn); }
 .status-dot.unknown { background: var(--status-unknown); }
 .status-dot.disabled { background: var(--text-muted); }
+.status-dot.excluded { background: var(--text-muted); }
 .status-dot.checking {
   background: var(--accent);
   animation: pulse 1s ease-in-out infinite;

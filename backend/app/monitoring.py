@@ -423,9 +423,11 @@ async def poll_single_recorder(
     include_inventory: bool = True,
     update_config: bool = True,
 ) -> Optional[RecorderStatusUpdate]:
-    if not recorder.enabled:
-        return None
     config = config_store.load()
+    from .exclusions import is_pollable
+
+    if not is_pollable(recorder, config):
+        return None
     credentials = config.credentials
     settings = config.monitoring
     polled_at = datetime.now(timezone.utc)
@@ -453,8 +455,10 @@ async def run_poll_cycle(
     include_inventory: bool = False,
     tracker: Optional["PollJobTracker"] = None,
 ) -> None:
+    from .exclusions import pollable_recorders
+
     config = config_store.load()
-    recorders = [r for r in config.recorders if r.enabled]
+    recorders = pollable_recorders(config)
     if tracker:
         await tracker.set_total(len(recorders))
     if not recorders:
@@ -529,10 +533,12 @@ async def run_ntp_fix_all(
     metrics_map = {
         m.recorder_id: m for m in state_store.list_recorder_metrics()
     }
+    from .exclusions import is_pollable
+
     fixable = [
         r
         for r in config.recorders
-        if r.enabled
+        if is_pollable(r, config)
         and (m := metrics_map.get(r.id))
         and m.device_online
         and show_ntp_action_button(m)

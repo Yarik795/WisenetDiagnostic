@@ -20,7 +20,6 @@ def _rec(**kwargs):
         host="192.168.1.10",
         port=80,
         use_https=False,
-        enabled=True,
     )
     base.update(kwargs)
     return SimpleNamespace(**base)
@@ -162,3 +161,43 @@ def test_build_error_report_hrx_no_hdd() -> None:
     archive_rows = [r for r in ctx.rows if r.category_label == "Глубина архива"]
     assert len(archive_rows) == 1
     assert archive_rows[0].status == "error"
+
+
+def test_error_report_skips_excluded() -> None:
+    rec = _rec(id="ex-1")
+    metrics = RecorderMetricsRow(
+        recorder_id="ex-1",
+        model="M",
+        firmware_version="1",
+        device_online=True,
+        health_status="error",
+        health_reason="fail",
+        ntp_status="Success",
+        time_skew_seconds=500.0,
+        storage_used_percent=50.0,
+        storage_status="Normal",
+        archive_start=None,
+        archive_end=None,
+        archive_days=5.0,
+        channel_count=1,
+        channels_ok=0,
+        channels_warn=0,
+        channels_error=1,
+        channels_unknown=0,
+        last_polled_at=datetime.now(timezone.utc),
+        disks_json="[]",
+        system_events_json="{}",
+        storageinfo_ok=True,
+        archive_poll_error=None,
+        recording_storage_enable=True,
+        archive_min_days=5.0,
+        archive_max_days=5.0,
+    )
+    ctx = build_error_report_context(
+        [rec],
+        {"ex-1": metrics},
+        MonitoringSettings(),
+        excluded_ids={"ex-1"},
+    )
+    assert ctx.problem_count == 0
+    assert ctx.rows == []

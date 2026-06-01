@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+{% block title %}Исключения — Wisenet Диагностика{% endblock %}
+{% block page_title %}Исключения из мониторинга{% endblock %}
+{% block page_actions %}
+<a href="/settings" class="btn btn-ghost">← Настройки</a>
+{% endblock %}
+{% block content %}
+<div class="warning-box" style="margin-bottom:16px;">
+  <span aria-hidden="true">ℹ</span>
+  <p>Исключённые регистраторы остаются в списке объектов, но не опрашиваются и не попадают в сводки проблем и HTML-отчёт. Список хранится в <code>config.json</code> (<code>exclusions.recorder_ids</code>).</p>
+</div>
+<div class="card" style="padding:24px;">
+  {% if not recorders %}
+  <p class="empty-state">Нет регистраторов. Добавьте NVR на странице объектов.</p>
+  {% else %}
+  <form method="post" action="/settings/exclusions">
+    <div class="field" style="margin-bottom:16px;">
+      <p class="label" style="margin-bottom:8px;">Отметьте NVR для исключения из мониторинга</p>
+      <div class="exclusions-list" style="display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;">
+        {% for rec in recorders %}
+        <label class="toggle-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border:1px solid var(--border-subtle);border-radius:8px;{% if rec.id in excluded_ids %}background:var(--bg-muted, #f4f4f5);{% endif %}">
+          <input type="checkbox" name="recorder_ids" value="{{ rec.id }}" {% if rec.id in excluded_ids %}checked{% endif %}>
+          <span>
+            <strong>{{ display_recorder_name(rec) }}</strong>
+            <span class="recorder-row-host" style="display:block;">{{ rec.object_name }} · {{ format_host_port(rec.host, rec.port, rec.use_https) }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Сохранить список</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

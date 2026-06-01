@@ -239,6 +239,7 @@ def build_error_report_context(
     device_auth: DeviceAuthMode = "",
     problem_since_map: dict[tuple[str, str], datetime] | None = None,
     report_at: Optional[datetime] = None,
+    excluded_ids: set[str] | None = None,
 ) -> ErrorReportContext:
     ref = report_at or datetime.now(timezone.utc)
     dashboard = health_dashboard_context(
@@ -247,6 +248,7 @@ def build_error_report_context(
         settings,
         ntp_server=ntp_server,
         problems_only=True,
+        excluded_ids=excluded_ids,
     )
     rows = flatten_error_report_rows(
         dashboard["category_sections"],

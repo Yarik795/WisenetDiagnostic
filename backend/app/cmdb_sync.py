@@ -106,10 +106,15 @@ def sync_from_cmdb(
             total_data_rows=parsed.total_data_rows,
         )
 
-    new_config = AppConfig(
-        credentials=old_config.credentials,
-        monitoring=old_config.monitoring,
-        recorders=merged,
+    from .exclusions import prune_exclusions
+
+    new_config = prune_exclusions(
+        AppConfig(
+            credentials=old_config.credentials,
+            monitoring=old_config.monitoring,
+            exclusions=old_config.exclusions,
+            recorders=merged,
+        )
     )
     try:
         AppConfig.model_validate(new_config.model_dump(mode="json"))

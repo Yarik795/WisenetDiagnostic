@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from ..cmdb_sync import sync_from_cmdb
 from ..config_store import ConfigStore
+from ..exclusions import excluded_ids_set, is_excluded
 from ..display_time import format_for_display
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
@@ -53,6 +54,10 @@ def _object_names(store: ConfigStore) -> list[str]:
     return sorted({r.object_name for r in store.list_recorders()})
 
 
+def _excluded_ids(store: ConfigStore) -> set[str]:
+    return excluded_ids_set(store.load())
+
+
 def _metrics_map(state: StateStore):
     return metrics_map_from_list(state.list_recorder_metrics())
 
@@ -64,7 +69,10 @@ def _inventory_kpi_ctx(store: ConfigStore, state: StateStore) -> dict:
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
     settings = config.monitoring
-    ctx = fleet_overview_context(recorders, metrics, settings)
+    excluded = excluded_ids_set(config)
+    ctx = fleet_overview_context(
+        recorders, metrics, settings, excluded_ids=excluded
+    )
     ctx["inventory_problem_nvr_count"] = ctx["fleet_problem_nvr_count"]
     ctx["inventory_enabled_count"] = ctx["fleet_enabled_count"]
     ctx["inventory_category_counts"] = ctx["fleet_category_counts"]
@@ -98,6 +106,7 @@ def _time_dashboard_ctx(
         problems_only=problems_only,
         search=search,
         show_all_table=show_all_table,
+        excluded_ids=excluded_ids_set(config),
     )
     ctx["time_refresh_url"] = refresh_url
     ctx["time_server_now"] = format_for_display(
@@ -142,6 +151,7 @@ def _health_dashboard_ctx(
         problems_only=problems_only,
         search=search,
         highlight_category=highlight_category,
+        excluded_ids=excluded_ids_set(config),
     )
     ctx["health_refresh_url"] = refresh_url
     ctx["health_server_now"] = format_for_display(
@@ -320,9 +330,17 @@ def _recorder_partial_context(
     *,
     template: str,
     metrics_map: dict | None = None,
+    excluded_ids: set[str] | None = None,
 ) -> dict:
-    status = effective_status(recorder, metrics)
-    ctx: dict = {"recorder": recorder, "status": status, "metrics": metrics}
+    excluded = excluded_ids or set()
+    status = effective_status(recorder, metrics, excluded_ids=excluded)
+    ctx: dict = {
+        "recorder": recorder,
+        "status": status,
+        "metrics": metrics,
+        "excluded_ids": excluded,
+        "is_excluded": recorder.id in excluded,
+    }
     if template == "partials/recorder_table_row.html":
         ctx["metrics_map"] = metrics_map or {recorder.id: metrics}
     return ctx
@@ -360,6 +378,7 @@ def objects_page(
     inventory_view = "table" if view.strip().lower() == "table" else "groups"
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
+    excluded = _excluded_ids(store)
     if inventory_view == "table":
         recorders_display = sorted(
             recorders,
@@ -368,7 +387,9 @@ def objects_page(
         groups = []
     else:
         recorders_display = recorders
-        groups = group_by_object(recorders, "", sort, metrics)
+        groups = group_by_object(
+            recorders, "", sort, metrics, excluded_ids=excluded
+        )
     toast = _toast_from_query(request)
     if inventory_view == "table":
         poll_refresh_url = "/objects/partials/table"
@@ -385,6 +406,7 @@ def objects_page(
             "groups": groups,
             "recorders": recorders_display,
             "metrics_map": metrics,
+            "excluded_ids": excluded,
             "sort": sort,
             "toast": toast,
             **_inventory_kpi_ctx(store, state),
@@ -447,12 +469,14 @@ def objects_table_partial(
         store.list_recorders(),
         key=lambda r: (r.object_name.lower(), r.host),
     )
+    excluded = _excluded_ids(store)
     return templates.TemplateResponse(
         request,
         "partials/objects_table.html",
         {
             "recorders": recorders,
             "metrics_map": _metrics_map(state),
+            "excluded_ids": excluded,
         },
     )
 
@@ -467,11 +491,15 @@ def objects_groups_partial(
 ) -> HTMLResponse:
     recorders = store.list_recorders()
     metrics = _metrics_map(state)
-    groups = group_by_object(recorders, search, sort, metrics)
+    excluded = _excluded_ids(store)
+    groups = group_by_object(
+        recorders, search, sort, metrics, excluded_ids=excluded
+    )
     ctx = {
         "groups": groups,
         "recorders": recorders,
         "metrics_map": metrics,
+        "excluded_ids": excluded,
         "inventory_view": "groups",
         **_inventory_kpi_ctx(store, state),
     }
@@ -499,6 +527,7 @@ def objects_export_errors_html(
         ntp_server=config.monitoring.ntp_server or "",
         device_auth="userinfo",
         problem_since_map=state.category_problem_since_map(),
+        excluded_ids=excluded_ids_set(config),
     )
     filename = (
         "wisenet-dashboard-errors-"
@@ -727,6 +756,43 @@ def settings_save(
     return RedirectResponse(url="/settings?saved=1", status_code=303)
 
 
+@router.get("/settings/exclusions", response_class=HTMLResponse)
+def settings_exclusions_page(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+) -> HTMLResponse:
+    config = store.load()
+    excluded = excluded_ids_set(config)
+    recorders = sorted(
+        config.recorders,
+        key=lambda r: (r.object_name.lower(), display_recorder_name(r).lower()),
+    )
+    return templates.TemplateResponse(
+        request,
+        "settings_exclusions.html",
+        {
+            "active_nav": "settings",
+            "recorders": recorders,
+            "excluded_ids": excluded,
+            "toast": _toast_from_query(request),
+        },
+    )
+
+
+@router.post("/settings/exclusions", response_class=HTMLResponse)
+def settings_exclusions_save(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    recorder_ids: list[str] = Form(default=[]),
+) -> Response:
+    store.set_exclusions(recorder_ids)
+    return _redirect(
+        "/settings/exclusions",
+        "success",
+        "Список исключений сохранён",
+    )
+
+
 @router.get("/recorders/new", response_class=HTMLResponse)
 def recorder_new_form(
     request: Request,
@@ -773,12 +839,9 @@ async def recorder_create(
     host: str = Form(""),
     port: str = Form("80"),
     use_https: str = Form("false"),
-    enabled: str = Form("true"),
     store: ConfigStore = Depends(get_store),
 ) -> Response:
-    data, errors = parse_recorder_form(
-        object_name, name, host, port, use_https, enabled
-    )
+    data, errors = parse_recorder_form(object_name, name, host, port, use_https)
     if errors or data is None:
         return templates.TemplateResponse(
             request,
@@ -798,7 +861,6 @@ async def recorder_create(
             host=data.host,
             port=data.port,
             use_https=data.use_https,
-            enabled=data.enabled,
         )
     except ValidationError as e:
         return _form_validation_error(request, None, store, e)
@@ -816,16 +878,13 @@ async def recorder_update(
     host: str = Form(""),
     port: str = Form("80"),
     use_https: str = Form("false"),
-    enabled: str = Form("true"),
     store: ConfigStore = Depends(get_store),
 ) -> Response:
     recorder = store.get_recorder(recorder_id)
     if not recorder:
         return HTMLResponse("Не найден", status_code=404)
 
-    data, errors = parse_recorder_form(
-        object_name, name, host, port, use_https, enabled
-    )
+    data, errors = parse_recorder_form(object_name, name, host, port, use_https)
     if errors or data is None:
         return templates.TemplateResponse(
             request,
@@ -845,7 +904,6 @@ async def recorder_update(
             host=data.host,
             port=data.port,
             use_https=data.use_https,
-            enabled=data.enabled,
         )
     except ValidationError as e:
         return _form_validation_error(request, recorder, store, e)
@@ -868,6 +926,65 @@ def recorder_delete(
     if "/recorders" in referer and "/objects" not in referer:
         return _redirect("/recorders", "success", "Регистратор удалён")
     return _redirect("/objects", "success", "Регистратор удалён")
+
+
+@router.post("/recorders/{recorder_id}/exclude", response_class=HTMLResponse)
+def recorder_exclude(
+    request: Request,
+    recorder_id: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    if not store.add_exclusion(recorder_id):
+        return HTMLResponse("Не найден", status_code=404)
+    recorder = store.get_recorder(recorder_id)
+    if not recorder:
+        return HTMLResponse("Не найден", status_code=404)
+    referer = request.headers.get("HX-Current-URL", "")
+    template = _recorder_partial_template(referer)
+    metrics = state.get_recorder_metrics(recorder_id)
+    response = templates.TemplateResponse(
+        request,
+        template,
+        _recorder_partial_context(
+            recorder,
+            metrics,
+            template=template,
+            excluded_ids=_excluded_ids(store),
+        ),
+    )
+    return _attach_toast(
+        response, "success", f"{display_recorder_name(recorder)} исключён из мониторинга"
+    )
+
+
+@router.post("/recorders/{recorder_id}/unexclude", response_class=HTMLResponse)
+def recorder_unexclude(
+    request: Request,
+    recorder_id: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    store.remove_exclusion(recorder_id)
+    recorder = store.get_recorder(recorder_id)
+    if not recorder:
+        return HTMLResponse("Не найден", status_code=404)
+    referer = request.headers.get("HX-Current-URL", "")
+    template = _recorder_partial_template(referer)
+    metrics = state.get_recorder_metrics(recorder_id)
+    response = templates.TemplateResponse(
+        request,
+        template,
+        _recorder_partial_context(
+            recorder,
+            metrics,
+            template=template,
+            excluded_ids=_excluded_ids(store),
+        ),
+    )
+    return _attach_toast(
+        response, "success", f"{display_recorder_name(recorder)} снова в мониторинге"
+    )
 
 
 @router.post("/recorders/{recorder_id}/check", response_class=HTMLResponse)
@@ -899,6 +1016,12 @@ async def recorder_check(
         )
         return HTMLResponse("Не найден", status_code=404)
 
+    config = store.load()
+    if is_excluded(recorder_id, config):
+        return HTMLResponse(
+            "Регистратор исключён из мониторинга", status_code=400
+        )
+
     credentials = store.get_credentials()
     has_credentials = bool(credentials.username and credentials.password)
     check_logger.info(
@@ -909,7 +1032,7 @@ async def recorder_check(
             "extra_object_name": recorder.object_name,
             "extra_host": recorder.host,
             "extra_port": recorder.port,
-            "extra_enabled": recorder.enabled,
+            "extra_excluded": is_excluded(recorder.id, config),
             "extra_has_credentials": has_credentials,
         },
     )
@@ -938,7 +1061,12 @@ async def recorder_check(
     response = templates.TemplateResponse(
         request,
         template,
-        _recorder_partial_context(updated, metrics, template=template),
+        _recorder_partial_context(
+            updated,
+            metrics,
+            template=template,
+            excluded_ids=_excluded_ids(store),
+        ),
     )
     if outcome_status and outcome_status.value == "online":
         return _attach_toast(
@@ -969,10 +1097,10 @@ async def recorder_enable_ntp(
     if not recorder:
         return HTMLResponse("Не найден", status_code=404)
 
-    if not recorder.enabled:
-        return HTMLResponse("Регистратор отключён", status_code=400)
-
     config = store.load()
+    if is_excluded(recorder_id, config):
+        return HTMLResponse("Регистратор исключён из мониторинга", status_code=400)
+
     credentials = config.credentials
     ntp_server = (config.monitoring.ntp_server or "").strip()
     metrics = state.get_recorder_metrics(recorder_id)
@@ -993,7 +1121,12 @@ async def recorder_enable_ntp(
         response = templates.TemplateResponse(
             request,
             template,
-            _recorder_partial_context(recorder, metrics, template=template),
+            _recorder_partial_context(
+                recorder,
+                metrics,
+                template=template,
+                excluded_ids=_excluded_ids(store),
+            ),
             status_code=status_code,
         )
         return _attach_toast(response, "error", message)
@@ -1042,7 +1175,12 @@ async def recorder_enable_ntp(
     response = templates.TemplateResponse(
         request,
         template,
-        _recorder_partial_context(updated, metrics, template=template),
+        _recorder_partial_context(
+            updated,
+            metrics,
+            template=template,
+            excluded_ids=_excluded_ids(store),
+        ),
     )
     return _attach_toast(response, "success", toast_msg)
 

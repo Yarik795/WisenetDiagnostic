@@ -27,7 +27,7 @@
         <dd>
           <div class="sync-row">
             <span class="{{ sync_type_badge_class(metrics.sync_type) }}">{{ sync_type_label(metrics.sync_type) }}</span>
-            {% if show_ntp_action_button(metrics) and recorder.enabled %}
+            {% if show_ntp_action_button(metrics) and not is_recorder_excluded(recorder.id) %}
             <button
               type="button"
               class="btn btn-outline btn-sm sync-action-btn"

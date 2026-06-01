@@ -47,8 +47,6 @@ def _recorder_has_poll_data(
     recorder: Recorder,
     metrics: Optional[RecorderMetricsRow],
 ) -> bool:
-    if not recorder.enabled:
-        return False
     if metrics is None or metrics.last_polled_at is None:
         return False
     return metrics.device_online

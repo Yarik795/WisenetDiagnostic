@@ -19,7 +19,8 @@
   <div class="object-group-body">
     {% for recorder in group.recorders %}
     {% set metrics = metrics_map.get(recorder.id) %}
-    {% set status = effective_status(recorder, metrics) %}
+    {% set is_excluded = recorder.id in excluded_ids %}
+    {% set status = effective_status(recorder, metrics, excluded_ids=excluded_ids) %}
     {% set error = metrics.health_reason if metrics else recorder.last_error %}
     {% include "partials/recorder_row.html" %}
     {% endfor %}

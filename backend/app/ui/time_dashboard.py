@@ -48,9 +48,6 @@ def classify_time_health(
     metrics: Optional[RecorderMetricsRow],
     settings: MonitoringSettings,
 ) -> TimeCategory:
-    if not recorder.enabled:
-        return "unknown"
-
     if metrics is None or metrics.last_polled_at is None:
         return "unknown"
 
@@ -86,10 +83,13 @@ def aggregate_time_stats(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> TimeDashboardStats:
+    excluded = excluded_ids or set()
     stats = TimeDashboardStats()
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         stats.total_enabled += 1
         metrics = metrics_map.get(rec.id)
@@ -114,11 +114,13 @@ def list_problem_rows(
     *,
     problems_only: bool = True,
     search: str = "",
+    excluded_ids: set[str] | None = None,
 ) -> list[TimeProblemRow]:
+    excluded = excluded_ids or set()
     q = search.strip().lower()
     rows: list[TimeProblemRow] = []
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         metrics = metrics_map.get(rec.id)
         cat = classify_time_health(rec, metrics, settings)
@@ -133,7 +135,7 @@ def list_problem_rows(
                 recorder=rec,
                 metrics=metrics,
                 category=cat,
-                effective=effective_status(rec, metrics),
+                effective=effective_status(rec, metrics, excluded_ids=excluded),
             )
         )
     rows.sort(
@@ -150,11 +152,14 @@ def object_time_problem_count(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> int:
+    excluded = excluded_ids or set()
     return sum(
         1
         for r in recorders
-        if r.enabled
+        if r.id not in excluded
         and is_time_problem_category(
             classify_time_health(r, metrics_map.get(r.id), settings)
         )
@@ -171,14 +176,18 @@ def time_dashboard_context(
     problems_only: bool = True,
     search: str = "",
     show_all_table: bool = False,
+    excluded_ids: set[str] | None = None,
 ) -> dict:
-    stats = aggregate_time_stats(recorders, metrics_map, settings)
+    stats = aggregate_time_stats(
+        recorders, metrics_map, settings, excluded_ids=excluded_ids
+    )
     problem_rows = list_problem_rows(
         recorders,
         metrics_map,
         settings,
         problems_only=not show_all_table and problems_only,
         search=search,
+        excluded_ids=excluded_ids,
     )
     if show_all_table and not problems_only:
         problem_rows = list_problem_rows(
@@ -187,6 +196,7 @@ def time_dashboard_context(
             settings,
             problems_only=False,
             search=search,
+            excluded_ids=excluded_ids,
         )
     return {
         "time_stats": stats,

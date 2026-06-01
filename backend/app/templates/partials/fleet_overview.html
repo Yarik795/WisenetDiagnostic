@@ -11,7 +11,7 @@
     </div>
     <div class="fleet-kpi">
       <span class="fleet-kpi-value">{{ fleet_enabled_count }}</span>
-      <span class="fleet-kpi-label">Включено</span>
+      <span class="fleet-kpi-label">В мониторинге</span>
     </div>
     <div class="fleet-kpi fleet-kpi--warn">
       <span class="fleet-kpi-dot" aria-hidden="true"></span>
@@ -37,8 +37,8 @@
       <span><span class="legend-dot legend-dot--warn"></span> Деградация {{ fleet_status_counts.warn }}</span>
       <span><span class="legend-dot legend-dot--error"></span> Критично {{ fleet_status_counts.error }}</span>
       <span><span class="legend-dot legend-dot--unknown"></span> Нет данных {{ fleet_status_counts.unknown }}</span>
-      {% if fleet_status_counts.disabled > 0 %}
-      <span><span class="legend-dot legend-dot--disabled"></span> Выключено {{ fleet_status_counts.disabled }}</span>
+      {% if fleet_status_counts.excluded > 0 %}
+      <span><span class="legend-dot legend-dot--excluded"></span> Исключено {{ fleet_status_counts.excluded }}</span>
       {% endif %}
     </div>
     <div

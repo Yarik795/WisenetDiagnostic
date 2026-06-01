@@ -9,10 +9,9 @@ from app.ui.time_dashboard import (
 )
 
 
-def _rec(enabled=True, id="r1", object_name="Obj"):
+def _rec(id="r1", object_name="Obj"):
     return SimpleNamespace(
         id=id,
-        enabled=enabled,
         object_name=object_name,
         host="10.0.0.1",
         name="NVR",

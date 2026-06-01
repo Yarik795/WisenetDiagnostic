@@ -20,6 +20,10 @@ from .health_classifiers import (
 from .time_dashboard import time_dashboard_context
 
 
+def _excluded_set(excluded_ids: set[str] | None) -> set[str]:
+    return excluded_ids if excluded_ids is not None else set()
+
+
 @dataclass
 class CategoryDashboardStats:
     total_enabled: int = 0
@@ -74,10 +78,13 @@ def aggregate_category_stats(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> CategoryDashboardStats:
+    excluded = _excluded_set(excluded_ids)
     stats = CategoryDashboardStats()
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         stats.total_enabled += 1
         metrics = metrics_map.get(rec.id)
@@ -103,12 +110,14 @@ def list_health_problem_rows(
     problems_only: bool = True,
     search: str = "",
     category_filter: HealthCategory,
+    excluded_ids: set[str] | None = None,
 ) -> list[HealthProblemRow]:
+    excluded = _excluded_set(excluded_ids)
     q = search.strip().lower()
     label = CATEGORY_LABELS[category_filter]
     rows: list[HealthProblemRow] = []
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         metrics = metrics_map.get(rec.id)
         status, reason = classify_category(category_filter, rec, metrics, settings)
@@ -130,7 +139,7 @@ def list_health_problem_rows(
                 status=status,
                 value_display=_value_display(category_filter, metrics, settings),
                 reason=reason,
-                effective=effective_status(rec, metrics),
+                effective=effective_status(rec, metrics, excluded_ids=excluded),
                 polled_at_display=polled,
             )
         )
@@ -233,6 +242,7 @@ def build_category_sections(
     compact: bool = False,
     problems_only: bool = True,
     search: str = "",
+    excluded_ids: set[str] | None = None,
 ) -> list[CategoryDashboardSection]:
     sections: list[CategoryDashboardSection] = []
     for cat, label in CATEGORY_LABELS.items():
@@ -245,6 +255,7 @@ def build_category_sections(
                 compact=compact,
                 problems_only=problems_only,
                 search=search,
+                excluded_ids=excluded_ids,
             )
             sections.append(
                 CategoryDashboardSection(
@@ -258,7 +269,9 @@ def build_category_sections(
             )
             continue
 
-        stats = aggregate_category_stats(cat, recorders, metrics_map, settings)
+        stats = aggregate_category_stats(
+            cat, recorders, metrics_map, settings, excluded_ids=excluded_ids
+        )
         rows = list_health_problem_rows(
             recorders,
             metrics_map,
@@ -266,6 +279,7 @@ def build_category_sections(
             problems_only=problems_only,
             search=search,
             category_filter=cat,
+            excluded_ids=excluded_ids,
         )
         sections.append(
             CategoryDashboardSection(
@@ -285,10 +299,13 @@ def object_health_problem_count(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> int:
+    excluded = _excluded_set(excluded_ids)
     count = 0
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         metrics = metrics_map.get(rec.id)
         statuses = [
@@ -304,10 +321,13 @@ def object_category_problem_counts(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> dict[HealthCategory, int]:
+    excluded = _excluded_set(excluded_ids)
     counts = {cat: 0 for cat in CATEGORY_LABELS}
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         metrics = metrics_map.get(rec.id)
         for cat in CATEGORY_LABELS:
@@ -317,7 +337,16 @@ def object_category_problem_counts(
     return counts
 
 
-_STATUS_ORDER = {"error": 4, "offline": 4, "warn": 3, "unknown": 2, "ok": 1, "online": 1, "disabled": 0}
+_STATUS_ORDER = {
+    "error": 4,
+    "offline": 4,
+    "warn": 3,
+    "unknown": 2,
+    "ok": 1,
+    "online": 1,
+    "disabled": 0,
+    "excluded": 0,
+}
 
 
 @dataclass
@@ -326,7 +355,7 @@ class FleetStatusCounts:
     warn: int = 0
     error: int = 0
     unknown: int = 0
-    disabled: int = 0
+    excluded: int = 0
 
     @property
     def stacked_segments(self) -> list[tuple[str, int, str]]:
@@ -335,12 +364,17 @@ class FleetStatusCounts:
             ("warn", self.warn, "time-stack-warn"),
             ("error", self.error, "time-stack-error"),
             ("unknown", self.unknown, "time-stack-unknown"),
-            ("disabled", self.disabled, "fleet-stack-disabled"),
+            ("excluded", self.excluded, "fleet-stack-excluded"),
         ]
 
     @property
     def stacked_total(self) -> int:
-        return self.ok + self.warn + self.error + self.unknown + self.disabled
+        return self.ok + self.warn + self.error + self.unknown + self.excluded
+
+    @property
+    def disabled(self) -> int:
+        """Обратная совместимость шаблонов."""
+        return self.excluded
 
 
 @dataclass
@@ -406,8 +440,10 @@ def _status_rank(status: str) -> int:
 def _recorder_has_poll_data(
     recorder: Recorder,
     metrics: Optional[RecorderMetricsRow],
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> bool:
-    if not recorder.enabled:
+    if recorder.id in _excluded_set(excluded_ids):
         return False
     if metrics is None or metrics.last_polled_at is None:
         return False
@@ -417,13 +453,16 @@ def _recorder_has_poll_data(
 def aggregate_fleet_status_counts(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> FleetStatusCounts:
+    excluded = _excluded_set(excluded_ids)
     counts = FleetStatusCounts()
     for rec in recorders:
-        if not rec.enabled:
-            counts.disabled += 1
+        if rec.id in excluded:
+            counts.excluded += 1
             continue
-        status = effective_status(rec, metrics_map.get(rec.id))
+        status = effective_status(rec, metrics_map.get(rec.id), excluded_ids=excluded)
         if status in ("ok", "online"):
             counts.ok += 1
         elif status == "warn":
@@ -438,12 +477,16 @@ def aggregate_fleet_status_counts(
 def count_nvr_without_poll_data(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> int:
     n = 0
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in _excluded_set(excluded_ids):
             continue
-        if not _recorder_has_poll_data(rec, metrics_map.get(rec.id)):
+        if not _recorder_has_poll_data(
+            rec, metrics_map.get(rec.id), excluded_ids=excluded_ids
+        ):
             n += 1
     return n
 
@@ -452,8 +495,10 @@ def recorder_has_health_problems(
     recorder: Recorder,
     metrics: Optional[RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> bool:
-    if not recorder.enabled:
+    if recorder.id in _excluded_set(excluded_ids):
         return False
     statuses = [
         classify_category(c, recorder, metrics, settings)[0]
@@ -469,26 +514,35 @@ def fleet_health_percent(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> int:
-    enabled = [r for r in recorders if r.enabled]
-    if not enabled:
+    excluded = _excluded_set(excluded_ids)
+    monitored = [r for r in recorders if r.id not in excluded]
+    if not monitored:
         return 100
     healthy = sum(
         1
-        for r in enabled
-        if not recorder_has_health_problems(r, metrics_map.get(r.id), settings)
+        for r in monitored
+        if not recorder_has_health_problems(
+            r, metrics_map.get(r.id), settings, excluded_ids=excluded
+        )
     )
-    return round(100 * healthy / len(enabled))
+    return round(100 * healthy / len(monitored))
 
 
 def build_category_problem_bars(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> list[CategoryProblemBar]:
     bars: list[CategoryProblemBar] = []
     for cat, label in CATEGORY_LABELS.items():
-        stats = aggregate_category_stats(cat, recorders, metrics_map, settings)
+        stats = aggregate_category_stats(
+            cat, recorders, metrics_map, settings, excluded_ids=excluded_ids
+        )
         bars.append(
             CategoryProblemBar(
                 category=cat,
@@ -509,7 +563,9 @@ def build_top_problem_objects(
     settings: MonitoringSettings,
     *,
     limit: int = 8,
+    excluded_ids: set[str] | None = None,
 ) -> list[TopProblemObject]:
+    excluded = _excluded_set(excluded_ids)
     by_object: dict[str, list[Recorder]] = {}
     for rec in recorders:
         by_object.setdefault(rec.object_name, []).append(rec)
@@ -519,8 +575,10 @@ def build_top_problem_objects(
         problem_nvr = sum(
             1
             for r in recs
-            if r.enabled
-            and recorder_has_health_problems(r, metrics_map.get(r.id), settings)
+            if r.id not in excluded
+            and recorder_has_health_problems(
+                r, metrics_map.get(r.id), settings, excluded_ids=excluded
+            )
         )
         if problem_nvr == 0:
             continue
@@ -549,37 +607,41 @@ def _cell_for_column(
     recs: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> ObjectMatrixCell:
-    enabled = [r for r in recs if r.enabled]
-    if not enabled:
+    excluded = _excluded_set(excluded_ids)
+    monitored = [r for r in recs if r.id not in excluded]
+    if not monitored:
         return ObjectMatrixCell(
             column=column,
-            status="disabled",
+            status="excluded",
             problem_count=0,
-            title="Все NVR выключены",
+            title="Все NVR исключены из мониторинга",
         )
 
     if category is None:
         statuses = [
-            effective_status(r, metrics_map.get(r.id)) for r in enabled
+            effective_status(r, metrics_map.get(r.id), excluded_ids=excluded)
+            for r in monitored
         ]
         worst = max(statuses, key=_status_rank) if statuses else "unknown"
         problems = sum(
             1
-            for r in enabled
-            if effective_status(r, metrics_map.get(r.id))
+            for r in monitored
+            if effective_status(r, metrics_map.get(r.id), excluded_ids=excluded)
             in ("warn", "error", "offline", "unknown")
         )
         return ObjectMatrixCell(
             column=column,
             status=worst,
             problem_count=problems,
-            title=f"{problems} из {len(enabled)} NVR с отклонением",
+            title=f"{problems} из {len(monitored)} NVR с отклонением",
         )
 
     statuses: list[HealthCategoryStatus] = []
     problems = 0
-    for rec in enabled:
+    for rec in monitored:
         st, reason = classify_category(
             category, rec, metrics_map.get(rec.id), settings
         )
@@ -589,7 +651,7 @@ def _cell_for_column(
     worst = worst_category_status(*statuses) if statuses else "unknown"
     label = CATEGORY_LABELS[category]
     if problems:
-        title = f"{label}: {problems} из {len(enabled)} NVR"
+        title = f"{label}: {problems} из {len(monitored)} NVR"
     elif worst == "unknown":
         title = f"{label}: нет суммарных данных API"
     else:
@@ -606,21 +668,28 @@ def build_object_health_matrix(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> list[ObjectMatrixRow]:
+    excluded = _excluded_set(excluded_ids)
     by_object: dict[str, list[Recorder]] = {}
     for rec in recorders:
         by_object.setdefault(rec.object_name, []).append(rec)
 
     rows: list[ObjectMatrixRow] = []
     for name, recs in by_object.items():
-        enabled = [r for r in recs if r.enabled]
+        monitored = [r for r in recs if r.id not in excluded]
         problem_nvr = sum(
             1
-            for r in enabled
-            if recorder_has_health_problems(r, metrics_map.get(r.id), settings)
+            for r in monitored
+            if recorder_has_health_problems(
+                r, metrics_map.get(r.id), settings, excluded_ids=excluded
+            )
         )
         cells = [
-            _cell_for_column(col, cat, recs, metrics_map, settings)
+            _cell_for_column(
+                col, cat, recs, metrics_map, settings, excluded_ids=excluded
+            )
             for col, cat in _MATRIX_COLUMNS
         ]
         rows.append(
@@ -646,10 +715,13 @@ def build_object_health_matrix(
 def _fleet_last_polled_display(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> str:
+    excluded = _excluded_set(excluded_ids)
     latest: Optional[Any] = None
     for rec in recorders:
-        if not rec.enabled:
+        if rec.id in excluded:
             continue
         metrics = metrics_map.get(rec.id)
         if metrics and metrics.last_polled_at:
@@ -664,18 +736,23 @@ def fleet_overview_context(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
+    *,
+    excluded_ids: set[str] | None = None,
 ) -> dict:
+    excluded = _excluded_set(excluded_ids)
     object_names = {r.object_name for r in recorders}
-    enabled_recs = [r for r in recorders if r.enabled]
-    status_counts = aggregate_fleet_status_counts(recorders, metrics_map)
+    monitored_recs = [r for r in recorders if r.id not in excluded]
+    status_counts = aggregate_fleet_status_counts(
+        recorders, metrics_map, excluded_ids=excluded
+    )
     category_counts = object_category_problem_counts(
-        recorders, metrics_map, settings
+        recorders, metrics_map, settings, excluded_ids=excluded
     )
     critical_nvr = 0
     warn_nvr = 0
-    for rec in enabled_recs:
+    for rec in monitored_recs:
         metrics = metrics_map.get(rec.id)
-        eff = effective_status(rec, metrics)
+        eff = effective_status(rec, metrics, excluded_ids=excluded)
         cat_statuses = [
             classify_category(c, rec, metrics, settings)[0]
             for c in CATEGORY_LABELS
@@ -692,32 +769,35 @@ def fleet_overview_context(
     return {
         "fleet_object_count": len(object_names),
         "fleet_nvr_count": len(recorders),
-        "fleet_enabled_count": len(enabled_recs),
+        "fleet_enabled_count": len(monitored_recs),
+        "fleet_excluded_count": status_counts.excluded,
         "fleet_problem_nvr_count": object_health_problem_count(
-            recorders, metrics_map, settings
+            recorders, metrics_map, settings, excluded_ids=excluded
         ),
-        "fleet_no_data_count": count_nvr_without_poll_data(recorders, metrics_map),
+        "fleet_no_data_count": count_nvr_without_poll_data(
+            recorders, metrics_map, excluded_ids=excluded
+        ),
         "fleet_status_counts": status_counts,
         "fleet_category_counts": category_counts,
         "fleet_health_percent": fleet_health_percent(
-            recorders, metrics_map, settings
+            recorders, metrics_map, settings, excluded_ids=excluded
         ),
         "fleet_last_polled_display": _fleet_last_polled_display(
-            recorders, metrics_map
+            recorders, metrics_map, excluded_ids=excluded
         ),
         "fleet_critical_count": critical_nvr,
         "fleet_warn_count": warn_nvr,
         "fleet_unknown_count": status_counts.unknown,
         "health_category_options": list(CATEGORY_LABELS.items()),
         "object_matrix_rows": build_object_health_matrix(
-            recorders, metrics_map, settings
+            recorders, metrics_map, settings, excluded_ids=excluded
         ),
         "object_matrix_headers": _MATRIX_HEADERS,
         "top_problem_objects": build_top_problem_objects(
-            recorders, metrics_map, settings
+            recorders, metrics_map, settings, excluded_ids=excluded
         ),
         "category_problem_bars": build_category_problem_bars(
-            recorders, metrics_map, settings
+            recorders, metrics_map, settings, excluded_ids=excluded
         ),
     }
 
@@ -732,6 +812,7 @@ def health_dashboard_context(
     problems_only: bool = True,
     search: str = "",
     highlight_category: Optional[HealthCategory] = None,
+    excluded_ids: set[str] | None = None,
 ) -> dict:
     sections = build_category_sections(
         recorders,
@@ -741,6 +822,7 @@ def health_dashboard_context(
         compact=compact,
         problems_only=problems_only,
         search=search,
+        excluded_ids=excluded_ids,
     )
     if highlight_category:
         for section in sections:

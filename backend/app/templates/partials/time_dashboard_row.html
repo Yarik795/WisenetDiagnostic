@@ -18,7 +18,7 @@
   <td style="font-size:12px;color:var(--text-secondary);max-width:200px;">{% if m and m.health_reason %}{{ m.health_reason }}{% else %}—{% endif %}</td>
   {% if time_show_actions|default(true) %}
   <td>
-    {% if m and show_ntp_action_button(m) and rec.enabled %}
+    {% if m and show_ntp_action_button(m) and not is_recorder_excluded(rec.id) %}
     <button
       type="button"
       class="btn btn-outline btn-sm sync-action-btn"

@@ -203,3 +203,51 @@ def test_merge_fail_on_empty_object_name() -> None:
     assert merged == []
     assert len(errors) == 1
     assert errors[0].source_row == 4
+
+
+def test_sync_preserves_exclusions(tmp_path: Path) -> None:
+    from app.cmdb_sync import sync_from_cmdb
+    from app.config_store import ConfigStore
+    from app.models import AppConfig, ExclusionSettings
+
+    store = ConfigStore(path=tmp_path / "config.json")
+    store.save(
+        AppConfig(
+            recorders=[
+                Recorder(
+                    id="nvr-keep",
+                    object_name="Old",
+                    host="10.1.1.1",
+                    port=80,
+                )
+            ],
+            exclusions=ExclusionSettings(recorder_ids=["nvr-keep"]),
+        )
+    )
+
+    xlsx = tmp_path / "cmdb.xlsx"
+    xlsx.write_bytes(b"")
+    from unittest.mock import patch
+    from cmdb_reader import CmdbParseResult
+
+    rows = [
+        CmdbRecorderRow(
+            host="10.1.1.1",
+            object_name="New name",
+            name="NVR",
+            source_row=5,
+        )
+    ]
+    parsed = CmdbParseResult(
+        rows=rows,
+        skipped_empty_ip=0,
+        skipped_wrong_type=0,
+        total_data_rows=1,
+    )
+
+    with patch("app.cmdb_sync.read_cmdb_xlsx", return_value=parsed):
+        result = sync_from_cmdb(store, cmdb_path=xlsx, dry_run=True)
+
+    assert result.ok
+    config = store.load()
+    assert "nvr-keep" in config.exclusions.recorder_ids

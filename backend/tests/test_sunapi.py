@@ -9,7 +9,6 @@ def test_build_deviceinfo_url_http() -> None:
         host="10.0.0.1",
         port=80,
         use_https=False,
-        enabled=True,
     )
     url = build_deviceinfo_url(r)
     assert url == (
@@ -25,7 +24,6 @@ def test_build_deviceinfo_url_https() -> None:
         host="nvr.local",
         port=443,
         use_https=True,
-        enabled=True,
     )
     url = build_deviceinfo_url(r)
     assert url.startswith("https://nvr.local:443/")

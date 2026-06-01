@@ -6,7 +6,8 @@
   <span aria-hidden="true">⚠</span>
   <p>Пароль хранится в локальном <code>config.json</code> на сервере. Не размещайте конфиг в публичных репозиториях.</p>
 </div>
-<div class="card" style="max-width:480px;padding:24px;">
+<div class="card" style="max-width:480px;padding:24px;margin-bottom:16px;">
+  <h2 style="font-size:16px;margin:0 0 16px;">Учётные данные SUNAPI</h2>
   <form method="post" action="/settings">
     <div class="field">
       <label class="label" for="username">Логин SUNAPI</label>
@@ -20,5 +21,10 @@
     </div>
     <button type="submit" class="btn btn-primary">Сохранить</button>
   </form>
+</div>
+<div class="card" style="max-width:480px;padding:24px;">
+  <h2 style="font-size:16px;margin:0 0 8px;">Исключения из мониторинга</h2>
+  <p style="font-size:14px;color:var(--text-secondary);margin:0 0 16px;">Управление списком NVR, которые не опрашиваются и не участвуют в отчётах.</p>
+  <a href="/settings/exclusions" class="btn btn-outline">Открыть список исключений</a>
 </div>
 {% endblock %}

@@ -1,6 +1,6 @@
 <div
   id="recorder-row-{{ recorder.id }}"
-  class="recorder-row recorder-row--stacked"
+  class="recorder-row recorder-row--stacked{% if is_excluded %} recorder-row--excluded{% endif %}"
   data-recorder-row
   data-search-text="{{ recorder.object_name }} {{ recorder.host }} {{ recorder.name or '' }}"
 >
@@ -25,7 +25,7 @@
       <button
         type="button"
         class="btn btn-outline"
-        {% if not recorder.enabled %}disabled{% endif %}
+        {% if is_excluded %}disabled{% endif %}
         hx-post="/recorders/{{ recorder.id }}/check"
         hx-target="#recorder-row-{{ recorder.id }}"
         hx-swap="outerHTML"
@@ -44,6 +44,21 @@
               hx-post="/recorders/{{ recorder.id }}/inventory"
               hx-swap="none"
             >↻ Каналы</button>
+            {% if is_excluded %}
+            <button
+              type="button"
+              hx-post="/recorders/{{ recorder.id }}/unexclude"
+              hx-target="#recorder-row-{{ recorder.id }}"
+              hx-swap="outerHTML"
+            >Вернуть в мониторинг</button>
+            {% else %}
+            <button
+              type="button"
+              hx-post="/recorders/{{ recorder.id }}/exclude"
+              hx-target="#recorder-row-{{ recorder.id }}"
+              hx-swap="outerHTML"
+            >Исключить</button>
+            {% endif %}
             <button
               type="button"
               hx-get="/recorders/{{ recorder.id }}/edit"

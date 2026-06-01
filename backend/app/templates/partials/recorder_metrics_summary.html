@@ -19,6 +19,6 @@
   {% endif %}
   <span>{{ format_channel_counts(metrics.channel_count, metrics.channels_ok, metrics.channels_warn, metrics.channels_error, metrics.channels_unknown) }}</span>
 </div>
-{% elif recorder.enabled %}
+{% elif not is_recorder_excluded(recorder.id) %}
 <div class="metrics-summary metrics-summary--empty">Нет данных опроса — нажмите «Проверить»</div>
 {% endif %}

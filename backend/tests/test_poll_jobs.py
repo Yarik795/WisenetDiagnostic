@@ -26,14 +26,12 @@ def stores(tmp_path: Path) -> tuple[ConfigStore, StateStore]:
                     object_name="Obj",
                     host="10.0.0.1",
                     port=80,
-                    enabled=True,
                 ),
                 Recorder(
                     id="nvr-b",
                     object_name="Obj",
                     host="10.0.0.2",
                     port=80,
-                    enabled=True,
                 ),
             ]
         )

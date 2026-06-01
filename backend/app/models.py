@@ -30,7 +30,6 @@ class RecorderBase(BaseModel):
     host: str = Field(..., min_length=1)
     port: int = Field(default=80, ge=1, le=65535)
     use_https: bool = False
-    enabled: bool = True
 
     @field_validator("object_name", "host")
     @classmethod
@@ -89,10 +88,17 @@ class MonitoringSettings(BaseModel):
         return v
 
 
+class ExclusionSettings(BaseModel):
+    """Регистраторы из списка не опрашиваются и не попадают в отчёты/дашборды проблем."""
+
+    recorder_ids: list[str] = Field(default_factory=list)
+
+
 class AppConfig(BaseModel):
     credentials: Credentials = Field(default_factory=Credentials)
     recorders: list[Recorder] = Field(default_factory=list)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    exclusions: ExclusionSettings = Field(default_factory=ExclusionSettings)
 
 
 class CheckResult(BaseModel):

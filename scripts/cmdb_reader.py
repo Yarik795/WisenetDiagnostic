@@ -177,7 +177,6 @@ def merge_recorders_from_cmdb(
                 "host": row.host,
                 "port": 80,
                 "use_https": False,
-                "enabled": True,
             }
             old = remaining.pop(row.host, None)
             if old:

@@ -68,7 +68,7 @@ def _log_check_result(
         "extra_host": recorder.host,
         "extra_port": recorder.port,
         "extra_use_https": recorder.use_https,
-        "extra_enabled": recorder.enabled,
+        "extra_excluded": kwargs.get("excluded", False),
         "extra_status": outcome.status.value,
         "extra_duration_ms": duration_ms,
         "extra_error": outcome.error,
@@ -87,6 +87,8 @@ async def check_recorder(
     recorder: Recorder,
     credentials: Credentials,
     timeout: float = 15.0,
+    *,
+    excluded: bool = False,
 ) -> SunapiCheckOutcome:
     checked_at = datetime.now(timezone.utc)
     start = time.perf_counter()
@@ -96,13 +98,14 @@ async def check_recorder(
         _log_check_result(recorder, outcome, duration_ms=duration_ms, **kwargs)
         return outcome
 
-    if not recorder.enabled:
+    if excluded:
         return finish(
             SunapiCheckOutcome(
                 status=CheckStatus.DISABLED,
                 checked_at=checked_at,
                 error=None,
-            )
+            ),
+            excluded=True,
         )
 
     if not credentials.username or not credentials.password:

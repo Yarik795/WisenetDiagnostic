@@ -63,7 +63,6 @@ def test_recorders_crud_via_forms(client: TestClient) -> None:
             "host": "10.1.2.3",
             "port": "80",
             "use_https": "false",
-            "enabled": "true",
         },
         follow_redirects=False,
     )
@@ -117,7 +116,6 @@ def test_check_returns_row_fragment(
             "host": "10.0.0.5",
             "port": "80",
             "use_https": "false",
-            "enabled": "true",
         },
         follow_redirects=True,
     )
@@ -148,7 +146,6 @@ def test_enable_ntp_missing_server_config(client: TestClient) -> None:
             host="10.0.0.5",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
 
@@ -183,7 +180,6 @@ def test_enable_ntp_success(
             host="10.0.0.5",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
 
@@ -259,7 +255,6 @@ def test_status_time_category_ntp_fail_in_critical_kpi(client: TestClient) -> No
             host="10.0.0.1",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     state = app.dependency_overrides[get_state_store]()
@@ -287,7 +282,6 @@ def test_objects_page_has_inventory_kpi_not_dashboard_stack(client: TestClient) 
             host="10.0.0.1",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     r = client.get("/objects")
@@ -310,7 +304,6 @@ def test_status_page_has_category_dashboard_stack(client: TestClient) -> None:
             host="10.0.0.1",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     r = client.get("/status")
@@ -333,7 +326,6 @@ def test_objects_fleet_category_chip_links(
             host="10.0.0.1",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     state = app.dependency_overrides[get_state_store]()
@@ -367,7 +359,6 @@ def test_status_top_problem_objects(
             host="10.0.0.9",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     state = app.dependency_overrides[get_state_store]()
@@ -399,7 +390,6 @@ def test_objects_health_matrix_deep_link_without_object_groups_hash(
             host="10.0.0.10",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     state = app.dependency_overrides[get_state_store]()
@@ -432,7 +422,6 @@ def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
             host="192.168.1.10",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     state = app.dependency_overrides[get_state_store]()
@@ -466,7 +455,6 @@ def test_objects_export_errors_html(client: TestClient) -> None:
             host="10.1.2.3",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     state = app.dependency_overrides[get_state_store]()
@@ -507,7 +495,6 @@ def test_objects_table_view(client: TestClient) -> None:
             host="10.0.0.2",
             port=80,
             use_https=False,
-            enabled=True,
         )
     )
     r = client.get("/objects?view=table")
@@ -517,3 +504,88 @@ def test_objects_table_view(client: TestClient) -> None:
     assert "data-object-group" not in r.text
     assert "fleet-overview" in r.text
     assert "object-health-matrix" not in r.text
+
+
+def test_recorder_exclude_unexclude(client: TestClient) -> None:
+    client.post(
+        "/recorders",
+        data={
+            "object_name": "Obj",
+            "name": "NVR",
+            "host": "10.0.0.8",
+            "port": "80",
+            "use_https": "false",
+        },
+        follow_redirects=True,
+    )
+    store = app.dependency_overrides[get_store]()
+    rid = store.list_recorders()[0].id
+
+    r = client.post(
+        f"/recorders/{rid}/exclude",
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://127.0.0.1/objects",
+        },
+    )
+    assert r.status_code == 200
+    assert "recorder-row--excluded" in r.text
+    assert rid in store.load().exclusions.recorder_ids
+
+    r2 = client.post(
+        f"/recorders/{rid}/unexclude",
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://127.0.0.1/objects",
+        },
+    )
+    assert r2.status_code == 200
+    assert rid not in store.load().exclusions.recorder_ids
+
+
+def test_settings_exclusions_page(client: TestClient) -> None:
+    client.post(
+        "/recorders",
+        data={
+            "object_name": "Obj",
+            "name": "",
+            "host": "10.0.0.9",
+            "port": "80",
+            "use_https": "false",
+        },
+        follow_redirects=True,
+    )
+    store = app.dependency_overrides[get_store]()
+    rid = store.list_recorders()[0].id
+
+    page = client.get("/settings/exclusions")
+    assert page.status_code == 200
+    assert "Исключения из мониторинга" in page.text
+
+    r = client.post(
+        "/settings/exclusions",
+        data={"recorder_ids": [rid]},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert rid in store.load().exclusions.recorder_ids
+
+
+def test_check_blocked_for_excluded(client: TestClient) -> None:
+    client.post(
+        "/recorders",
+        data={
+            "object_name": "Obj",
+            "name": "",
+            "host": "10.0.0.7",
+            "port": "80",
+            "use_https": "false",
+        },
+        follow_redirects=True,
+    )
+    store = app.dependency_overrides[get_store]()
+    rid = store.list_recorders()[0].id
+    store.add_exclusion(rid)
+
+    r = client.post(f"/recorders/{rid}/check")
+    assert r.status_code == 400

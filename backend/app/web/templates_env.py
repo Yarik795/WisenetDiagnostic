@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from ..config_store import ConfigStore
+from ..exclusions import excluded_ids_set
 from ..ui.grouping import (
     STATUS_LABELS,
     effective_status,
@@ -89,3 +90,10 @@ templates.env.globals["object_category_problem_counts"] = object_category_proble
 templates.env.globals["recorder_problem_badges"] = recorder_problem_badges
 templates.env.globals["category_badge_code"] = lambda c: BADGE_CODES.get(c, c)
 templates.env.globals["category_label"] = lambda c: CATEGORY_LABELS.get(c, c)
+
+
+def _is_recorder_excluded(recorder_id: str) -> bool:
+    return recorder_id in excluded_ids_set(ConfigStore().load())
+
+
+templates.env.globals["is_recorder_excluded"] = _is_recorder_excluded

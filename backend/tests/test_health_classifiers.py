@@ -12,8 +12,8 @@ from app.ui.health_classifiers import (
 )
 
 
-def _rec(enabled=True, id="r1"):
-    return SimpleNamespace(id=id, enabled=enabled, object_name="Obj", host="10.0.0.1", name="NVR")
+def _rec(id="r1"):
+    return SimpleNamespace(id=id, object_name="Obj", host="10.0.0.1", name="NVR")
 
 
 def _metrics(**kwargs):

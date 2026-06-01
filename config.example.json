@@ -18,6 +18,9 @@
     "ntp_posix_timezone": "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00",
     "display_timezone": "Europe/Moscow"
   },
+  "exclusions": {
+    "recorder_ids": []
+  },
   "recorders": [
     {
       "id": "nvr-001",
@@ -26,7 +29,6 @@
       "host": "10.1.2.3",
       "port": 80,
       "use_https": false,
-      "enabled": true,
       "last_status": null,
       "last_check_at": null,
       "last_error": null

@@ -17,7 +17,6 @@ class RecorderFormData:
     host: str
     port: int
     use_https: bool
-    enabled: bool
 
 
 def parse_recorder_form(
@@ -26,7 +25,6 @@ def parse_recorder_form(
     host: str,
     port: str,
     use_https: str,
-    enabled: str,
 ) -> tuple[Optional[RecorderFormData], dict[str, str]]:
     errors: dict[str, str] = {}
     obj = object_name.strip()
@@ -56,7 +54,6 @@ def parse_recorder_form(
             host=h,
             port=port_num,
             use_https=use_https == "true",
-            enabled=enabled == "true",
         ),
         {},
     )

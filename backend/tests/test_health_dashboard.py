@@ -11,10 +11,9 @@ from app.ui.health_dashboard import (
 )
 
 
-def _rec(id="a", enabled=True):
+def _rec(id="a"):
     return SimpleNamespace(
         id=id,
-        enabled=enabled,
         object_name="Obj",
         host="10.0.0.1",
         name="NVR",
@@ -78,6 +77,18 @@ def test_aggregate_category_stats() -> None:
     assert stats.total_enabled == 1
     assert stats.warn == 1
     assert stats.has_problems is True
+
+
+def test_excluded_recorder_skipped_in_problem_rows() -> None:
+    settings = MonitoringSettings()
+    rows = list_health_problem_rows(
+        [_rec()],
+        {"a": _metrics()},
+        settings,
+        category_filter="temperature",
+        excluded_ids={"a"},
+    )
+    assert rows == []
 
 
 def test_list_health_problem_rows_filtered() -> None:

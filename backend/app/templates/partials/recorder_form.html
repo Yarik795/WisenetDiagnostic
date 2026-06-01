@@ -46,12 +46,6 @@
         {% if form %}{% if form.use_https %}checked{% endif %}{% elif recorder and recorder.use_https %}checked{% endif %}>
       <label for="use_https">HTTPS</label>
     </div>
-    <div class="field toggle-row">
-      <input type="hidden" name="enabled" value="false">
-      <input type="checkbox" id="enabled" name="enabled" value="true"
-        {% if form %}{% if form.enabled %}checked{% endif %}{% elif not recorder or recorder.enabled %}checked{% endif %}>
-      <label for="enabled">Включён</label>
-    </div>
     <div style="display:flex;gap:12px;margin-top:24px;">
       <button type="submit" class="btn btn-primary">Сохранить</button>
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('drawer-root').innerHTML=''">Отмена</button>

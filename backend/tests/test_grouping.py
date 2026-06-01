@@ -9,24 +9,23 @@ from app.ui.grouping import (
 
 def _rec(
     object_name: str = "Obj",
-    enabled: bool = True,
+    rec_id: str = "nvr-1",
     last_status: CheckStatus | None = None,
 ) -> Recorder:
     return Recorder(
-        id="nvr-1",
+        id=rec_id,
         object_name=object_name,
         name="NVR",
         host="10.0.0.1",
         port=80,
         use_https=False,
-        enabled=enabled,
         last_status=last_status,
     )
 
 
-def test_effective_status_disabled() -> None:
-    r = _rec(enabled=False, last_status=CheckStatus.ONLINE)
-    assert effective_status(r) == "disabled"
+def test_effective_status_excluded() -> None:
+    r = _rec(last_status=CheckStatus.ONLINE)
+    assert effective_status(r, excluded_ids={"nvr-1"}) == "excluded"
 
 
 def test_effective_status_unknown() -> None:
@@ -35,7 +34,7 @@ def test_effective_status_unknown() -> None:
 
 def test_aggregate_worst_offline() -> None:
     a = _rec(last_status=CheckStatus.ONLINE)
-    b = _rec(last_status=CheckStatus.OFFLINE)
+    b = _rec(rec_id="nvr-2", last_status=CheckStatus.OFFLINE)
     assert aggregate_status([a, b]) == "error"
 
 
@@ -47,7 +46,6 @@ def test_group_by_object_search() -> None:
         host="10.1.1.1",
         port=80,
         use_https=False,
-        enabled=True,
     )
     r2 = Recorder(
         id="nvr-2",
@@ -56,7 +54,6 @@ def test_group_by_object_search() -> None:
         host="10.2.2.2",
         port=80,
         use_https=False,
-        enabled=True,
     )
     groups = group_by_object([r1, r2], search="10.1", sort="name")
     assert len(groups) == 1
@@ -65,5 +62,5 @@ def test_group_by_object_search() -> None:
 
 def test_problem_count() -> None:
     a = _rec(last_status=CheckStatus.ONLINE)
-    b = _rec(last_status=CheckStatus.OFFLINE)
+    b = _rec(rec_id="nvr-2", last_status=CheckStatus.OFFLINE)
     assert problem_count([a, b]) == 1
