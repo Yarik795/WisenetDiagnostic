@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
+from ..cmdb_sync import sync_from_cmdb
 from ..config_store import ConfigStore
 from ..display_time import format_for_display
 from ..logging_config import get_log_file_path, get_logger
@@ -395,6 +396,17 @@ def objects_page(
             ),
         },
     )
+
+
+@router.post("/objects/sync-cmdb", response_class=HTMLResponse)
+def objects_sync_cmdb(
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    result = sync_from_cmdb(store, state=state)
+    if result.ok:
+        return _redirect("/objects", "success", result.message)
+    return _redirect("/objects", "error", result.message)
 
 
 @router.get("/objects/partials/health-dashboard", response_class=HTMLResponse)

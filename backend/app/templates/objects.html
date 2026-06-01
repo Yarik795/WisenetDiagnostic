@@ -10,10 +10,9 @@
 >Экспорт отчета</a>
 {% include "partials/poll_page_actions.html" %}
 <button type="button" class="btn btn-primary"
-  hx-get="/recorders/new"
-  hx-target="#drawer-root"
-  hx-swap="innerHTML"
->+ Добавить регистратор</button>
+  hx-post="/objects/sync-cmdb"
+  hx-confirm="Обновить список регистраторов из cmdb.xlsx? Записи, которых нет в CMDB, будут удалены."
+>Обновить из CMDB</button>
 {% endblock %}
 {% block content %}
 {% include "partials/inventory_header.html" %}
