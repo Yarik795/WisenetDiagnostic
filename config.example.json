@@ -21,6 +21,22 @@
   "exclusions": {
     "recorder_ids": []
   },
+  "email_report": {
+    "enabled": false,
+    "smtp_host": "MTA.SIGMA.SBRF.RU",
+    "smtp_port": 25,
+    "use_starttls": true,
+    "smtp_user": "",
+    "smtp_password": "",
+    "from_email": "monitoring@example.com",
+    "to_emails": ["recipient@example.com"],
+    "subject": "Wisenet Диагностика — отчёт по ошибкам",
+    "send_time": "09:30",
+    "catchup_after_hours": 24,
+    "history_max_entries": 90,
+    "dashboard_history_days": 30,
+    "failed_retry_minutes": 60
+  },
   "recorders": [
     {
       "id": "nvr-001",

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from .config_store import ConfigStore
 from .poll_jobs import PollJobManager
+from .report_delivery import ReportDeliveryService
 from .state_store import StateStore
 
 logger = logging.getLogger("scheduler")
@@ -21,6 +22,7 @@ class MonitoringScheduler:
         self.config_store = config_store
         self.state_store = state_store
         self.poll_jobs = poll_jobs or PollJobManager()
+        self.report_delivery = ReportDeliveryService(config_store, state_store)
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._last_full: datetime | None = None
@@ -58,34 +60,38 @@ class MonitoringScheduler:
         logger.info("monitoring scheduler stopped")
 
     async def _tick(self) -> None:
-        now = datetime.now(timezone.utc)
-        config = self.config_store.load()
-        full_min = config.monitoring.full_poll_interval_minutes
-        inventory_hours = 24
+        try:
+            now = datetime.now(timezone.utc)
+            config = self.config_store.load()
+            full_min = config.monitoring.full_poll_interval_minutes
+            inventory_hours = 24
 
-        do_inventory = (
-            self._last_inventory is None
-            or (now - self._last_inventory).total_seconds() >= inventory_hours * 3600
-        )
-        if do_inventory:
+            do_inventory = (
+                self._last_inventory is None
+                or (now - self._last_inventory).total_seconds()
+                >= inventory_hours * 3600
+            )
+            if do_inventory:
+                ran = await self.poll_jobs.try_run_scheduled(
+                    self.config_store,
+                    self.state_store,
+                    include_inventory=True,
+                )
+                if ran:
+                    self._last_inventory = now
+                    self._last_full = now
+                return
+
+            do_full = (
+                self._last_full is None
+                or (now - self._last_full).total_seconds() >= full_min * 60
+            )
             ran = await self.poll_jobs.try_run_scheduled(
                 self.config_store,
                 self.state_store,
-                include_inventory=True,
+                include_inventory=do_full,
             )
-            if ran:
-                self._last_inventory = now
+            if ran and do_full:
                 self._last_full = now
-            return
-
-        do_full = (
-            self._last_full is None
-            or (now - self._last_full).total_seconds() >= full_min * 60
-        )
-        ran = await self.poll_jobs.try_run_scheduled(
-            self.config_store,
-            self.state_store,
-            include_inventory=do_full,
-        )
-        if ran and do_full:
-            self._last_full = now
+        finally:
+            await asyncio.to_thread(self.report_delivery.tick_sync)

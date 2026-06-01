@@ -58,4 +58,8 @@ def migrate_config_raw(data: dict) -> dict:
                 seen.add(rid)
 
     exclusions["recorder_ids"] = recorder_ids
+
+    if "email_report" not in data or not isinstance(data.get("email_report"), dict):
+        data["email_report"] = {}
+
     return data

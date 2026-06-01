@@ -94,11 +94,40 @@ class ExclusionSettings(BaseModel):
     recorder_ids: list[str] = Field(default_factory=list)
 
 
+class EmailReportSettings(BaseModel):
+    enabled: bool = False
+    smtp_host: str = "MTA.SIGMA.SBRF.RU"
+    smtp_port: int = Field(default=25, ge=1, le=65535)
+    use_starttls: bool = True
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_email: str = ""
+    to_emails: list[str] = Field(default_factory=list)
+    subject: str = "Wisenet Диагностика — отчёт по ошибкам"
+    send_time: str = "09:30"
+    catchup_after_hours: int = Field(default=24, ge=1, le=168)
+    history_max_entries: int = Field(default=90, ge=7, le=365)
+    dashboard_history_days: int = Field(default=30, ge=7, le=90)
+    failed_retry_minutes: int = Field(default=60, ge=5, le=240)
+
+    @field_validator("send_time")
+    @classmethod
+    def validate_send_time(cls, v: str) -> str:
+        parts = v.strip().split(":")
+        if len(parts) != 2:
+            raise ValueError("send_time must be HH:MM")
+        hour, minute = int(parts[0]), int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError("send_time must be a valid HH:MM")
+        return f"{hour:02d}:{minute:02d}"
+
+
 class AppConfig(BaseModel):
     credentials: Credentials = Field(default_factory=Credentials)
     recorders: list[Recorder] = Field(default_factory=list)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     exclusions: ExclusionSettings = Field(default_factory=ExclusionSettings)
+    email_report: EmailReportSettings = Field(default_factory=EmailReportSettings)
 
 
 class CheckResult(BaseModel):

@@ -32,6 +32,7 @@ from ..ui.helpers import display_recorder_name
 from ..ui.metrics_helpers import format_skew, sync_type_label
 from ..ui.health_classifiers import CATEGORY_LABELS, HealthCategory
 from ..ui.error_report import build_error_report_context
+from ..ui.error_report_render import render_error_report_html
 from ..ui.health_dashboard import health_dashboard_context
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
@@ -533,11 +534,8 @@ def objects_export_errors_html(
         "wisenet-dashboard-errors-"
         f"{format_for_display(datetime.now(timezone.utc), '%Y%m%d-%H%M')}.html"
     )
-    response = templates.TemplateResponse(
-        request,
-        "exports/error_report.html",
-        {"report": report},
-    )
+    html = render_error_report_html(report)
+    response = HTMLResponse(content=html)
     response.headers["Content-Disposition"] = (
         f'attachment; filename="{filename}"'
     )
