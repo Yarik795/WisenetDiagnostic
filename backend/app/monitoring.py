@@ -572,11 +572,11 @@ async def run_poll_cycle(
         if tracker:
             await tracker.set_polling_round(attempt, len(pending))
 
-        wave_outcomes = await asyncio.gather(*[_poll_wave_one(r) for r in pending])
         still_pending: list[Recorder] = []
         polled_at = datetime.now(timezone.utc)
+        wave_tasks = [asyncio.create_task(_poll_wave_one(r)) for r in pending]
 
-        for rec, wave in wave_outcomes:
+        async def _apply_wave_result(rec: Recorder, wave: _WavePollResult) -> None:
             state = poll_states[rec.id]
             state.attempts = attempt
 
@@ -636,6 +636,10 @@ async def run_poll_cycle(
                     )
             else:
                 still_pending.append(rec)
+
+        for finished in asyncio.as_completed(wave_tasks):
+            rec, wave = await finished
+            await _apply_wave_result(rec, wave)
 
         pending = still_pending
 

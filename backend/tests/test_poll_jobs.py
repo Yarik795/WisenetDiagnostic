@@ -75,6 +75,47 @@ async def test_run_poll_cycle_updates_tracker(stores: tuple[ConfigStore, StateSt
 
 
 @pytest.mark.asyncio
+async def test_run_poll_cycle_updates_tracker_incrementally(
+    stores: tuple[ConfigStore, StateStore],
+) -> None:
+    config_store, state = stores
+    job = PollJob(
+        job_id="incr",
+        kind=PollJobKind.SHORT,
+        status=PollJobStatus.RUNNING,
+        include_inventory=False,
+        started_at=__import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ),
+    )
+    tracker = PollJobTracker(job)
+    online_poll = __import__(
+        "app.sunapi_extended", fromlist=["RecorderPollData"]
+    ).RecorderPollData(online=True)
+    slow_id = "nvr-a"
+
+    async def staggered_poll(recorder, *args, **kwargs):
+        if recorder.id == slow_id:
+            await asyncio.sleep(0.15)
+        return online_poll
+
+    with patch("app.monitoring.poll_recorder", side_effect=staggered_poll):
+        cycle_task = asyncio.create_task(
+            run_poll_cycle(
+                config_store,
+                state,
+                include_inventory=False,
+                tracker=tracker,
+            )
+        )
+        await asyncio.sleep(0.05)
+        assert job.done == 1
+        await cycle_task
+
+    assert job.done == 2
+
+
+@pytest.mark.asyncio
 async def test_poll_job_manager_serializes_cycles(
     stores: tuple[ConfigStore, StateStore],
 ) -> None:
