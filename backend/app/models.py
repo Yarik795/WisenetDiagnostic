@@ -63,12 +63,27 @@ class MonitoringSettings(BaseModel):
     hdd_temperature_error_celsius: int = Field(default=60, ge=1, le=120)
     archive_days_error_threshold: int = Field(default=7, ge=0, le=365)
     channels_error_threshold_percent: int = Field(default=25, ge=1, le=100)
+    cpu_usage_warn_percent: float = Field(default=80.0, ge=0.0, le=100.0)
+    cpu_usage_error_percent: float = Field(default=95.0, ge=0.0, le=100.0)
+    storage_drop_datarate_warn_percent: float = Field(
+        default=5.0, ge=0.0, le=100.0
+    )
     ntp_server: str = ""
     ntp_posix_timezone: str = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
     display_timezone: str = "Europe/Moscow"
     poll_retry_enabled: bool = True
     poll_retry_max: int = Field(default=3, ge=0, le=10)
     poll_retry_delay_seconds: int = Field(default=5, ge=1, le=120)
+
+    @field_validator("cpu_usage_error_percent")
+    @classmethod
+    def cpu_error_above_warn(cls, v: float, info) -> float:
+        warn = info.data.get("cpu_usage_warn_percent")
+        if warn is not None and v < warn:
+            raise ValueError(
+                "cpu_usage_error_percent must be >= cpu_usage_warn_percent"
+            )
+        return v
 
     @field_validator("hdd_temperature_error_celsius")
     @classmethod

@@ -88,6 +88,89 @@ def format_percent(value: Optional[float]) -> str:
     return f"{float(value):.1f}%"
 
 
+def format_cpu_usage(value: Optional[float]) -> str:
+    if value is None:
+        return "—"
+    return f"{float(value):.1f}%"
+
+
+def format_mbps(value: Optional[float]) -> str:
+    if value is None:
+        return "—"
+    return f"{float(value):.2f} Мбит/с"
+
+
+def _disk_bool_field(disk: dict[str, Any], *keys: str) -> Optional[bool]:
+    for key in keys:
+        if key not in disk:
+            continue
+        raw = disk[key]
+        if raw is None:
+            continue
+        text = str(raw).strip().lower()
+        if text in ("true", "1", "yes"):
+            return True
+        if text in ("false", "0", "no"):
+            return False
+    return None
+
+
+def disk_drop_datarate_percent(disk: dict[str, Any]) -> Optional[float]:
+    raw = disk_field(
+        disk,
+        "DropDataratePercent",
+        "drop_datarate_percent",
+        "DropDatarate",
+    )
+    if raw is None:
+        return None
+    try:
+        return float(str(raw).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def disk_worst_loss_percent(disk: dict[str, Any]) -> Optional[float]:
+    raw = disk_field(disk, "WorstLossPercent", "worst_loss_percent", "WorstLoss")
+    if raw is None:
+        return None
+    try:
+        return float(str(raw).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def disk_format_required(disk: dict[str, Any]) -> bool:
+    return _disk_bool_field(disk, "FormatRequired", "format_required") is True
+
+
+def max_disk_drop_datarate_percent(disks: list[dict[str, Any]]) -> Optional[float]:
+    values = [v for d in disks if (v := disk_drop_datarate_percent(d)) is not None]
+    return max(values) if values else None
+
+
+def any_disk_format_required(disks: list[dict[str, Any]]) -> bool:
+    return any(disk_format_required(d) for d in disks)
+
+
+def disk_drop_display(disk: dict[str, Any]) -> str:
+    pct = disk_drop_datarate_percent(disk)
+    if pct is None:
+        return "—"
+    return format_percent(pct)
+
+
+def disk_power_on_hours(disk: dict[str, Any]) -> Optional[str]:
+    raw = disk_field(disk, "PowerOnDuration", "power_on_duration")
+    if raw is None:
+        return None
+    try:
+        hours = int(float(str(raw).replace(",", ".")))
+    except (TypeError, ValueError):
+        return str(raw)
+    return f"{hours} ч"
+
+
 def format_archive_days_value(days: Optional[float]) -> str:
     if days is None:
         return "—"
@@ -325,6 +408,7 @@ SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
     "MemoryError": "Ошибка памяти",
     "RecordingError": "Ошибка записи",
     "RecordFrameDrop": "Потеря кадров записи",
+    "iSCSIDisconnect": "Отключение iSCSI",
 }
 
 FAN_EVENT_LABELS: dict[str, str] = {
@@ -341,6 +425,10 @@ SYSTEM_EVENT_WARN_LABELS: dict[str, str] = {
     "NetTxTrafficOverflow": "Перегрузка исходящего трафика",
     "NewFWAvailable": "Доступно обновление ПО",
     "BeingUpdate": "Идёт обновление",
+    "OverwriteDecoding": "Конфликт декодирования и перезаписи",
+    "AMDLoadFail": "Сбой загрузки AMD",
+    "HDDCountChanged": "Изменено число накопителей",
+    "USBHDDConnect": "Подключён USB-накопитель",
 }
 
 

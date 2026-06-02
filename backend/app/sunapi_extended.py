@@ -111,15 +111,35 @@ _COMBINED_TEMP_RE = re.compile(
 )
 
 
+def _parse_optional_float(raw) -> Optional[float]:
+    if raw is None:
+        return None
+    text = str(raw).strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def channel_is_active(ch: "ChannelInfo") -> bool:
+    state = (ch.source_state or ch.video_state or "").strip().lower()
+    return state == "on"
+
+
 @dataclass
 class ChannelInfo:
     channel_no: int
     name: Optional[str] = None
     source_state: Optional[str] = None
+    video_state: Optional[str] = None
     camera_ip: Optional[str] = None
     camera_model: Optional[str] = None
     register_status: Optional[str] = None
     data_rate: Optional[float] = None
+    cpu_usage: Optional[float] = None
+    poe_status: Optional[bool] = None
 
 
 @dataclass
@@ -162,6 +182,12 @@ class EventChannelStatus:
     channel_no: int
     video_loss: Optional[bool] = None
     connected: Optional[bool] = None
+    low_fps: Optional[bool] = None
+    tampering: Optional[bool] = None
+    defocus: Optional[bool] = None
+    fog: Optional[bool] = None
+    sd_fail: Optional[bool] = None
+    sd_full: Optional[bool] = None
 
 
 @dataclass
@@ -178,6 +204,8 @@ class NvrApiProfile:
     cgi_version: Optional[float] = None
     supports_diskutility: bool = True
     celsius_only_temperature: bool = False
+    supports_poe_status: bool = False
+    supports_modern_storage_metrics: bool = False
 
     @classmethod
     def from_device(cls, device: Optional[DeviceInfo]) -> "NvrApiProfile":
@@ -197,11 +225,16 @@ class NvrApiProfile:
         if any(model_upper.startswith(p) for p in ("HRX-1620", "XRN-2010")):
             supports_diskutility = False
 
+        supports_poe = cgi_ver is not None and cgi_ver >= 2.6
+        supports_modern_storage = supports_poe
+
         return cls(
             model=model or None,
             cgi_version=cgi_ver,
             supports_diskutility=supports_diskutility,
             celsius_only_temperature=celsius_only,
+            supports_poe_status=supports_poe,
+            supports_modern_storage_metrics=supports_modern_storage,
         )
 
 
@@ -222,6 +255,12 @@ class RecorderPollData:
     system_events: dict[str, bool] = field(default_factory=dict)
     recording_period_error: Optional[str] = None
     recording_storage_enable: Optional[bool] = None
+    recording_storage_overwrite: Optional[bool] = None
+    cpu_usage_max: Optional[float] = None
+    cpu_usage_avg: Optional[float] = None
+    data_rate_total_mbps: Optional[float] = None
+    channels_zero_bitrate: int = 0
+    channels_poe_off: int = 0
 
 
 def build_base_url(recorder: Recorder, cgi: str) -> str:
@@ -266,15 +305,31 @@ def parse_sunapi_error_body(body: str) -> Optional[str]:
     return "NG"
 
 
-def parse_recording_storage(body: str) -> Optional[bool]:
-    """Enable из recording.cgi?msubmenu=storage."""
+def parse_recording_storage(body: str) -> tuple[Optional[bool], Optional[bool]]:
+    """Enable и OverWrite из recording.cgi?msubmenu=storage."""
     data = try_parse_json(body)
-    if isinstance(data, dict) and "Enable" in data:
-        return _parse_bool_value(data["Enable"])
+    if isinstance(data, dict):
+        enable = (
+            _parse_bool_value(data["Enable"])
+            if "Enable" in data
+            else None
+        )
+        overwrite = (
+            _parse_bool_value(data["OverWrite"])
+            if "OverWrite" in data
+            else None
+        )
+        return enable, overwrite
     fields = parse_key_value_body(body)
-    if "Enable" in fields:
-        return _parse_bool_value(fields["Enable"])
-    return None
+    enable = (
+        _parse_bool_value(fields["Enable"]) if "Enable" in fields else None
+    )
+    overwrite = (
+        _parse_bool_value(fields["OverWrite"])
+        if "OverWrite" in fields
+        else None
+    )
+    return enable, overwrite
 
 
 def _period_signature(period: Optional[RecordingPeriodInfo]) -> Optional[tuple[str, str]]:
@@ -336,15 +391,30 @@ def parse_videosource_channels(body: str) -> list[ChannelInfo]:
 
 
 def _parse_data_rate(raw) -> Optional[float]:
-    if raw is None:
+    return _parse_optional_float(raw)
+
+
+def _channel_from_register_item(item: dict) -> Optional[ChannelInfo]:
+    ch = item.get("Channel")
+    if ch is None:
         return None
-    text = str(raw).strip().replace(",", ".")
-    if not text:
-        return None
-    try:
-        return float(text)
-    except (TypeError, ValueError):
-        return None
+    name = item.get("Title") or item.get("Name") or item.get("Model")
+    poe = (
+        _parse_bool_value(item["PoeStatus"])
+        if "PoeStatus" in item
+        else None
+    )
+    return ChannelInfo(
+        channel_no=int(ch),
+        camera_ip=item.get("IPAddress"),
+        camera_model=item.get("Model"),
+        register_status=item.get("Status"),
+        data_rate=_parse_data_rate(item.get("DataRate")),
+        cpu_usage=_parse_optional_float(item.get("CPUUsage")),
+        video_state=item.get("VideoState"),
+        name=name,
+        poe_status=poe,
+    )
 
 
 def parse_cameraregister(body: str) -> list[ChannelInfo]:
@@ -355,17 +425,9 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
             ch = item.get("Channel")
             if ch is None:
                 continue
-            name = item.get("Title") or item.get("Name") or item.get("Model")
-            channels.append(
-                ChannelInfo(
-                    channel_no=int(ch),
-                    camera_ip=item.get("IPAddress"),
-                    camera_model=item.get("Model"),
-                    register_status=item.get("Status"),
-                    data_rate=_parse_data_rate(item.get("DataRate")),
-                    name=name,
-                )
-            )
+            parsed = _channel_from_register_item(item)
+            if parsed is not None:
+                channels.append(parsed)
         return channels
 
     fields = parse_key_value_body(body)
@@ -373,6 +435,11 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
     channels = []
     for ch, attrs in sorted(indexed.items()):
         name = attrs.get("Title") or attrs.get("Name") or attrs.get("Model")
+        poe = (
+            _parse_bool_value(attrs["PoeStatus"])
+            if "PoeStatus" in attrs
+            else None
+        )
         channels.append(
             ChannelInfo(
                 channel_no=ch,
@@ -380,7 +447,10 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
                 camera_model=attrs.get("Model"),
                 register_status=attrs.get("Status"),
                 data_rate=_parse_data_rate(attrs.get("DataRate")),
+                cpu_usage=_parse_optional_float(attrs.get("CPUUsage")),
+                video_state=attrs.get("VideoState"),
                 name=name,
+                poe_status=poe,
             )
         )
     return channels
@@ -397,10 +467,13 @@ def merge_channels(*sources: list[ChannelInfo]) -> list[ChannelInfo]:
             for attr in (
                 "name",
                 "source_state",
+                "video_state",
                 "camera_ip",
                 "camera_model",
                 "register_status",
                 "data_rate",
+                "cpu_usage",
+                "poe_status",
             ):
                 if getattr(existing, attr) is None and getattr(ch, attr) is not None:
                     setattr(existing, attr, getattr(ch, attr))
@@ -1219,6 +1292,18 @@ def _apply_channel_event_attr(
         ch_status.video_loss = _parse_bool_value(value)
     elif attr in ("Connected", "NetworkCameraConnect"):
         ch_status.connected = _parse_bool_value(value)
+    elif attr_lower == "lowfps":
+        ch_status.low_fps = _parse_bool_value(value)
+    elif attr_lower == "tampering":
+        ch_status.tampering = _parse_bool_value(value)
+    elif attr_lower == "defocusdetection":
+        ch_status.defocus = _parse_bool_value(value)
+    elif attr_lower == "fogdetection":
+        ch_status.fog = _parse_bool_value(value)
+    elif attr_lower == "sdfail":
+        ch_status.sd_fail = _parse_bool_value(value)
+    elif attr_lower == "sdfull":
+        ch_status.sd_full = _parse_bool_value(value)
 
 
 def _collect_system_events_from_fields(fields: dict[str, str]) -> dict[str, bool]:
@@ -1299,6 +1384,31 @@ def parse_eventstatus(body: str) -> EventStatusResult:
     )
 
 
+def compute_stream_metrics(
+    channels: list[ChannelInfo],
+    *,
+    profile: Optional[NvrApiProfile] = None,
+) -> tuple[Optional[float], Optional[float], Optional[float], int, int]:
+    """max CPU %, avg CPU %, sum DataRate Mbps, zero-bitrate active channels, PoE off count."""
+    active = [ch for ch in channels if channel_is_active(ch)]
+    cpus = [ch.cpu_usage for ch in active if ch.cpu_usage is not None]
+    rates = [ch.data_rate for ch in active if ch.data_rate is not None]
+    zero_bitrate = sum(
+        1
+        for ch in active
+        if ch.data_rate is not None and ch.data_rate <= 0
+    )
+    poe_off = 0
+    if profile and profile.supports_poe_status:
+        poe_off = sum(
+            1 for ch in active if ch.poe_status is False
+        )
+    cpu_max = max(cpus) if cpus else None
+    cpu_avg = round(sum(cpus) / len(cpus), 2) if cpus else None
+    rate_sum = round(sum(rates), 3) if rates else None
+    return cpu_max, cpu_avg, rate_sum, zero_bitrate, poe_off
+
+
 def _to_float(value) -> Optional[float]:
     if value is None:
         return None
@@ -1351,21 +1461,29 @@ async def poll_recorder(
     result.online = True
     profile = NvrApiProfile.from_device(result.device)
 
-    if include_inventory:
-        cam_url = build_url(recorder, "media.cgi", "cameraregister")
-        st, b, _ = await _fetch(recorder, credentials, cam_url, timeout)
-        cam_channels: list[ChannelInfo] = []
-        if st == 200:
-            cam_channels = parse_cameraregister(b)
+    cam_url = build_url(recorder, "media.cgi", "cameraregister")
+    st, b, _ = await _fetch(recorder, credentials, cam_url, timeout)
+    cam_channels: list[ChannelInfo] = []
+    if st == 200:
+        cam_channels = parse_cameraregister(b)
 
+    vs_channels: list[ChannelInfo] = []
+    if include_inventory:
         vs_url = build_url(recorder, "media.cgi", "videosource")
         st, b, _ = await _fetch(recorder, credentials, vs_url, timeout)
-        vs_channels: list[ChannelInfo] = []
         if st == 200:
             vs_channels = parse_videosource_channels(b)
 
+    if cam_channels or vs_channels:
         result.channels = merge_channels(cam_channels, vs_channels)
         result.channels_polled = True
+        (
+            result.cpu_usage_max,
+            result.cpu_usage_avg,
+            result.data_rate_total_mbps,
+            result.channels_zero_bitrate,
+            result.channels_poe_off,
+        ) = compute_stream_metrics(result.channels, profile=profile)
 
     storage_url = build_url(recorder, "system.cgi", "storageinfo")
     st, b, _ = await _fetch(recorder, credentials, storage_url, timeout)
@@ -1405,7 +1523,9 @@ async def poll_recorder(
     rec_storage_url = build_url(recorder, "recording.cgi", "storage")
     st, b, _ = await _fetch(recorder, credentials, rec_storage_url, timeout)
     if st == 200 and not parse_sunapi_error_body(b):
-        result.recording_storage_enable = parse_recording_storage(b)
+        enable, overwrite = parse_recording_storage(b)
+        result.recording_storage_enable = enable
+        result.recording_storage_overwrite = overwrite
 
     if result.channels:
         result.channel_recording_periods = await fetch_channel_recording_periods(

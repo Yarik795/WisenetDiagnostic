@@ -8,8 +8,10 @@ from .metrics_helpers import (
     active_fan_event_labels,
     active_storage_system_event_labels,
     aggregate_storage_from_disks,
+    any_disk_format_required,
     disk_field,
     is_manual_sync,
+    max_disk_drop_datarate_percent,
     max_disk_temperature_celsius,
     parse_disks_json,
     parse_system_events_json,
@@ -115,6 +117,22 @@ def classify_storage_health(
     if not disks and metrics.recording_storage_enable is False:
         status = "error"
         reasons.append("Запись на накопитель отключена")
+
+    if any_disk_format_required(disks):
+        status = "error"
+        reasons.append("Требуется форматирование накопителя")
+
+    max_drop = max_disk_drop_datarate_percent(disks)
+    if (
+        max_drop is not None
+        and max_drop >= settings.storage_drop_datarate_warn_percent
+    ):
+        if status != "error":
+            status = "warn"
+        reasons.append(
+            f"Потери записи на диск {max_drop:.1f}% "
+            f"(≥ {settings.storage_drop_datarate_warn_percent:.0f}%)"
+        )
 
     if not reasons:
         if not disks and metrics.storageinfo_ok:

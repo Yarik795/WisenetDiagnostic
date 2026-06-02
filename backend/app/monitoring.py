@@ -18,8 +18,10 @@ from .sunapi import check_recorder
 from .sunapi_extended import (
     ChannelInfo,
     EventChannelStatus,
+    NvrApiProfile,
     RecorderPollData,
     RecordingPeriodInfo,
+    channel_is_active,
     enable_recorder_ntp,
     is_register_status_error,
     is_stale_connectfail_on_live_channel,
@@ -31,6 +33,8 @@ from .ui.metrics_helpers import (
     SYSTEM_EVENT_ERROR_LABELS,
     SYSTEM_EVENT_WARN_LABELS,
     active_system_event_labels,
+    any_disk_format_required,
+    max_disk_drop_datarate_percent,
     max_disk_temperature_celsius_from_disks,
 )
 
@@ -43,8 +47,22 @@ def evaluate_channel_health(
     settings: MonitoringSettings,
     *,
     device_model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
 ) -> tuple[str, str]:
-    state = (ch.source_state or "").lower()
+    state = (ch.source_state or ch.video_state or "").lower()
+
+    if event and event.sd_fail is True:
+        return HealthStatus.ERROR.value, "Сбой SD-карты камеры"
+    if event and event.sd_full is True:
+        return HealthStatus.WARN.value, "SD-карта камеры заполнена"
+    if event and event.low_fps is True:
+        return HealthStatus.WARN.value, "Низкий FPS"
+    if event and event.tampering is True:
+        return HealthStatus.WARN.value, "Вмешательство (Tampering)"
+    if event and event.defocus is True:
+        return HealthStatus.WARN.value, "Расфокус"
+    if event and event.fog is True:
+        return HealthStatus.WARN.value, "Туман / засветка (Fog)"
 
     if state == "deactive":
         return HealthStatus.UNKNOWN.value, "Канал деактивирован (не используется)"
@@ -72,6 +90,29 @@ def evaluate_channel_health(
         )
     if reg_key and reg_key not in ("success", "ok"):
         return HealthStatus.WARN.value, f"Статус регистрации: {ch.register_status}"
+
+    if channel_is_active(ch):
+        if ch.data_rate is not None and ch.data_rate <= 0:
+            return HealthStatus.WARN.value, "Нулевой битрейт потока"
+        if profile and profile.supports_poe_status and ch.poe_status is False:
+            return HealthStatus.WARN.value, "PoE выключен на канале"
+        if (
+            ch.cpu_usage is not None
+            and ch.cpu_usage >= settings.cpu_usage_error_percent
+        ):
+            return (
+                HealthStatus.ERROR.value,
+                f"Нагрузка декодирования {ch.cpu_usage:.1f}%",
+            )
+        if (
+            ch.cpu_usage is not None
+            and ch.cpu_usage >= settings.cpu_usage_warn_percent
+        ):
+            return (
+                HealthStatus.WARN.value,
+                f"Нагрузка декодирования {ch.cpu_usage:.1f}%",
+            )
+
     if ch.camera_ip and state == "on":
         return HealthStatus.OK.value, "Канал активен"
     if state == "on":
@@ -114,6 +155,7 @@ def evaluate_recorder_health(
     *,
     archive_min_days: Optional[float] = None,
     archive_max_days: Optional[float] = None,
+    profile: Optional[NvrApiProfile] = None,
 ) -> tuple[str, str]:
     if not poll.online:
         return HealthStatus.ERROR.value, poll.error or "NVR недоступен"
@@ -147,6 +189,52 @@ def evaluate_recorder_health(
                         f"Температура HDD {max_temp:.0f} °C "
                         f"(предупреждение ≥ {settings.hdd_temperature_warn_celsius} °C)"
                     )
+            if profile and profile.supports_modern_storage_metrics:
+                if any_disk_format_required(poll.storage.disks):
+                    status = HealthStatus.ERROR.value
+                    reasons.append("Требуется форматирование накопителя")
+                max_drop = max_disk_drop_datarate_percent(poll.storage.disks)
+                if (
+                    max_drop is not None
+                    and max_drop >= settings.storage_drop_datarate_warn_percent
+                ):
+                    if status != HealthStatus.ERROR.value:
+                        status = HealthStatus.WARN.value
+                    reasons.append(
+                        f"Потери записи на диск {max_drop:.1f}% "
+                        f"(≥ {settings.storage_drop_datarate_warn_percent:.0f}%)"
+                    )
+
+    if poll.recording_storage_enable is False:
+        status = HealthStatus.ERROR.value
+        reasons.append("Запись на накопитель отключена")
+
+    if poll.cpu_usage_max is not None:
+        if poll.cpu_usage_max >= settings.cpu_usage_error_percent:
+            status = HealthStatus.ERROR.value
+            reasons.append(
+                f"Нагрузка декодирования max {poll.cpu_usage_max:.1f}% "
+                f"(критично ≥ {settings.cpu_usage_error_percent:.0f}%)"
+            )
+        elif poll.cpu_usage_max >= settings.cpu_usage_warn_percent:
+            if status != HealthStatus.ERROR.value:
+                status = HealthStatus.WARN.value
+            reasons.append(
+                f"Нагрузка декодирования max {poll.cpu_usage_max:.1f}% "
+                f"(≥ {settings.cpu_usage_warn_percent:.0f}%)"
+            )
+
+    if poll.channels_zero_bitrate and poll.channels_zero_bitrate > 0:
+        if status != HealthStatus.ERROR.value:
+            status = HealthStatus.WARN.value
+        reasons.append(
+            f"Каналов с нулевым битрейтом: {poll.channels_zero_bitrate}"
+        )
+
+    if poll.channels_poe_off and poll.channels_poe_off > 0:
+        if status != HealthStatus.ERROR.value:
+            status = HealthStatus.WARN.value
+        reasons.append(f"Каналов с выкл. PoE: {poll.channels_poe_off}")
 
     if poll.date_time:
         if poll.date_time.ntp_status and poll.date_time.ntp_status.lower() == "fail":
@@ -213,6 +301,9 @@ def _channel_info_from_row(row: ChannelRow) -> ChannelInfo:
         source_state=row.source_state,
         camera_ip=row.camera_ip,
         camera_model=row.camera_model,
+        data_rate=row.data_rate,
+        cpu_usage=row.cpu_usage,
+        poe_status=row.poe_status,
     )
 
 
@@ -226,9 +317,14 @@ def _upsert_channel_from_poll(
     period: Optional[RecordingPeriodInfo],
     *,
     device_model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
 ) -> str:
     h_status, h_reason = evaluate_channel_health(
-        ch, event, settings, device_model=device_model
+        ch,
+        event,
+        settings,
+        device_model=device_model,
+        profile=profile,
     )
     state.upsert_channel(
         recorder_id,
@@ -244,6 +340,9 @@ def _upsert_channel_from_poll(
         archive_start=period.start_time if period else None,
         archive_end=period.end_time if period else None,
         archive_days=period.archive_days if period else None,
+        data_rate=ch.data_rate,
+        cpu_usage=ch.cpu_usage,
+        poe_status=ch.poe_status,
     )
     state.record_history(
         "channel",
@@ -271,6 +370,7 @@ def apply_poll_result(
 
     periods = poll.channel_recording_periods
     device_model = poll.device.model if poll.device else None
+    profile = NvrApiProfile.from_device(poll.device) if poll.device else None
 
     if poll.channels_polled:
         for ch in poll.channels:
@@ -285,6 +385,7 @@ def apply_poll_result(
                 polled_at,
                 period,
                 device_model=device_model,
+                profile=profile,
             )
             channel_statuses.append(h_status)
             channel_nos.append(ch.channel_no)
@@ -303,6 +404,7 @@ def apply_poll_result(
                     polled_at,
                     periods.get(ch.channel_no),
                     device_model=device_model,
+                    profile=profile,
                 )
                 channel_statuses.append(h_status)
             else:
@@ -319,6 +421,7 @@ def apply_poll_result(
         settings,
         archive_min_days=archive_min_days,
         archive_max_days=archive_max_days,
+        profile=profile,
     )
     if poll.channels_polled:
         counts = _count_statuses(channel_statuses)
@@ -382,6 +485,12 @@ def apply_poll_result(
         storageinfo_ok=bool(poll.storage and poll.storage.storageinfo_ok),
         archive_poll_error=poll.recording_period_error,
         recording_storage_enable=poll.recording_storage_enable,
+        recording_storage_overwrite=poll.recording_storage_overwrite,
+        cpu_usage_max=poll.cpu_usage_max,
+        cpu_usage_avg=poll.cpu_usage_avg,
+        data_rate_total_mbps=poll.data_rate_total_mbps,
+        channels_zero_bitrate=poll.channels_zero_bitrate or None,
+        channels_poe_off=poll.channels_poe_off or None,
     )
     metrics = state.get_recorder_metrics(recorder.id)
     for category in CATEGORY_LABELS:

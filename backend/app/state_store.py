@@ -27,6 +27,9 @@ class ChannelRow:
     archive_start: Optional[str] = None
     archive_end: Optional[str] = None
     archive_days: Optional[float] = None
+    data_rate: Optional[float] = None
+    cpu_usage: Optional[float] = None
+    poe_status: Optional[bool] = None
 
 
 @dataclass
@@ -62,6 +65,12 @@ class RecorderMetricsRow:
     storageinfo_ok: bool = False
     archive_poll_error: Optional[str] = None
     recording_storage_enable: Optional[bool] = None
+    recording_storage_overwrite: Optional[bool] = None
+    cpu_usage_max: Optional[float] = None
+    cpu_usage_avg: Optional[float] = None
+    data_rate_total_mbps: Optional[float] = None
+    channels_zero_bitrate: Optional[int] = None
+    channels_poe_off: Optional[int] = None
     last_poll_job_id: Optional[str] = None
     last_poll_attempts: Optional[int] = None
     last_poll_success_attempt: Optional[int] = None
@@ -224,6 +233,12 @@ class StateStore:
             ("last_poll_attempts", "INTEGER"),
             ("last_poll_success_attempt", "INTEGER"),
             ("last_poll_first_try_ok", "INTEGER"),
+            ("recording_storage_overwrite", "INTEGER"),
+            ("cpu_usage_max", "REAL"),
+            ("cpu_usage_avg", "REAL"),
+            ("data_rate_total_mbps", "REAL"),
+            ("channels_zero_bitrate", "INTEGER"),
+            ("channels_poe_off", "INTEGER"),
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -238,6 +253,9 @@ class StateStore:
             ("archive_start", "TEXT"),
             ("archive_end", "TEXT"),
             ("archive_days", "REAL"),
+            ("data_rate", "REAL"),
+            ("cpu_usage", "REAL"),
+            ("poe_status", "INTEGER"),
         ]
         for name, col_type in channel_additions:
             if name not in channel_columns:
@@ -259,6 +277,9 @@ class StateStore:
         archive_start: Optional[str] = None,
         archive_end: Optional[str] = None,
         archive_days: Optional[float] = None,
+        data_rate: Optional[float] = None,
+        cpu_usage: Optional[float] = None,
+        poe_status: Optional[bool] = None,
     ) -> None:
         polled = _iso(last_polled_at)
         with self._connect() as conn:
@@ -267,8 +288,9 @@ class StateStore:
                 INSERT INTO channels (
                     recorder_id, channel_no, name, camera_ip, camera_model,
                     source_state, health_status, health_reason, video_loss, last_polled_at,
-                    archive_start, archive_end, archive_days
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    archive_start, archive_end, archive_days,
+                    data_rate, cpu_usage, poe_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id, channel_no) DO UPDATE SET
                     name=excluded.name,
                     camera_ip=excluded.camera_ip,
@@ -280,7 +302,10 @@ class StateStore:
                     last_polled_at=excluded.last_polled_at,
                     archive_start=excluded.archive_start,
                     archive_end=excluded.archive_end,
-                    archive_days=excluded.archive_days
+                    archive_days=excluded.archive_days,
+                    data_rate=excluded.data_rate,
+                    cpu_usage=excluded.cpu_usage,
+                    poe_status=excluded.poe_status
                 """,
                 (
                     recorder_id,
@@ -296,6 +321,9 @@ class StateStore:
                     archive_start,
                     archive_end,
                     archive_days,
+                    data_rate,
+                    cpu_usage,
+                    _bool_int(poe_status),
                 ),
             )
 
@@ -370,6 +398,12 @@ class StateStore:
         storageinfo_ok: bool = False,
         archive_poll_error: Optional[str] = None,
         recording_storage_enable: Optional[bool] = None,
+        recording_storage_overwrite: Optional[bool] = None,
+        cpu_usage_max: Optional[float] = None,
+        cpu_usage_avg: Optional[float] = None,
+        data_rate_total_mbps: Optional[float] = None,
+        channels_zero_bitrate: Optional[int] = None,
+        channels_poe_off: Optional[int] = None,
     ) -> None:
         disks_json = json.dumps(disks, ensure_ascii=False) if disks else None
         system_events_json = (
@@ -387,9 +421,11 @@ class StateStore:
                     channels_error, channels_unknown, last_polled_at,
                     local_time, utc_time, sync_type,
                     storage_used_mb, storage_total_mb, disks_json, system_events_json,
-                    storageinfo_ok, archive_poll_error, recording_storage_enable
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    storageinfo_ok, archive_poll_error, recording_storage_enable,
+                    recording_storage_overwrite, cpu_usage_max, cpu_usage_avg,
+                    data_rate_total_mbps, channels_zero_bitrate, channels_poe_off
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -420,7 +456,13 @@ class StateStore:
                     system_events_json=excluded.system_events_json,
                     storageinfo_ok=excluded.storageinfo_ok,
                     archive_poll_error=excluded.archive_poll_error,
-                    recording_storage_enable=excluded.recording_storage_enable
+                    recording_storage_enable=excluded.recording_storage_enable,
+                    recording_storage_overwrite=excluded.recording_storage_overwrite,
+                    cpu_usage_max=excluded.cpu_usage_max,
+                    cpu_usage_avg=excluded.cpu_usage_avg,
+                    data_rate_total_mbps=excluded.data_rate_total_mbps,
+                    channels_zero_bitrate=excluded.channels_zero_bitrate,
+                    channels_poe_off=excluded.channels_poe_off
                 """,
                 (
                     recorder_id,
@@ -454,6 +496,12 @@ class StateStore:
                     int(storageinfo_ok),
                     archive_poll_error,
                     _bool_int(recording_storage_enable),
+                    _bool_int(recording_storage_overwrite),
+                    cpu_usage_max,
+                    cpu_usage_avg,
+                    data_rate_total_mbps,
+                    channels_zero_bitrate,
+                    channels_poe_off,
                 ),
             )
 
@@ -742,6 +790,13 @@ def _channel_from_row(row: sqlite3.Row) -> ChannelRow:
         archive_start=row["archive_start"] if "archive_start" in row.keys() else None,
         archive_end=row["archive_end"] if "archive_end" in row.keys() else None,
         archive_days=row["archive_days"] if "archive_days" in row.keys() else None,
+        data_rate=row["data_rate"] if "data_rate" in row.keys() else None,
+        cpu_usage=row["cpu_usage"] if "cpu_usage" in row.keys() else None,
+        poe_status=(
+            None
+            if "poe_status" not in row.keys() or row["poe_status"] is None
+            else bool(row["poe_status"])
+        ),
     )
 
 
@@ -786,6 +841,27 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
             if "recording_storage_enable" not in row.keys()
             or row["recording_storage_enable"] is None
             else bool(row["recording_storage_enable"])
+        ),
+        recording_storage_overwrite=(
+            None
+            if "recording_storage_overwrite" not in row.keys()
+            or row["recording_storage_overwrite"] is None
+            else bool(row["recording_storage_overwrite"])
+        ),
+        cpu_usage_max=row["cpu_usage_max"] if "cpu_usage_max" in row.keys() else None,
+        cpu_usage_avg=row["cpu_usage_avg"] if "cpu_usage_avg" in row.keys() else None,
+        data_rate_total_mbps=(
+            row["data_rate_total_mbps"]
+            if "data_rate_total_mbps" in row.keys()
+            else None
+        ),
+        channels_zero_bitrate=(
+            row["channels_zero_bitrate"]
+            if "channels_zero_bitrate" in row.keys()
+            else None
+        ),
+        channels_poe_off=(
+            row["channels_poe_off"] if "channels_poe_off" in row.keys() else None
         ),
         last_poll_job_id=(
             row["last_poll_job_id"] if "last_poll_job_id" in row.keys() else None

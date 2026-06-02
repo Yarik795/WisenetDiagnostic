@@ -68,6 +68,23 @@
       </dl>
       <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="margin-top:8px;">Открыть каналы</a>
     </section>
+    <section class="metrics-block">
+      <h4>Нагрузка / потоки</h4>
+      <dl class="metrics-dl">
+        <dt>CPU max (декод.)</dt><dd>{{ format_cpu_usage(metrics.cpu_usage_max) }}</dd>
+        <dt>CPU avg</dt><dd>{{ format_cpu_usage(metrics.cpu_usage_avg) }}</dd>
+        <dt>Суммарный битрейт</dt><dd>{{ format_mbps(metrics.data_rate_total_mbps) }}</dd>
+        <dt>Нулевой битрейт</dt><dd>{{ metrics.channels_zero_bitrate if metrics.channels_zero_bitrate is not none else '—' }} кан.</dd>
+        <dt>PoE выкл.</dt><dd>{{ metrics.channels_poe_off if metrics.channels_poe_off is not none else '—' }} кан.</dd>
+      </dl>
+    </section>
+    <section class="metrics-block">
+      <h4>Запись (настройки)</h4>
+      <dl class="metrics-dl">
+        <dt>Включена</dt><dd>{{ format_bool_ru(metrics.recording_storage_enable) }}</dd>
+        <dt>Перезапись</dt><dd>{{ format_bool_ru(metrics.recording_storage_overwrite) }}</dd>
+      </dl>
+    </section>
   </div>
   <section class="metrics-block metrics-block--full">
     <h4>Накопители</h4>
@@ -91,6 +108,8 @@
             <th>Всего</th>
             <th>%</th>
             <th>Темп.</th>
+            <th>Потери</th>
+            <th>Нараб.</th>
           </tr>
         </thead>
         <tbody>
@@ -104,6 +123,8 @@
             <td class="recorder-row-host">{{ disk_total_display(disk) }}</td>
             <td>{{ disk_percent_display(disk) }}</td>
             <td>{{ disk_temperature_display(disk) }}</td>
+            <td>{{ disk_drop_display(disk) }}</td>
+            <td>{{ disk_power_on_hours(disk) or '—' }}</td>
           </tr>
           {% endfor %}
         </tbody>

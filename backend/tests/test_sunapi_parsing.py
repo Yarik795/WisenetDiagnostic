@@ -4,6 +4,7 @@ from app.sunapi_extended import (
     NvrApiProfile,
     _is_diskutility_error,
     _to_float,
+    compute_stream_metrics,
     extract_disk_temperature,
     format_celsius_only_temperature,
     merge_channels,
@@ -318,7 +319,9 @@ def test_parse_sunapi_error_body_604() -> None:
 
 def test_parse_recording_storage_enable_false() -> None:
     body = "Enable=False\nOverWrite=False\n"
-    assert parse_recording_storage(body) is False
+    enable, overwrite = parse_recording_storage(body)
+    assert enable is False
+    assert overwrite is False
 
 
 def test_parse_storage_no_disks_skips_root_status() -> None:

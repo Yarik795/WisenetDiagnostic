@@ -37,7 +37,11 @@ from ..ui.metrics_helpers import (
     format_channel_counts,
     format_mb,
     format_percent,
+    format_cpu_usage,
+    format_mbps,
     format_skew,
+    disk_drop_display,
+    disk_power_on_hours,
     parse_disks_json,
     sync_type_badge_class,
     sync_type_label,
@@ -58,6 +62,10 @@ templates.env.globals["problem_count"] = problem_count
 templates.env.globals["parse_disks"] = parse_disks_json
 templates.env.globals["format_mb"] = format_mb
 templates.env.globals["format_percent"] = format_percent
+templates.env.globals["format_cpu_usage"] = format_cpu_usage
+templates.env.globals["format_mbps"] = format_mbps
+templates.env.globals["disk_drop_display"] = disk_drop_display
+templates.env.globals["disk_power_on_hours"] = disk_power_on_hours
 templates.env.globals["format_archive_days"] = format_archive_days
 templates.env.globals["format_archive_days_value"] = format_archive_days_value
 templates.env.globals["format_archive_range"] = format_archive_range
