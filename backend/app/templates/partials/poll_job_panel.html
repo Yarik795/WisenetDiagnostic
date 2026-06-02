@@ -10,8 +10,8 @@
 {% endif %}
 <div
   id="poll-job-panel"
-  class="poll-job-panel poll-job-panel--compact card{% if job.status.value == 'running' %} poll-job-panel--running{% endif %}"
-  {% if job.status.value == 'running' %}
+  class="poll-job-panel poll-job-panel--compact card{% if job.is_active %} poll-job-panel--running{% endif %}"
+  {% if job.is_active %}
   hx-get="/monitoring/jobs/{{ job.job_id }}?refresh_url={{ refresh_url|urlencode }}&refresh_target={{ refresh_target|urlencode }}{% if refresh_select %}&refresh_select={{ refresh_select|urlencode }}{% endif %}"
   hx-trigger="every 1s"
   hx-swap="outerHTML"

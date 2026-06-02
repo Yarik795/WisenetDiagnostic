@@ -1273,6 +1273,7 @@ def _poll_ui_ctx(
         "refresh_url": refresh_url,
         "refresh_target": refresh_target,
         "refresh_select": refresh_select,
+        "poll_page_inventory": inventory,
         "poll_job": active_job,
         "job": active_job,
         "auto_poll_paused": auto_paused,
@@ -1416,6 +1417,29 @@ def history_page(
             "filter_entity_type": entity_type,
             "filter_entity_id": entity_id,
         },
+    )
+
+
+@router.get("/monitoring/poll-ui", response_class=HTMLResponse)
+def monitoring_poll_ui(
+    request: Request,
+    refresh_url: str = "/objects/partials/health-dashboard",
+    refresh_target: str = "#health-dashboard-stack",
+    refresh_select: str = "",
+    inventory: str = "",
+    store: ConfigStore = Depends(get_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    return _poll_page_actions_response(
+        request,
+        poll_jobs,
+        store,
+        scheduler,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+        inventory=inventory.lower() in ("true", "1", "yes", "on"),
     )
 
 

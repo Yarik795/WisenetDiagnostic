@@ -1,4 +1,12 @@
-<div id="poll-page-actions" class="poll-page-actions">
+<div
+  id="poll-page-actions"
+  class="poll-page-actions"
+  {% if not poll_job %}
+  hx-get="/monitoring/poll-ui?refresh_url={{ refresh_url|urlencode }}&refresh_target={{ refresh_target|urlencode }}{% if refresh_select %}&refresh_select={{ refresh_select|urlencode }}{% endif %}{% if poll_page_inventory %}&inventory=true{% endif %}"
+  hx-trigger="every 2s"
+  hx-swap="outerHTML"
+  {% endif %}
+>
   {% include "partials/poll_auto_controls.html" %}
   {% if poll_job %}
   {% with job=poll_job %}

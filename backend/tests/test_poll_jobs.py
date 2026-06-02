@@ -107,7 +107,8 @@ async def test_poll_job_manager_serializes_cycles(
     assert job1.status == PollJobStatus.COMPLETED
 
 
-def test_poll_all_endpoint_returns_progress_panel(tmp_path: Path) -> None:
+@pytest.fixture
+def poll_web_client(tmp_path: Path) -> tuple:
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -121,25 +122,108 @@ def test_poll_all_endpoint_returns_progress_panel(tmp_path: Path) -> None:
 
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_state_store] = lambda: state
+    client = TestClient(app)
+    yield client, store, state
+    app.dependency_overrides.clear()
+
+
+_POLL_REFRESH = {
+    "refresh_url": "/objects/partials/groups",
+    "refresh_target": "#object-groups",
+}
+
+
+def _poll_page_actions_snippet(html: str) -> str:
+    idx = html.find('id="poll-page-actions"')
+    assert idx >= 0
+    end = html.find("</div>", idx)
+    return html[idx : end + 6] if end >= 0 else html[idx : idx + 800]
+
+
+def test_poll_ui_idle_includes_watch_polling(poll_web_client: tuple) -> None:
+    client, _, _ = poll_web_client
+    r = client.get("/monitoring/poll-ui", params=_POLL_REFRESH)
+    assert r.status_code == 200
+    assert "poll-job-panel--idle" in r.text
+    snippet = _poll_page_actions_snippet(r.text)
+    assert 'hx-get="/monitoring/poll-ui' in snippet
+    assert 'hx-trigger="every 2s"' in snippet
+
+
+def test_objects_page_idle_includes_watch_polling(poll_web_client: tuple) -> None:
+    client, _, _ = poll_web_client
+    r = client.get("/objects")
+    assert r.status_code == 200
+    snippet = _poll_page_actions_snippet(r.text)
+    assert 'hx-get="/monitoring/poll-ui' in snippet
+    assert 'hx-trigger="every 2s"' in snippet
+
+
+def test_poll_ui_active_job_no_wrapper_polling(poll_web_client: tuple) -> None:
+    from datetime import datetime, timezone
+
+    client, _, _ = poll_web_client
+    mgr = client.app.state.poll_job_manager
+    job = PollJob(
+        job_id="ui-active",
+        kind=PollJobKind.SHORT,
+        status=PollJobStatus.RUNNING,
+        include_inventory=False,
+        started_at=datetime.now(timezone.utc),
+        total=10,
+        done=3,
+    )
+    mgr._remember_job(job)
     try:
-        client = TestClient(app)
-        r = client.post(
-            "/monitoring/poll-all",
-            data={
-                "refresh_url": "/objects/partials/health-dashboard",
-                "refresh_target": "#health-dashboard-stack",
-            },
-        )
+        r = client.get("/monitoring/poll-ui", params=_POLL_REFRESH)
         assert r.status_code == 200
-        assert "poll-job-panel" in r.text
-        assert "poll-job-panel--compact" in r.text
-        assert "poll-job-line" in r.text
-        assert "Опросить все NVR" in r.text
-        assert "poll-job-results" not in r.text
-        assert "Сейчас:" not in r.text
-        assert "Автоматический опрос" not in r.text
+        assert "poll-job-panel--running" in r.text
+        assert 'hx-trigger="every 1s"' in r.text
+        snippet = _poll_page_actions_snippet(r.text)
+        assert "every 2s" not in snippet
     finally:
-        app.dependency_overrides.clear()
+        mgr._clear_active_if(job.job_id)
+        mgr._jobs.pop(job.job_id, None)
+
+
+def test_poll_all_pending_includes_progress_polling(poll_web_client: tuple) -> None:
+    from datetime import datetime, timezone
+
+    client, _, _ = poll_web_client
+    mgr = client.app.state.poll_job_manager
+    job = PollJob(
+        job_id="post-pending",
+        kind=PollJobKind.SHORT,
+        status=PollJobStatus.PENDING,
+        include_inventory=False,
+        started_at=datetime.now(timezone.utc),
+    )
+    mgr._remember_job(job)
+    with patch.object(mgr, "start_manual_poll", return_value=job):
+        r = client.post("/monitoring/poll-all", data=_POLL_REFRESH)
+    assert r.status_code == 200
+    assert 'hx-trigger="every 1s"' in r.text
+    assert "poll-job-panel--running" in r.text
+    assert "Запуск" in r.text
+
+
+def test_poll_all_endpoint_returns_progress_panel(poll_web_client: tuple) -> None:
+    client, _, _ = poll_web_client
+    r = client.post(
+        "/monitoring/poll-all",
+        data={
+            "refresh_url": "/objects/partials/health-dashboard",
+            "refresh_target": "#health-dashboard-stack",
+        },
+    )
+    assert r.status_code == 200
+    assert "poll-job-panel" in r.text
+    assert "poll-job-panel--compact" in r.text
+    assert "poll-job-line" in r.text
+    assert "Опросить все NVR" in r.text
+    assert "poll-job-results" not in r.text
+    assert "Сейчас:" not in r.text
+    assert "Автоматический опрос" not in r.text
 
 
 @pytest.mark.asyncio
