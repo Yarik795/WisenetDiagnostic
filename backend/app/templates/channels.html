@@ -37,7 +37,7 @@
 {% if not channels %}
 <div class="empty-state">
   <h2>Нет данных по каналам</h2>
-  <p>Запустите инвентаризацию или дождитесь автоматического опроса (каждые 24 ч).</p>
+  <p>Запустите инвентаризацию или дождитесь автоматического опроса по расписанию.</p>
   <button type="button" class="btn btn-primary" style="margin-top:16px;"
     hx-post="/monitoring/inventory-all"
     hx-target="#poll-job-panel"

@@ -316,6 +316,11 @@ def _upsert_channel_from_poll(
     device_model: Optional[str] = None,
     profile: Optional[NvrApiProfile] = None,
 ) -> str:
+    if ch.source_state is None:
+        existing = state.get_channel(recorder_id, ch.channel_no)
+        if existing and existing.source_state:
+            ch.source_state = existing.source_state
+
     h_status, h_reason = evaluate_channel_health(
         ch,
         event,

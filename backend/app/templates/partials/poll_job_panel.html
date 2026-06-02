@@ -1,7 +1,7 @@
 {% if job.kind.value == 'inventory' %}
 {% set poll_action_hint = "Перечитывает список камер на всех NVR" %}
 {% else %}
-{% set poll_action_hint = "Обновляет статус, диски, архив и время. Список каналов — через инвентаризацию." %}
+{% set poll_action_hint = "Обновляет статус NVR, диски, время и состояние каналов. Инвентаризация — детальный архив по каналам." %}
 {% endif %}
 {% if schedule_hint %}
 {% set button_title = schedule_hint ~ ". " ~ poll_action_hint %}

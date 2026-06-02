@@ -1447,6 +1447,11 @@ async def poll_recorder(
     include_inventory: bool = True,
     timeout: float = 20.0,
 ) -> RecorderPollData:
+    """Опрос NVR по SUNAPI.
+
+    include_inventory: детальный архив по каждому каналу (searchrecordingperiod).
+    Состояние канала (videosource) запрашивается при каждом опросе.
+    """
     result = RecorderPollData()
     if not credentials.username or not credentials.password:
         result.error = "Не заданы учётные данные API"
@@ -1473,11 +1478,10 @@ async def poll_recorder(
         cam_channels = parse_cameraregister(b)
 
     vs_channels: list[ChannelInfo] = []
-    if include_inventory:
-        vs_url = build_url(recorder, "media.cgi", "videosource")
-        st, b, _ = await _fetch(recorder, credentials, vs_url, timeout)
-        if st == 200:
-            vs_channels = parse_videosource_channels(b)
+    vs_url = build_url(recorder, "media.cgi", "videosource")
+    st, b, _ = await _fetch(recorder, credentials, vs_url, timeout)
+    if st == 200:
+        vs_channels = parse_videosource_channels(b)
 
     if cam_channels or vs_channels:
         result.channels = merge_channels(cam_channels, vs_channels)

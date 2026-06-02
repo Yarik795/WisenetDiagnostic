@@ -250,6 +250,86 @@ def test_short_poll_preserves_channels(tmp_path: Path) -> None:
     assert metrics.channels_unknown == 1
 
 
+def test_short_poll_deactive_channel_not_error(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(
+        id="nvr1",
+        object_name="Obj",
+        host="10.0.0.1",
+        port=80,
+    )
+    poll = RecorderPollData(
+        online=True,
+        channels_polled=True,
+        channels=[
+            ChannelInfo(
+                channel_no=3,
+                source_state="Deactive",
+                camera_model="UNKNOWN",
+            )
+        ],
+        events=[EventChannelStatus(channel_no=3, connected=False)],
+    )
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        datetime.now(timezone.utc),
+        update_config=False,
+    )
+    ch = state.get_channel("nvr1", 3)
+    assert ch is not None
+    assert ch.health_status == "unknown"
+    assert "деактивирован" in (ch.health_reason or "").lower()
+    assert "не подключена" not in (ch.health_reason or "").lower()
+    assert ch.source_state == "Deactive"
+
+
+def test_upsert_preserves_source_state_when_poll_missing_state(
+    tmp_path: Path,
+) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(
+        id="nvr1",
+        object_name="Obj",
+        host="10.0.0.1",
+        port=80,
+    )
+    state.upsert_channel(
+        "nvr1",
+        3,
+        source_state="Deactive",
+        health_status="unknown",
+        health_reason="Канал деактивирован (не используется)",
+    )
+    poll = RecorderPollData(
+        online=True,
+        channels_polled=True,
+        channels=[ChannelInfo(channel_no=3, camera_model="UNKNOWN")],
+        events=[EventChannelStatus(channel_no=3, connected=False)],
+    )
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        datetime.now(timezone.utc),
+        update_config=False,
+    )
+    ch = state.get_channel("nvr1", 3)
+    assert ch is not None
+    assert ch.source_state == "Deactive"
+    assert ch.health_status == "unknown"
+    assert "не подключена" not in (ch.health_reason or "").lower()
+
+
 def test_recorder_cpu_fan_error() -> None:
     poll = RecorderPollData(
         online=True,

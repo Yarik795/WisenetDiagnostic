@@ -1249,7 +1249,7 @@ def _poll_schedule_hint(store: ConfigStore, *, auto_paused: bool = False) -> str
     schedule = (
         f"каждые {m.poll_interval_minutes} мин; "
         f"полный — каждые {m.full_poll_interval_minutes} мин; "
-        f"инвентаризация — раз в 24 ч"
+        f"инвентаризация (детальный архив по каналам) — раз в 24 ч"
     )
     if auto_paused:
         return f"Автоопрос приостановлен. Расписание без изменений: {schedule}"
@@ -1293,8 +1293,8 @@ def _poll_ui_ctx(
                 "poll_post_url": "/monitoring/poll-all",
                 "poll_button_label": "Опросить все NVR",
                 "poll_button_title": (
-                    "Обновляет статус, диски, архив и время; "
-                    "список каналов — через инвентаризацию"
+                    "Обновляет статус NVR, диски, время и состояние каналов; "
+                    "инвентаризация — детальный архив по каждому каналу"
                 ),
             }
         )
