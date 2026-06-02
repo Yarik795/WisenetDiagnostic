@@ -1168,6 +1168,10 @@ tr.recorder-row--excluded {
   color: var(--status-error);
 }
 
+.poll-job-status--cancelled {
+  color: var(--status-warn);
+}
+
 .poll-job-progress {
   height: 5px;
   border-radius: 3px;
@@ -1213,6 +1217,9 @@ tr.recorder-row--excluded {
 
 .poll-job-actions {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .poll-job-btn {

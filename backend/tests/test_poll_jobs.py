@@ -9,7 +9,14 @@ import pytest
 from app.config_store import ConfigStore
 from app.models import AppConfig, Recorder
 from app.monitoring import PollCycleStats, run_poll_cycle
-from app.poll_jobs import PollJobManager, PollJobStatus, PollJobTracker, PollJob, PollJobKind
+from app.poll_jobs import (
+    PollJob,
+    PollJobKind,
+    PollJobManager,
+    PollJobStatus,
+    PollJobTracker,
+)
+from app.monitoring import PollCycleCancelled
 from app.state_store import StateStore
 
 
@@ -246,6 +253,116 @@ def test_poll_all_pending_includes_progress_polling(poll_web_client: tuple) -> N
     assert 'hx-trigger="every 1s"' in r.text
     assert "poll-job-panel--running" in r.text
     assert "Запуск" in r.text
+
+
+@pytest.mark.asyncio
+async def test_cancel_active_poll(stores: tuple[ConfigStore, StateStore]) -> None:
+    config_store, state = stores
+    manager = PollJobManager()
+    release = asyncio.Event()
+
+    async def slow_poll(*args, **kwargs):
+        await release.wait()
+        return PollCycleStats(total=2)
+
+    with patch("app.poll_jobs.run_poll_cycle", side_effect=slow_poll):
+        job = manager.start_manual_poll(config_store, state, include_inventory=False)
+        await asyncio.sleep(0.05)
+        assert manager.get_active_job() is not None
+        assert await manager.cancel_active_poll()
+        assert job.status == PollJobStatus.CANCELLED
+        assert "прерван" in (job.message or "").lower()
+        assert manager.get_active_job() is None
+        release.set()
+
+
+@pytest.mark.asyncio
+async def test_run_poll_cycle_respects_cancel_event(
+    stores: tuple[ConfigStore, StateStore],
+) -> None:
+    config_store, state = stores
+    cancel_event = asyncio.Event()
+    online_poll = __import__(
+        "app.sunapi_extended", fromlist=["RecorderPollData"]
+    ).RecorderPollData(online=True)
+
+    call_count = 0
+
+    async def slow_poll(recorder, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            cancel_event.set()
+        await asyncio.sleep(0.05)
+        return online_poll
+
+    with patch("app.monitoring.poll_recorder", side_effect=slow_poll):
+        with pytest.raises(PollCycleCancelled):
+            await run_poll_cycle(
+                config_store,
+                state,
+                cancel_event=cancel_event,
+            )
+
+
+def test_poll_cancel_endpoint(poll_web_client: tuple) -> None:
+    client, store, state = poll_web_client
+    mgr = client.app.state.poll_job_manager
+    from datetime import datetime, timezone
+
+    job = PollJob(
+        job_id="cancel-ui",
+        kind=PollJobKind.SHORT,
+        status=PollJobStatus.RUNNING,
+        include_inventory=False,
+        started_at=datetime.now(timezone.utc),
+        total=10,
+        done=3,
+    )
+    mgr._remember_job(job)
+    ev = asyncio.Event()
+    mgr._cancel_events[job.job_id] = ev
+
+    async def fake_cancel():
+        ev.set()
+        job.status = PollJobStatus.CANCELLED
+        job.message = "Опрос прерван: 3 из 10"
+        job.finished_at = datetime.now(timezone.utc)
+        mgr._clear_active_if(job.job_id)
+
+    with patch.object(mgr, "cancel_active_poll", new_callable=AsyncMock, side_effect=fake_cancel):
+        r = client.post(
+            "/monitoring/poll/cancel",
+            data=_POLL_REFRESH,
+        )
+    assert r.status_code == 200
+    assert "poll-job-panel--idle" in r.text or "Опросить все NVR" in r.text
+    assert "Остановить опрос" not in r.text
+
+
+def test_poll_panel_shows_cancel_button_when_active(poll_web_client: tuple) -> None:
+    client, _, _ = poll_web_client
+    from datetime import datetime, timezone
+
+    mgr = client.app.state.poll_job_manager
+    job = PollJob(
+        job_id="ui-cancel",
+        kind=PollJobKind.SHORT,
+        status=PollJobStatus.RUNNING,
+        include_inventory=False,
+        started_at=datetime.now(timezone.utc),
+        total=5,
+        done=1,
+    )
+    mgr._remember_job(job)
+    try:
+        r = client.get("/monitoring/poll-ui", params=_POLL_REFRESH)
+        assert r.status_code == 200
+        assert 'hx-post="/monitoring/poll/cancel"' in r.text
+        assert "Остановить опрос" in r.text
+    finally:
+        mgr._clear_active_if(job.job_id)
+        mgr._jobs.pop(job.job_id, None)
 
 
 def test_poll_all_endpoint_returns_progress_panel(poll_web_client: tuple) -> None:

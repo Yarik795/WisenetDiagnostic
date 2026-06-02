@@ -31,6 +31,7 @@
         {% elif job.status.value == 'completed' %}Завершён
         {% elif job.status.value == 'failed' %}Ошибка
         {% elif job.status.value == 'skipped' %}Пропущен
+        {% elif job.status.value == 'cancelled' %}Прерван
         {% else %}{{ job.status.value }}{% endif %}
       </span>
       {% if job.status.value == 'running' and job.total > 0 %}
@@ -55,7 +56,7 @@
         {% endif %}
       {% endfor %}
     {% endif %}
-    <p class="poll-job-line{% if job.status.value in ('failed', 'skipped') %} poll-job-line--error{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}"{% if ns.err %} title="{{ ns.err }}"{% endif %}>
+    <p class="poll-job-line{% if job.status.value in ('failed', 'skipped') %} poll-job-line--error{% elif job.status.value == 'cancelled' %} poll-job-line--warn{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}"{% if ns.err %} title="{{ ns.err }}"{% endif %}>
       {% if job.status.value == 'running' and job.phase == 'waiting_retry' and job.pending_retry_count > 0 %}
         Повтор {{ job.retry_round }}/{{ job.max_attempts }} через {{ job.retry_delay_seconds }} с, ожидают {{ job.pending_retry_count }} NVR
       {% elif job.status.value == 'running' %}
@@ -64,7 +65,7 @@
         {% else %}
         Нет включённых регистраторов
         {% endif %}
-      {% elif job.status.value in ('completed', 'failed', 'skipped') %}
+      {% elif job.status.value in ('completed', 'failed', 'skipped', 'cancelled') %}
         {% if job.message %}{{ job.message }}{% elif job.total == 0 %}Нет включённых регистраторов{% endif %}
       {% elif job.status.value == 'pending' %}
         {% if job.total > 0 %}Подготовка…{% else %}Нет включённых регистраторов{% endif %}
@@ -73,6 +74,23 @@
   </div>
 
   <div class="poll-job-actions">
+    {% if job.is_active %}
+    <form
+      class="poll-job-form poll-job-form--cancel"
+      hx-post="/monitoring/poll/cancel"
+      hx-target="#poll-page-actions"
+      hx-swap="outerHTML"
+    >
+      <input type="hidden" name="refresh_url" value="{{ refresh_url }}">
+      <input type="hidden" name="refresh_target" value="{{ refresh_target }}">
+      {% if refresh_select %}<input type="hidden" name="refresh_select" value="{{ refresh_select }}">{% endif %}
+      <button
+        type="submit"
+        class="btn btn-outline btn-sm poll-job-btn poll-job-btn--cancel"
+        title="Прервать текущий опрос NVR; следующие циклы по расписанию не затрагиваются"
+      >Остановить опрос</button>
+    </form>
+    {% endif %}
     {% if job.kind.value != 'inventory' %}
     <form
       class="poll-job-form"

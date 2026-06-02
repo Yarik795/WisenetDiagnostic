@@ -11,7 +11,7 @@ from typing import Optional
 
 from .config_store import ConfigStore
 from .models import Recorder
-from .monitoring import PollCycleStats, run_poll_cycle
+from .monitoring import PollCycleCancelled, PollCycleStats, run_poll_cycle
 from .state_store import StateStore
 from .ui.helpers import display_recorder_name
 
@@ -46,6 +46,7 @@ class PollJobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -169,14 +170,23 @@ class PollJobTracker:
             self.job.recent_results.insert(0, result)
             self.job.recent_results = self.job.recent_results[: self._max_recent]
 
-    async def finish(self, message: str, *, failed: bool = False) -> None:
+    async def finish(
+        self,
+        message: str,
+        *,
+        failed: bool = False,
+        cancelled: bool = False,
+    ) -> None:
         async with self._mu:
             self.job.running_names = []
             self.job.finished_at = datetime.now(timezone.utc)
             self.job.message = message
-            self.job.status = (
-                PollJobStatus.FAILED if failed else PollJobStatus.COMPLETED
-            )
+            if cancelled:
+                self.job.status = PollJobStatus.CANCELLED
+            elif failed:
+                self.job.status = PollJobStatus.FAILED
+            else:
+                self.job.status = PollJobStatus.COMPLETED
 
 
 class PollJobManager:
@@ -188,6 +198,7 @@ class PollJobManager:
         self._jobs: dict[str, PollJob] = {}
         self._active_job_id: Optional[str] = None
         self._tasks: dict[str, asyncio.Task] = {}
+        self._cancel_events: dict[str, asyncio.Event] = {}
 
     def get_job(self, job_id: str) -> Optional[PollJob]:
         return self._jobs.get(job_id)
@@ -272,8 +283,33 @@ class PollJobManager:
                 name=f"poll-job-{job.job_id}",
             )
             self._tasks[job.job_id] = task
-            task.add_done_callback(lambda t: self._tasks.pop(job.job_id, None))
+            task.add_done_callback(self._task_done_callback(job.job_id))
             return job
+
+    def _task_done_callback(self, job_id: str):
+        def _cb(_task: asyncio.Task) -> None:
+            self._tasks.pop(job_id, None)
+            self._cancel_events.pop(job_id, None)
+
+        return _cb
+
+    async def cancel_active_poll(self) -> bool:
+        """Прервать текущий массовый опрос. Расписание планировщика не меняется."""
+        job = self.get_active_job()
+        if not job:
+            return False
+        job_id = job.job_id
+        cancel_event = self._cancel_events.get(job_id)
+        if cancel_event:
+            cancel_event.set()
+        task = self._tasks.get(job_id)
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        return True
 
     async def _execute_job(
         self,
@@ -288,6 +324,12 @@ class PollJobManager:
             self._clear_active_if(job.job_id)
             return
 
+        cancel_event = asyncio.Event()
+        self._cancel_events[job.job_id] = cancel_event
+        current = asyncio.current_task()
+        if current is not None:
+            self._tasks[job.job_id] = current
+
         async with self._cycle_lock:
             job.status = PollJobStatus.RUNNING
             tracker = PollJobTracker(job)
@@ -298,11 +340,23 @@ class PollJobManager:
                     include_inventory=job.include_inventory,
                     job_id=job.job_id,
                     tracker=tracker,
+                    cancel_event=cancel_event,
                 )
                 msg = _build_poll_completion_message(job, stats)
                 await tracker.finish(msg)
+            except PollCycleCancelled:
+                msg = f"Опрос прерван: {job.done} из {job.total}"
+                await tracker.finish(msg, cancelled=True)
+            except asyncio.CancelledError:
+                if cancel_event.is_set():
+                    msg = f"Опрос прерван: {job.done} из {job.total}"
+                    await tracker.finish(msg, cancelled=True)
+                else:
+                    raise
             except Exception as exc:
                 logger.exception("poll job failed", extra={"job_id": job.job_id})
                 await tracker.finish(str(exc) or "Ошибка опроса", failed=True)
             finally:
+                self._tasks.pop(job.job_id, None)
+                self._cancel_events.pop(job.job_id, None)
                 self._clear_active_if(job.job_id)

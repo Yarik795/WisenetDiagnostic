@@ -512,6 +512,32 @@ async def poll_single_recorder(
     )
 
 
+class PollCycleCancelled(Exception):
+    """Массовый опрос прерван по запросу пользователя."""
+
+
+async def _interruptible_sleep(
+    seconds: float, cancel_event: Optional[asyncio.Event]
+) -> None:
+    if not cancel_event:
+        await asyncio.sleep(seconds)
+        return
+    try:
+        await asyncio.wait_for(cancel_event.wait(), timeout=seconds)
+    except asyncio.TimeoutError:
+        return
+    if cancel_event.is_set():
+        raise PollCycleCancelled()
+
+
+async def _abort_wave_tasks(tasks: list[asyncio.Task]) -> None:
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 def _poll_retry_settings(config) -> tuple[int, int]:
     settings = config.monitoring
     if settings.poll_retry_enabled and settings.poll_retry_max > 0:
@@ -526,6 +552,7 @@ async def run_poll_cycle(
     include_inventory: bool = False,
     job_id: Optional[str] = None,
     tracker: Optional["PollJobTracker"] = None,
+    cancel_event: Optional[asyncio.Event] = None,
 ) -> PollCycleStats:
     from .exclusions import pollable_recorders
 
@@ -562,102 +589,110 @@ async def run_poll_cycle(
             await tracker.recorder_attempt_finished(rec)
         return rec, result
 
-    while pending and attempt < max_attempts:
-        attempt += 1
-        if attempt > 1 and tracker:
-            await tracker.set_waiting_retry(
-                attempt, len(pending), retry_delay, max_attempts
-            )
-            await asyncio.sleep(retry_delay)
-        if tracker:
-            await tracker.set_polling_round(attempt, len(pending))
-
-        still_pending: list[Recorder] = []
-        polled_at = datetime.now(timezone.utc)
-        wave_tasks = [asyncio.create_task(_poll_wave_one(r)) for r in pending]
-
-        async def _apply_wave_result(rec: Recorder, wave: _WavePollResult) -> None:
-            state = poll_states[rec.id]
-            state.attempts = attempt
-
-            if job_id:
-                state_store.insert_poll_attempt(
-                    job_id=job_id,
-                    recorder_id=rec.id,
-                    attempt=attempt,
-                    outcome=wave.outcome,
-                    online=wave.online,
-                    error=wave.error,
-                    duration_ms=wave.duration_ms,
-                    recorded_at=polled_at,
+    try:
+        while pending and attempt < max_attempts:
+            if cancel_event and cancel_event.is_set():
+                raise PollCycleCancelled()
+            attempt += 1
+            if attempt > 1 and tracker:
+                await tracker.set_waiting_retry(
+                    attempt, len(pending), retry_delay, max_attempts
                 )
+                await _interruptible_sleep(retry_delay, cancel_event)
+            if tracker:
+                await tracker.set_polling_round(attempt, len(pending))
 
-            if wave.online:
-                state.success_attempt = attempt
-                update = apply_poll_result(
-                    config_store,
-                    state_store,
-                    rec,
-                    wave.poll,
-                    settings,
-                    polled_at,
-                    update_config=False,
-                )
-                if update is not None:
-                    status_updates.append(update)
-                stats.responded += 1
-                if attempt > 1:
-                    stats.responded_after_retry += 1
-                if tracker:
-                    await tracker.recorder_final_finished(
-                        rec,
-                        success=True,
-                        after_retry=attempt > 1,
-                    )
-            elif attempt >= max_attempts:
-                update = apply_poll_result(
-                    config_store,
-                    state_store,
-                    rec,
-                    wave.poll,
-                    settings,
-                    polled_at,
-                    update_config=False,
-                )
-                if update is not None:
-                    status_updates.append(update)
-                stats.still_unreachable += 1
-                if tracker:
-                    await tracker.recorder_final_finished(
-                        rec,
-                        success=False,
-                        after_retry=False,
+            still_pending: list[Recorder] = []
+            polled_at = datetime.now(timezone.utc)
+            wave_tasks = [
+                asyncio.create_task(_poll_wave_one(r), name=f"poll-{r.id}")
+                for r in pending
+            ]
+
+            async def _apply_wave_result(rec: Recorder, wave: _WavePollResult) -> None:
+                state = poll_states[rec.id]
+                state.attempts = attempt
+
+                if job_id:
+                    state_store.insert_poll_attempt(
+                        job_id=job_id,
+                        recorder_id=rec.id,
+                        attempt=attempt,
+                        outcome=wave.outcome,
+                        online=wave.online,
                         error=wave.error,
+                        duration_ms=wave.duration_ms,
+                        recorded_at=polled_at,
                     )
-            else:
-                still_pending.append(rec)
 
-        for finished in asyncio.as_completed(wave_tasks):
-            rec, wave = await finished
-            await _apply_wave_result(rec, wave)
+                if wave.online:
+                    state.success_attempt = attempt
+                    update = apply_poll_result(
+                        config_store,
+                        state_store,
+                        rec,
+                        wave.poll,
+                        settings,
+                        polled_at,
+                        update_config=False,
+                    )
+                    if update is not None:
+                        status_updates.append(update)
+                    stats.responded += 1
+                    if attempt > 1:
+                        stats.responded_after_retry += 1
+                    if tracker:
+                        await tracker.recorder_final_finished(
+                            rec,
+                            success=True,
+                            after_retry=attempt > 1,
+                        )
+                elif attempt >= max_attempts:
+                    update = apply_poll_result(
+                        config_store,
+                        state_store,
+                        rec,
+                        wave.poll,
+                        settings,
+                        polled_at,
+                        update_config=False,
+                    )
+                    if update is not None:
+                        status_updates.append(update)
+                    stats.still_unreachable += 1
+                    if tracker:
+                        await tracker.recorder_final_finished(
+                            rec,
+                            success=False,
+                            after_retry=False,
+                            error=wave.error,
+                        )
+                else:
+                    still_pending.append(rec)
 
-        pending = still_pending
+            for finished in asyncio.as_completed(wave_tasks):
+                if cancel_event and cancel_event.is_set():
+                    await _abort_wave_tasks(wave_tasks)
+                    raise PollCycleCancelled()
+                rec, wave = await finished
+                await _apply_wave_result(rec, wave)
 
-    if job_id:
-        for rec in recorders:
-            state = poll_states[rec.id]
-            if state.attempts <= 0:
-                continue
-            state_store.update_poll_recorder_summary(
-                rec.id,
-                job_id=job_id,
-                attempts=state.attempts,
-                success_attempt=state.success_attempt,
-                first_try_ok=state.success_attempt == 1,
-            )
-
-    if status_updates:
-        config_store.update_recorder_statuses(status_updates)
+            pending = still_pending
+    finally:
+        if job_id:
+            for rec in recorders:
+                state = poll_states[rec.id]
+                if state.attempts <= 0:
+                    continue
+                state_store.update_poll_recorder_summary(
+                    rec.id,
+                    job_id=job_id,
+                    attempts=state.attempts,
+                    success_attempt=state.success_attempt,
+                    first_try_ok=state.success_attempt == 1,
+                )
+        if status_updates:
+            config_store.update_recorder_statuses(status_updates)
 
     logger.info(
         "poll cycle done",

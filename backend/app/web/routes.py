@@ -1471,6 +1471,41 @@ async def monitoring_poll_all(
     )
 
 
+@router.post("/monitoring/poll/cancel", response_class=HTMLResponse)
+async def monitoring_poll_cancel(
+    request: Request,
+    refresh_url: str = Form(default="/objects/partials/health-dashboard"),
+    refresh_target: str = Form(default="#health-dashboard-stack"),
+    refresh_select: str = Form(default=""),
+    inventory: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    cancelled = await poll_jobs.cancel_active_poll()
+    response = _poll_page_actions_response(
+        request,
+        poll_jobs,
+        store,
+        scheduler,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+        inventory=inventory.lower() in ("true", "1", "yes", "on"),
+    )
+    if cancelled:
+        response.headers["HX-Trigger"] = json.dumps(
+            {
+                "showToast": {
+                    "type": "success",
+                    "message": "Текущий опрос остановлен",
+                }
+            },
+            ensure_ascii=True,
+        )
+    return response
+
+
 @router.post("/monitoring/auto-poll/stop", response_class=HTMLResponse)
 def monitoring_auto_poll_stop(
     request: Request,
