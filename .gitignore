@@ -26,3 +26,6 @@ Thumbs.db
 
 # CMDB import (local)
 cmdb.xlsx
+
+# SUNAPI raw dumps (scripts/dump_nvr_api_samples.py)
+docs/nvr-samples/raw/
