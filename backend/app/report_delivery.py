@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, Optional
@@ -8,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from .config_store import ConfigStore
 from .display_time import get_display_tz, to_display
+from .logging_config import get_logger
 from .email_sender import send_report_email
 from .exclusions import excluded_ids_set, pollable_recorders
 from .models import AppConfig, EmailReportSettings
@@ -25,7 +25,7 @@ from .ui.error_report_render import (
     render_error_report_html,
 )
 
-logger = logging.getLogger("report_delivery")
+logger = get_logger("report_delivery")
 
 
 @dataclass(frozen=True)

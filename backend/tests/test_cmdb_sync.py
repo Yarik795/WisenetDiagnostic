@@ -131,6 +131,48 @@ def test_build_col_index_normalizes_spaces() -> None:
     assert idx["Функциональный тип"] == 1
 
 
+def test_build_col_index_accepts_latin_homoglyph_address() -> None:
+    header = ["IP", "Функциональный тип", "Адреc", "Модель уcтройcтва"]
+    idx = build_col_index(header)
+    assert idx["Адрес"] == 2
+    assert idx["Модель устройства"] == 3
+
+
+def test_parse_cmdb_with_homoglyph_functional_type() -> None:
+    video_type_homoglyph = "Видеорегистраторы".replace("с", "c")
+    grid = _grid_with_data(
+        [
+            "538000001",
+            "Оборудование ТСО",
+            "10.0.0.3",
+            "",
+            "",
+            "г. Москва",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Hanwha",
+            "HRX-1620",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            video_type_homoglyph,
+        ],
+    )
+    result = parse_cmdb_grid(grid)
+    assert len(result.rows) == 1
+    assert result.rows[0].host == "10.0.0.3"
+
+
 def test_merge_preserves_id_and_last_by_host() -> None:
     existing = [
         Recorder(

@@ -90,6 +90,8 @@ def test_objects_page_has_cmdb_sync_button(client: TestClient) -> None:
     assert r.status_code == 200
     assert "Обновить из CMDB" in r.text
     assert 'hx-post="/objects/sync-cmdb"' in r.text
+    assert 'hx-target="body"' in r.text
+    assert 'hx-swap="none"' in r.text
 
 
 def test_sync_cmdb_missing_file(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

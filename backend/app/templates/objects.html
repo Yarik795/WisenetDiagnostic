@@ -11,6 +11,8 @@
 {% include "partials/poll_page_actions.html" %}
 <button type="button" class="btn btn-primary"
   hx-post="/objects/sync-cmdb"
+  hx-target="body"
+  hx-swap="none"
   hx-confirm="Обновить список регистраторов из cmdb.xlsx? Записи, которых нет в CMDB, будут удалены."
 >Обновить из CMDB</button>
 {% endblock %}

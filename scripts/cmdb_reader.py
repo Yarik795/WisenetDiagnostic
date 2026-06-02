@@ -15,12 +15,48 @@ COL_FUNCTIONAL_TYPE = "Функциональный тип"
 
 _REQUIRED_HEADERS = {COL_IP, COL_FUNCTIONAL_TYPE}
 
+# Latin letters that look like Cyrillic (common CMDB export corruption).
+_HOMOGLYPH_MAP = str.maketrans(
+    {
+        "A": "А",
+        "a": "а",
+        "B": "В",
+        "C": "С",
+        "c": "с",
+        "E": "Е",
+        "e": "е",
+        "H": "Н",
+        "K": "К",
+        "M": "М",
+        "O": "О",
+        "o": "о",
+        "P": "Р",
+        "p": "р",
+        "T": "Т",
+        "X": "Х",
+        "x": "х",
+        "Y": "У",
+        "y": "у",
+    }
+)
 
-def normalize_header(value: Any) -> str:
+
+def normalize_homoglyphs(text: str) -> str:
+    if not any("\u0400" <= ch <= "\u04FF" for ch in text):
+        return text
+    return text.translate(_HOMOGLYPH_MAP)
+
+
+def normalize_cmdb_label(value: Any) -> str:
+    """Normalize CMDB headers and categorical fields (not IP/MAC/host)."""
     if value is None:
         return ""
-    text = str(value).strip()
-    return re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+", " ", str(value).strip())
+    return normalize_homoglyphs(text)
+
+
+def normalize_header(value: Any) -> str:
+    return normalize_cmdb_label(value)
 
 
 def _cell_str(value: Any) -> str:
@@ -88,7 +124,9 @@ def parse_cmdb_grid(rows: list[list[Any]]) -> CmdbParseResult:
             continue
         total_data_rows += 1
 
-        func_type = _cell_str(row[type_col] if type_col < len(row) else None)
+        func_type = normalize_cmdb_label(
+            row[type_col] if type_col < len(row) else None
+        )
         if func_type != FUNCTIONAL_TYPE_VIDEO:
             skipped_wrong_type += 1
             continue
