@@ -291,7 +291,14 @@ function initTimeDashboard() {
   });
 }
 
+function initServerToasts() {
+  document.querySelectorAll("#toast-container .toast").forEach((el) => {
+    setTimeout(() => el.remove(), 5000);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  initServerToasts();
   if (typeof htmx === "undefined") {
     showToast(
       "error",
@@ -346,8 +353,16 @@ function logHtmxClient(eventName, detail) {
   console.info("[wisenet]", JSON.stringify(payload));
 }
 
-document.body.addEventListener("htmx:sendError", (e) => logHtmxClient("htmx_send_error", e.detail));
-document.body.addEventListener("htmx:responseError", (e) =>
-  logHtmxClient("htmx_response_error", e.detail)
-);
+document.body.addEventListener("htmx:sendError", (e) => {
+  logHtmxClient("htmx_send_error", e.detail);
+  if (e.detail?.requestConfig?.path === "/objects/sync-cmdb") {
+    showToast("error", "Нет связи с сервером при обновлении из CMDB.");
+  }
+});
+document.body.addEventListener("htmx:responseError", (e) => {
+  logHtmxClient("htmx_response_error", e.detail);
+  if (e.detail?.requestConfig?.path === "/objects/sync-cmdb") {
+    showToast("error", "Не удалось обновить список из CMDB. Проверьте cmdb.xlsx и логи.");
+  }
+});
 document.body.addEventListener("htmx:swapError", (e) => logHtmxClient("htmx_swap_error", e.detail));

@@ -42,12 +42,31 @@ router = APIRouter(tags=["web"])
 check_logger = get_logger("check")
 
 
-def _redirect(url: str, toast_type: str | None = None, message: str | None = None) -> Response:
+def _redirect(
+    url: str,
+    toast_type: str | None = None,
+    message: str | None = None,
+    *,
+    request: Request | None = None,
+) -> Response:
+    redirect_url = url
     if toast_type and message:
         qs = urlencode({"toast": toast_type, "msg": message})
-        url = f"{url}?{qs}"
-    response = RedirectResponse(url=url, status_code=303)
-    response.headers["HX-Redirect"] = url
+        redirect_url = f"{url}?{qs}"
+
+    headers: dict[str, str] = {"HX-Redirect": redirect_url}
+    if toast_type and message:
+        headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"type": toast_type, "message": message}},
+            ensure_ascii=True,
+        )
+
+    if request is not None and request.headers.get("HX-Request") == "true":
+        return Response(status_code=200, headers=headers)
+
+    response = RedirectResponse(url=redirect_url, status_code=303)
+    for key, value in headers.items():
+        response.headers[key] = value
     return response
 
 
@@ -423,13 +442,14 @@ def objects_page(
 
 @router.post("/objects/sync-cmdb", response_class=HTMLResponse)
 def objects_sync_cmdb(
+    request: Request,
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> Response:
     result = sync_from_cmdb(store, state=state)
     if result.ok:
-        return _redirect("/objects", "success", result.message)
-    return _redirect("/objects", "error", result.message)
+        return _redirect("/objects", "success", result.message, request=request)
+    return _redirect("/objects", "error", result.message, request=request)
 
 
 @router.get("/objects/partials/health-dashboard", response_class=HTMLResponse)
@@ -788,6 +808,7 @@ def settings_exclusions_save(
         "/settings/exclusions",
         "success",
         "Список исключений сохранён",
+        request=request,
     )
 
 
@@ -864,7 +885,7 @@ async def recorder_create(
         return _form_validation_error(request, None, store, e)
 
     store.create_recorder(body)
-    return _redirect("/objects", "success", "Регистратор добавлен")
+    return _redirect("/objects", "success", "Регистратор добавлен", request=request)
 
 
 @router.post("/recorders/{recorder_id}", response_class=HTMLResponse)
@@ -907,7 +928,7 @@ async def recorder_update(
         return _form_validation_error(request, recorder, store, e)
 
     store.update_recorder(recorder_id, body)
-    return _redirect("/objects", "success", "Регистратор сохранён")
+    return _redirect("/objects", "success", "Регистратор сохранён", request=request)
 
 
 @router.post("/recorders/{recorder_id}/delete", response_class=HTMLResponse)
@@ -922,8 +943,8 @@ def recorder_delete(
     state.delete_recorder_data(recorder_id)
     referer = request.headers.get("HX-Current-URL", "")
     if "/recorders" in referer and "/objects" not in referer:
-        return _redirect("/recorders", "success", "Регистратор удалён")
-    return _redirect("/objects", "success", "Регистратор удалён")
+        return _redirect("/recorders", "success", "Регистратор удалён", request=request)
+    return _redirect("/objects", "success", "Регистратор удалён", request=request)
 
 
 @router.post("/recorders/{recorder_id}/exclude", response_class=HTMLResponse)
@@ -1497,5 +1518,5 @@ async def recorder_inventory(
     await poll_single_recorder(store, state, recorder, include_inventory=True)
     referer = request.headers.get("HX-Current-URL", "")
     if "/channels" in referer:
-        return _redirect("/channels", "success", "Каналы обновлены")
-    return _redirect("/objects", "success", "Каналы обновлены")
+        return _redirect("/channels", "success", "Каналы обновлены", request=request)
+    return _redirect("/objects", "success", "Каналы обновлены", request=request)

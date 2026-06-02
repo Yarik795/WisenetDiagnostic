@@ -97,6 +97,21 @@ def test_objects_page_has_cmdb_sync_button(client: TestClient) -> None:
 def test_sync_cmdb_missing_file(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     missing = Path("/nonexistent/cmdb-missing-test.xlsx")
     monkeypatch.setattr("app.cmdb_sync.DEFAULT_CMDB_PATH", missing)
+    r = client.post(
+        "/objects/sync-cmdb",
+        follow_redirects=False,
+        headers={"HX-Request": "true"},
+    )
+    assert r.status_code == 200
+    assert "toast=error" in r.headers["hx-redirect"]
+    assert "showToast" in r.headers.get("hx-trigger", "")
+
+
+def test_sync_cmdb_missing_file_without_htmx(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missing = Path("/nonexistent/cmdb-missing-test.xlsx")
+    monkeypatch.setattr("app.cmdb_sync.DEFAULT_CMDB_PATH", missing)
     r = client.post("/objects/sync-cmdb", follow_redirects=False)
     assert r.status_code == 303
     loc = r.headers["location"]
@@ -141,9 +156,14 @@ def test_sync_cmdb_success(
     _write_cmdb_xlsx(cmdb_path, grid)
     monkeypatch.setattr("app.cmdb_sync.DEFAULT_CMDB_PATH", cmdb_path)
 
-    r = client.post("/objects/sync-cmdb", follow_redirects=False)
-    assert r.status_code == 303
-    assert "toast=success" in r.headers["location"]
+    r = client.post(
+        "/objects/sync-cmdb",
+        follow_redirects=False,
+        headers={"HX-Request": "true"},
+    )
+    assert r.status_code == 200
+    assert "toast=success" in r.headers["hx-redirect"]
+    assert "showToast" in r.headers.get("hx-trigger", "")
 
     page = client.get("/objects")
     assert "10.88.1.1" in page.text
