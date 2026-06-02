@@ -128,6 +128,14 @@ def channel_is_active(ch: "ChannelInfo") -> bool:
     return state == "on"
 
 
+def is_analog_channel(ch: "ChannelInfo") -> bool:
+    """Аналоговый вход: в API модель/имя «Analog CAM», IP и битрейт IP-потока не применимы."""
+    for raw in (ch.camera_model, ch.name):
+        if raw and "analog" in raw.strip().lower():
+            return True
+    return False
+
+
 @dataclass
 class ChannelInfo:
     channel_no: int
@@ -1389,24 +1397,21 @@ def compute_stream_metrics(
     *,
     profile: Optional[NvrApiProfile] = None,
 ) -> tuple[Optional[float], Optional[float], Optional[float], int, int]:
-    """max CPU %, avg CPU %, sum DataRate Mbps, zero-bitrate active channels, PoE off count."""
+    """max CPU %, avg CPU %, sum DataRate Mbps, zero-bitrate IP channels (без analog)."""
     active = [ch for ch in channels if channel_is_active(ch)]
     cpus = [ch.cpu_usage for ch in active if ch.cpu_usage is not None]
     rates = [ch.data_rate for ch in active if ch.data_rate is not None]
     zero_bitrate = sum(
         1
         for ch in active
-        if ch.data_rate is not None and ch.data_rate <= 0
+        if not is_analog_channel(ch)
+        and ch.data_rate is not None
+        and ch.data_rate <= 0
     )
-    poe_off = 0
-    if profile and profile.supports_poe_status:
-        poe_off = sum(
-            1 for ch in active if ch.poe_status is False
-        )
     cpu_max = max(cpus) if cpus else None
     cpu_avg = round(sum(cpus) / len(cpus), 2) if cpus else None
     rate_sum = round(sum(rates), 3) if rates else None
-    return cpu_max, cpu_avg, rate_sum, zero_bitrate, poe_off
+    return cpu_max, cpu_avg, rate_sum, zero_bitrate, 0
 
 
 def _to_float(value) -> Optional[float]:

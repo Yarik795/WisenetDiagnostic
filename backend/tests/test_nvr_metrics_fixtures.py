@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.models import MonitoringSettings
 from app.monitoring import evaluate_channel_health, evaluate_recorder_health
+from app.sunapi_extended import is_analog_channel
 from app.sunapi import DeviceInfo
 from app.sunapi_extended import (
     ChannelInfo,
@@ -30,12 +31,11 @@ def _read(name: str) -> str:
     return (_FIXTURES / name).read_text(encoding="utf-8")
 
 
-def test_fixture_hrx1634_cameraregister_cpu_and_poe() -> None:
+def test_fixture_hrx1634_cameraregister_cpu() -> None:
     channels = parse_cameraregister(_read("hrx1634_cameraregister.txt"))
     by_no = {c.channel_no: c for c in channels}
     assert by_no[0].cpu_usage is not None
     assert by_no[0].data_rate is not None
-    assert by_no[0].poe_status is False
     profile = NvrApiProfile.from_device(
         DeviceInfo(model="HRX-1634", cgi_version="2.6.0")
     )
@@ -44,7 +44,7 @@ def test_fixture_hrx1634_cameraregister_cpu_and_poe() -> None:
     )
     assert cpu_max is not None
     assert rate_sum is not None
-    assert poe_off >= 1
+    assert poe_off == 0
 
 
 def test_fixture_hrx1620_cameraregister_no_poe_field() -> None:
@@ -91,6 +91,41 @@ def test_eventstatus_quality_flags_from_fixture() -> None:
     ch0 = next(e for e in result.channels if e.channel_no == 0)
     assert ch0.low_fps is True
     assert ch0.tampering is False
+
+
+def test_analog_channel_zero_bitrate_is_ok() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        name="Analog CAM",
+        camera_model="Analog CAM",
+        video_state="On",
+        data_rate=0.0,
+        cpu_usage=0.0,
+    )
+    assert is_analog_channel(ch)
+    status, reason = evaluate_channel_health(ch, None, MonitoringSettings())
+    assert status == "ok"
+    assert "аналог" in reason.lower()
+
+
+def test_poe_off_does_not_affect_channel_health() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        source_state="On",
+        camera_ip="10.0.0.5",
+        camera_model="QND-6082R",
+        video_state="On",
+        data_rate=2.5,
+        poe_status=False,
+    )
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="XRN-6410B2", cgi_version="2.6.0")
+    )
+    status, reason = evaluate_channel_health(
+        ch, None, MonitoringSettings(), profile=profile
+    )
+    assert status == "ok"
+    assert "poe" not in reason.lower()
 
 
 def test_channel_health_low_fps_warn() -> None:

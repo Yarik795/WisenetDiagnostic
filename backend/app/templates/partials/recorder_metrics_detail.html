@@ -75,7 +75,6 @@
         <dt>CPU avg</dt><dd>{{ format_cpu_usage(metrics.cpu_usage_avg) }}</dd>
         <dt>Суммарный битрейт</dt><dd>{{ format_mbps(metrics.data_rate_total_mbps) }}</dd>
         <dt>Нулевой битрейт</dt><dd>{{ metrics.channels_zero_bitrate if metrics.channels_zero_bitrate is not none else '—' }} кан.</dd>
-        <dt>PoE выкл.</dt><dd>{{ metrics.channels_poe_off if metrics.channels_poe_off is not none else '—' }} кан.</dd>
       </dl>
     </section>
     <section class="metrics-block">

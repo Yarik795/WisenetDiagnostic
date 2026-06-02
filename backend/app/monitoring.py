@@ -24,6 +24,7 @@ from .sunapi_extended import (
     channel_is_active,
     enable_recorder_ntp,
     is_register_status_error,
+    is_analog_channel,
     is_stale_connectfail_on_live_channel,
     normalize_register_status,
     poll_recorder,
@@ -82,6 +83,9 @@ def evaluate_channel_health(
             "Канал активен (в API регистрации ConnectFail, поток в норме)",
         )
 
+    if is_analog_channel(ch):
+        return HealthStatus.OK.value, "Аналоговый канал"
+
     reg_key = normalize_register_status(ch.register_status)
     if state == "on" and is_register_status_error(ch.register_status):
         return (
@@ -94,8 +98,6 @@ def evaluate_channel_health(
     if channel_is_active(ch):
         if ch.data_rate is not None and ch.data_rate <= 0:
             return HealthStatus.WARN.value, "Нулевой битрейт потока"
-        if profile and profile.supports_poe_status and ch.poe_status is False:
-            return HealthStatus.WARN.value, "PoE выключен на канале"
         if (
             ch.cpu_usage is not None
             and ch.cpu_usage >= settings.cpu_usage_error_percent
@@ -230,11 +232,6 @@ def evaluate_recorder_health(
         reasons.append(
             f"Каналов с нулевым битрейтом: {poll.channels_zero_bitrate}"
         )
-
-    if poll.channels_poe_off and poll.channels_poe_off > 0:
-        if status != HealthStatus.ERROR.value:
-            status = HealthStatus.WARN.value
-        reasons.append(f"Каналов с выкл. PoE: {poll.channels_poe_off}")
 
     if poll.date_time:
         if poll.date_time.ntp_status and poll.date_time.ntp_status.lower() == "fail":
@@ -490,7 +487,7 @@ def apply_poll_result(
         cpu_usage_avg=poll.cpu_usage_avg,
         data_rate_total_mbps=poll.data_rate_total_mbps,
         channels_zero_bitrate=poll.channels_zero_bitrate or None,
-        channels_poe_off=poll.channels_poe_off or None,
+        channels_poe_off=None,
     )
     metrics = state.get_recorder_metrics(recorder.id)
     for category in CATEGORY_LABELS:
