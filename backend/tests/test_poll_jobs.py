@@ -8,7 +8,7 @@ import pytest
 
 from app.config_store import ConfigStore
 from app.models import AppConfig, Recorder
-from app.monitoring import run_poll_cycle
+from app.monitoring import PollCycleStats, run_poll_cycle
 from app.poll_jobs import PollJobManager, PollJobStatus, PollJobTracker, PollJob, PollJobKind
 from app.state_store import StateStore
 
@@ -51,17 +51,26 @@ async def test_run_poll_cycle_updates_tracker(stores: tuple[ConfigStore, StateSt
     )
     tracker = PollJobTracker(job)
 
+    online_poll = __import__("app.sunapi_extended", fromlist=["RecorderPollData"]).RecorderPollData(
+        online=True
+    )
+
     with patch(
-        "app.monitoring.poll_single_recorder",
+        "app.monitoring.poll_recorder",
         new_callable=AsyncMock,
-        return_value=None,
+        return_value=online_poll,
     ) as mock_poll:
         await run_poll_cycle(
-            config_store, state, include_inventory=False, tracker=tracker
+            config_store,
+            state,
+            include_inventory=False,
+            tracker=tracker,
+            job_id="testjob01",
         )
 
     assert job.total == 2
     assert job.done == 2
+    assert job.success == 2
     assert mock_poll.await_count == 2
 
 
@@ -77,6 +86,7 @@ async def test_poll_job_manager_serializes_cycles(
     async def slow_poll(*args, **kwargs):
         started.set()
         await release.wait()
+        return PollCycleStats()
 
     with patch("app.poll_jobs.run_poll_cycle", side_effect=slow_poll):
         job1 = manager.start_manual_poll(config_store, state, include_inventory=False)
@@ -140,6 +150,7 @@ async def test_manual_poll_empty_recorders(tmp_path: Path) -> None:
     manager = PollJobManager()
 
     with patch("app.poll_jobs.run_poll_cycle", new_callable=AsyncMock) as mock_cycle:
+        mock_cycle.return_value = PollCycleStats(total=0)
         job = manager.start_manual_poll(config_store, state, include_inventory=False)
         await manager._tasks[job.job_id]
         mock_cycle.assert_awaited_once()

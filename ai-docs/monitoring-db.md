@@ -23,6 +23,7 @@
 - Снимок метрик по каждому регистратору (`recorder_metrics`).
 - История смены агрегированного статуса канала/регистратора (`status_history`).
 - История смены статуса по категориям здоровья (`category_status_history`).
+- Журнал попыток опроса в рамках массового job (`recorder_poll_attempts`).
 
 **Не в БД (смежные хранилища):**
 
@@ -221,6 +222,10 @@ erDiagram
 | `storage_total_mb` | `REAL` | YES | — | Всего, МБ |
 | `disks_json` | `TEXT` | YES | — | JSON-массив объектов дисков (см. §3.5) |
 | `system_events_json` | `TEXT` | YES | — | JSON-объект `{ "HDDFail": true, "CPUFanError": false, … }` |
+| `last_poll_job_id` | `TEXT` | YES | — | ID последнего массового опроса (`PollJob.job_id`) |
+| `last_poll_attempts` | `INTEGER` | YES | — | Число попыток в том job |
+| `last_poll_success_attempt` | `INTEGER` | YES | — | Номер успешной попытки (1-based); `NULL` если ответа не было |
+| `last_poll_first_try_ok` | `INTEGER` | YES | — | `1` — ответ с первой попытки job; `0` — с повтора или без ответа |
 
 ### 3.3. Ограничения и индексы
 
@@ -468,9 +473,48 @@ erDiagram
 
 ---
 
-## 6. Жизненный цикл данных
+## 6. Таблица `recorder_poll_attempts`
 
-### 6.1. Старт приложения
+### 6.1. Назначение
+
+Append-only журнал **каждой попытки** опроса регистратора в рамках массового job (планировщик, «Опросить все NVR», инвентаризация). Нужен для анализа: ответ не с первого раза, хронические таймауты, длительность попыток.
+
+Одиночная проверка (`POST /recorders/{id}/check`) в эту таблицу **не пишет**.
+
+### 6.2. Поля
+
+| Поле | Тип SQLite | NULL | Назначение |
+|------|------------|------|------------|
+| `id` | `INTEGER` | NO | PK, autoincrement |
+| `job_id` | `TEXT` | NO | Идентификатор job из `PollJobManager` (12 hex) |
+| `recorder_id` | `TEXT` | NO | ID регистратора |
+| `attempt` | `INTEGER` | NO | Номер попытки в job (1 = первый массовый проход) |
+| `outcome` | `TEXT` | NO | `success` \| `offline` \| `error` |
+| `online` | `INTEGER` | NO | `1` если `RecorderPollData.online` |
+| `error` | `TEXT` | YES | Текст ошибки подключения / исключения |
+| `duration_ms` | `INTEGER` | YES | Длительность попытки, мс |
+| `recorded_at` | `TEXT` | NO | Время попытки (ISO UTC) |
+
+### 6.3. Индексы
+
+| Имя | Описание |
+|-----|----------|
+| `idx_poll_attempts_recorder` | `(recorder_id, recorded_at DESC)` |
+| `idx_poll_attempts_job` | `(job_id, recorder_id, attempt)` |
+
+### 6.4. Кто создаёт записи
+
+`monitoring.run_poll_cycle()` → `StateStore.insert_poll_attempt()` на каждой волне опроса, если передан `job_id`.
+
+После job для каждого опрошенного регистратора: `update_poll_recorder_summary()` обновляет поля `last_poll_*` в `recorder_metrics`.
+
+**Повторные волны:** если NVR не ответил (`online=0`), метрики **не обновляются** до успешной попытки или до исчерпания `poll_retry_max`; затем вызывается `apply_poll_result` с offline.
+
+---
+
+## 7. Жизненный цикл данных
+
+### 7.1. Старт приложения
 
 ```
 FastAPI lifespan → get_state_store() → StateStore.init_db()
@@ -478,7 +522,7 @@ FastAPI lifespan → get_state_store() → StateStore.init_db()
   → _migrate_schema() (ALTER при необходимости)
 ```
 
-### 6.2. Цикл опроса (основной поток записи)
+### 7.2. Цикл опроса (основной поток записи)
 
 ```mermaid
 sequenceDiagram
@@ -489,19 +533,22 @@ sequenceDiagram
     participant DB as StateStore / monitoring.db
 
     S->>PJ: try_run_scheduled / start_manual_poll
-    PJ->>M: run_poll_cycle (per enabled recorder)
-    M->>API: poll_recorder
-    API-->>M: RecorderPollData
-    M->>DB: upsert_channel × N
-    M->>DB: record_history (channel)
-    M->>DB: remove_channels_not_in (if inventory)
-    M->>DB: upsert_recorder_metrics
-    M->>DB: record_category_status × 6
-    M->>DB: record_history (recorder)
-    M->>Config: update_recorder_statuses (не в SQLite)
+    PJ->>M: run_poll_cycle job_id
+    loop each attempt wave
+        M->>API: poll_recorder pending subset
+        API-->>M: RecorderPollData
+        M->>DB: insert_poll_attempt
+        alt online
+            M->>DB: upsert_channel metrics history
+        else final offline
+            M->>DB: upsert_recorder_metrics offline
+        end
+    end
+    M->>DB: update_poll_recorder_summary
+    M->>Config: update_recorder_statuses
 ```
 
-### 6.3. Режимы опроса и влияние на БД
+### 7.3. Режимы опроса и влияние на БД
 
 | Режим | `include_inventory` | `channels_polled` | Эффект на `channels` |
 |-------|---------------------|-------------------|----------------------|
@@ -509,16 +556,16 @@ sequenceDiagram
 | Полный / инвентаризация | true (раз в 24 ч или вручную) | true | Полный список с NVR; лишние `channel_no` удаляются |
 | Проверка одного NVR | true | true | Как инвентаризация для одного id |
 
-### 6.4. Удаление регистратора
+### 7.4. Удаление регистратора
 
 `POST /recorders/{recorder_id}/delete`:
 
 1. `ConfigStore.delete_recorder()` — из `config.json`.
-2. `StateStore.delete_recorder_data()` — все 4 таблицы для этого `recorder_id`.
+2. `StateStore.delete_recorder_data()` — все таблицы для этого `recorder_id` (включая `recorder_poll_attempts`).
 
 ---
 
-## 7. API `StateStore` (справочник для кода и LLM)
+## 8. API `StateStore` (справочник для кода и LLM)
 
 | Метод | Таблицы | Назначение |
 |-------|---------|------------|
@@ -534,10 +581,13 @@ sequenceDiagram
 | `get_category_problem_since` | `category_status_history` | Начало текущего warn/error эпизода |
 | `category_problem_since_map` | `category_status_history` | Карта `(recorder_id, category) → datetime` |
 | `delete_recorder_data` | все | Каскадная очистка по `recorder_id` |
+| `insert_poll_attempt` | `recorder_poll_attempts` | Одна попытка в job |
+| `list_poll_attempts` | `recorder_poll_attempts` | Выборка по `job_id` / `recorder_id` |
+| `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
 
 ---
 
-## 8. Примеры SQL для LLM и аналитики
+## 9. Примеры SQL для LLM и аналитики
 
 Подключение (Python):
 
@@ -600,9 +650,42 @@ FROM recorder_metrics
 WHERE device_online = 1;
 ```
 
+**Регистраторы, ответившие только со 2-й попытки и позже (в конкретном job):**
+
+```sql
+SELECT recorder_id, attempt, error, recorded_at
+FROM recorder_poll_attempts
+WHERE job_id = 'abc123def456'
+  AND online = 1
+  AND attempt > 1;
+```
+
+**Без ответа после всех попыток job:**
+
+```sql
+SELECT a.recorder_id, a.attempt, a.error
+FROM recorder_poll_attempts a
+INNER JOIN (
+    SELECT recorder_id, MAX(attempt) AS max_attempt
+    FROM recorder_poll_attempts
+    WHERE job_id = 'abc123def456'
+    GROUP BY recorder_id
+) last ON a.recorder_id = last.recorder_id AND a.attempt = last.max_attempt
+WHERE a.job_id = 'abc123def456' AND a.online = 0;
+```
+
+**Сводка по последнему массовому опросу (быстрый срез):**
+
+```sql
+SELECT recorder_id, last_poll_attempts, last_poll_success_attempt, last_poll_first_try_ok
+FROM recorder_metrics
+WHERE last_poll_job_id IS NOT NULL
+  AND last_poll_first_try_ok = 0;
+```
+
 ---
 
-## 9. Контекст для LLM: типовые вопросы и источники ответов
+## 10. Контекст для LLM: типовые вопросы и источники ответов
 
 | Вопрос пользователя | Таблицы / поля |
 |---------------------|----------------|
@@ -612,12 +695,14 @@ WHERE device_online = 1;
 | «Перегрев дисков?» | `disks_json`, `category='temperature'` |
 | «Сколько каналов в ошибке?» | `channels_error`, `channels` WHERE `health_status='error'` |
 | «Активны ли системные события HDD?» | `system_events_json` → ключи `HDDFail`, `HDDError`, … |
+| «Отвечал ли NVR не с первого раза?» | `recorder_poll_attempts` или `last_poll_first_try_ok`, `last_poll_success_attempt` |
+| «Сколько попыток было в последнем job?» | `last_poll_attempts`, `last_poll_job_id` |
 
 Рекомендация для промпта LLM: всегда указывать `last_polled_at` — данные актуальны только после последнего опроса; при `device_online=0` метрики дисков/NTP могут быть устаревшими.
 
 ---
 
-## 10. Пороги и внешние зависимости (не в БД)
+## 11. Пороги и внешние зависимости (не в БД)
 
 Значения из `config.json` → `monitoring`, влияющие на записываемые `health_*` и категории:
 
@@ -630,13 +715,17 @@ WHERE device_online = 1;
 | `time_skew_warn_seconds` / `time_skew_error_seconds` | warn/error по времени |
 | `hdd_temperature_warn_celsius` / `hdd_temperature_error_celsius` | warn/error по температуре |
 | `max_concurrent_polls` | Параллелизм опроса (не меняет схему БД) |
+| `poll_retry_enabled` | Включить повторные волны для неотвечающих NVR |
+| `poll_retry_max` | Число дополнительных волн (после первого прохода) |
+| `poll_retry_delay_seconds` | Пауза между волнами, сек |
 
 ---
 
-## 11. Версионирование документа
+## 12. Версионирование документа
 
 | Версия | Дата | Примечание |
 |--------|------|------------|
 | 1.0 | 2026-05-25 | Первое описание по `state_store.py`, `monitoring.py`, `health_classifiers.py` |
+| 1.1 | 2026-06-02 | `recorder_poll_attempts`, поля `last_poll_*`, многоэтапный `run_poll_cycle` |
 
 При изменении схемы в `_migrate_schema()` обновляйте этот файл и таблицу полей в §2–§3.

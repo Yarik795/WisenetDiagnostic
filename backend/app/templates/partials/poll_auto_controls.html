@@ -1,0 +1,41 @@
+<div class="poll-auto-controls">
+  {% if auto_poll_active %}
+  <form
+    class="poll-auto-form"
+    hx-post="/monitoring/auto-poll/stop"
+    hx-target="#poll-page-actions"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="refresh_url" value="{{ refresh_url }}">
+    <input type="hidden" name="refresh_target" value="{{ refresh_target }}">
+    {% if refresh_select %}<input type="hidden" name="refresh_select" value="{{ refresh_select }}">{% endif %}
+    {% if poll_post_url == '/monitoring/inventory-all' %}
+    <input type="hidden" name="inventory" value="true">
+    {% endif %}
+    <button
+      type="submit"
+      class="btn btn-outline"
+      title="{{ schedule_hint }}"
+    >Остановить обновление</button>
+  </form>
+  {% else %}
+  <form
+    class="poll-auto-form"
+    hx-post="/monitoring/auto-poll/resume"
+    hx-target="#poll-page-actions"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="refresh_url" value="{{ refresh_url }}">
+    <input type="hidden" name="refresh_target" value="{{ refresh_target }}">
+    {% if refresh_select %}<input type="hidden" name="refresh_select" value="{{ refresh_select }}">{% endif %}
+    {% if poll_post_url == '/monitoring/inventory-all' %}
+    <input type="hidden" name="inventory" value="true">
+    {% endif %}
+    <button
+      type="submit"
+      class="btn btn-primary"
+      title="{{ schedule_hint }}"
+    >Возобновить обновление</button>
+  </form>
+  {% endif %}
+</div>

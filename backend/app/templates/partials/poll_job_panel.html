@@ -56,9 +56,11 @@
       {% endfor %}
     {% endif %}
     <p class="poll-job-line{% if job.status.value in ('failed', 'skipped') %} poll-job-line--error{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}"{% if ns.err %} title="{{ ns.err }}"{% endif %}>
-      {% if job.status.value == 'running' %}
+      {% if job.status.value == 'running' and job.phase == 'waiting_retry' and job.pending_retry_count > 0 %}
+        Повтор {{ job.retry_round }}/{{ job.max_attempts }} через {{ job.retry_delay_seconds }} с, ожидают {{ job.pending_retry_count }} NVR
+      {% elif job.status.value == 'running' %}
         {% if job.total > 0 %}
-        ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}
+        ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}{% if job.pending_retry_count and job.phase == 'polling' %} · в очереди {{ job.pending_retry_count }}{% endif %}
         {% else %}
         Нет включённых регистраторов
         {% endif %}

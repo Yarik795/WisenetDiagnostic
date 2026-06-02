@@ -1232,6 +1232,18 @@ tr.recorder-row--excluded {
   gap: 8px;
 }
 
+.poll-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.poll-auto-controls,
+.poll-auto-form {
+  display: inline-block;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

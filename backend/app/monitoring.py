@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
@@ -415,6 +416,69 @@ def _count_statuses(statuses: list[str]) -> dict[str, int]:
     return counts
 
 
+@dataclass
+class _WavePollResult:
+    online: bool
+    poll: RecorderPollData
+    error: Optional[str] = None
+    duration_ms: int = 0
+    outcome: str = "offline"
+
+
+@dataclass
+class _RecorderPollState:
+    attempts: int = 0
+    success_attempt: Optional[int] = None
+
+
+@dataclass
+class PollCycleStats:
+    total: int = 0
+    responded: int = 0
+    responded_after_retry: int = 0
+    still_unreachable: int = 0
+
+
+async def _fetch_poll_for_recorder(
+    recorder: Recorder,
+    credentials,
+    *,
+    include_inventory: bool,
+) -> _WavePollResult:
+    start = time.perf_counter()
+    try:
+        poll = await poll_recorder(
+            recorder,
+            credentials,
+            include_inventory=include_inventory,
+        )
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        if poll.online:
+            return _WavePollResult(
+                online=True,
+                poll=poll,
+                duration_ms=duration_ms,
+                outcome="success",
+            )
+        return _WavePollResult(
+            online=False,
+            poll=poll,
+            error=poll.error,
+            duration_ms=duration_ms,
+            outcome="offline",
+        )
+    except Exception as exc:
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        logger.exception("poll failed for %s", recorder.id)
+        return _WavePollResult(
+            online=False,
+            poll=RecorderPollData(online=False, error=str(exc)),
+            error=str(exc),
+            duration_ms=duration_ms,
+            outcome="error",
+        )
+
+
 async def poll_single_recorder(
     config_store: ConfigStore,
     state_store: StateStore,
@@ -432,7 +496,7 @@ async def poll_single_recorder(
     settings = config.monitoring
     polled_at = datetime.now(timezone.utc)
 
-    poll = await poll_recorder(
+    wave = await _fetch_poll_for_recorder(
         recorder,
         credentials,
         include_inventory=include_inventory,
@@ -441,11 +505,18 @@ async def poll_single_recorder(
         config_store,
         state_store,
         recorder,
-        poll,
+        wave.poll,
         settings,
         polled_at,
         update_config=update_config,
     )
+
+
+def _poll_retry_settings(config) -> tuple[int, int]:
+    settings = config.monitoring
+    if settings.poll_retry_enabled and settings.poll_retry_max > 0:
+        return 1 + settings.poll_retry_max, settings.poll_retry_delay_seconds
+    return 1, settings.poll_retry_delay_seconds
 
 
 async def run_poll_cycle(
@@ -453,47 +524,148 @@ async def run_poll_cycle(
     state_store: StateStore,
     *,
     include_inventory: bool = False,
+    job_id: Optional[str] = None,
     tracker: Optional["PollJobTracker"] = None,
-) -> None:
+) -> PollCycleStats:
     from .exclusions import pollable_recorders
 
     config = config_store.load()
     recorders = pollable_recorders(config)
+    stats = PollCycleStats(total=len(recorders))
+    max_attempts, retry_delay = _poll_retry_settings(config)
+
     if tracker:
         await tracker.set_total(len(recorders))
+        await tracker.set_retry_config(max_attempts, retry_delay)
     if not recorders:
-        return
-
+        return stats
+    credentials = config.credentials
+    settings = config.monitoring
     sem = asyncio.Semaphore(config.monitoring.max_concurrent_polls)
     status_updates: list[RecorderStatusUpdate] = []
+    poll_states: dict[str, _RecorderPollState] = {
+        rec.id: _RecorderPollState() for rec in recorders
+    }
+    pending: list[Recorder] = list(recorders)
+    attempt = 0
 
-    async def _one(rec: Recorder) -> None:
+    async def _poll_wave_one(rec: Recorder) -> tuple[Recorder, _WavePollResult]:
         if tracker:
             await tracker.recorder_started(rec)
         async with sem:
-            try:
-                update = await poll_single_recorder(
+            result = await _fetch_poll_for_recorder(
+                rec,
+                credentials,
+                include_inventory=include_inventory,
+            )
+        if tracker:
+            await tracker.recorder_attempt_finished(rec)
+        return rec, result
+
+    while pending and attempt < max_attempts:
+        attempt += 1
+        if attempt > 1 and tracker:
+            await tracker.set_waiting_retry(
+                attempt, len(pending), retry_delay, max_attempts
+            )
+            await asyncio.sleep(retry_delay)
+        if tracker:
+            await tracker.set_polling_round(attempt, len(pending))
+
+        wave_outcomes = await asyncio.gather(*[_poll_wave_one(r) for r in pending])
+        still_pending: list[Recorder] = []
+        polled_at = datetime.now(timezone.utc)
+
+        for rec, wave in wave_outcomes:
+            state = poll_states[rec.id]
+            state.attempts = attempt
+
+            if job_id:
+                state_store.insert_poll_attempt(
+                    job_id=job_id,
+                    recorder_id=rec.id,
+                    attempt=attempt,
+                    outcome=wave.outcome,
+                    online=wave.online,
+                    error=wave.error,
+                    duration_ms=wave.duration_ms,
+                    recorded_at=polled_at,
+                )
+
+            if wave.online:
+                state.success_attempt = attempt
+                update = apply_poll_result(
                     config_store,
                     state_store,
                     rec,
-                    include_inventory=include_inventory,
+                    wave.poll,
+                    settings,
+                    polled_at,
                     update_config=False,
                 )
                 if update is not None:
                     status_updates.append(update)
+                stats.responded += 1
+                if attempt > 1:
+                    stats.responded_after_retry += 1
                 if tracker:
-                    await tracker.recorder_finished(rec, success=True)
-            except Exception as exc:
-                logger.exception("poll failed for %s", rec.id)
-                if tracker:
-                    await tracker.recorder_finished(
-                        rec, success=False, error=str(exc)
+                    await tracker.recorder_final_finished(
+                        rec,
+                        success=True,
+                        after_retry=attempt > 1,
                     )
+            elif attempt >= max_attempts:
+                update = apply_poll_result(
+                    config_store,
+                    state_store,
+                    rec,
+                    wave.poll,
+                    settings,
+                    polled_at,
+                    update_config=False,
+                )
+                if update is not None:
+                    status_updates.append(update)
+                stats.still_unreachable += 1
+                if tracker:
+                    await tracker.recorder_final_finished(
+                        rec,
+                        success=False,
+                        after_retry=False,
+                        error=wave.error,
+                    )
+            else:
+                still_pending.append(rec)
 
-    await asyncio.gather(*[_one(r) for r in recorders])
+        pending = still_pending
+
+    if job_id:
+        for rec in recorders:
+            state = poll_states[rec.id]
+            if state.attempts <= 0:
+                continue
+            state_store.update_poll_recorder_summary(
+                rec.id,
+                job_id=job_id,
+                attempts=state.attempts,
+                success_attempt=state.success_attempt,
+                first_try_ok=state.success_attempt == 1,
+            )
+
     if status_updates:
         config_store.update_recorder_statuses(status_updates)
-    logger.info("poll cycle done", extra={"recorders": len(recorders)})
+
+    logger.info(
+        "poll cycle done",
+        extra={
+            "recorders": len(recorders),
+            "responded": stats.responded,
+            "after_retry": stats.responded_after_retry,
+            "unreachable": stats.still_unreachable,
+            "attempts": max_attempts,
+        },
+    )
+    return stats
 
 
 async def run_inventory_cycle(

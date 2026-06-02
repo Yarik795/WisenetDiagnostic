@@ -66,6 +66,9 @@ class MonitoringSettings(BaseModel):
     ntp_server: str = ""
     ntp_posix_timezone: str = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
     display_timezone: str = "Europe/Moscow"
+    poll_retry_enabled: bool = True
+    poll_retry_max: int = Field(default=3, ge=0, le=10)
+    poll_retry_delay_seconds: int = Field(default=5, ge=1, le=120)
 
     @field_validator("hdd_temperature_error_celsius")
     @classmethod

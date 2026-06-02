@@ -18,9 +18,15 @@ from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..monitoring import poll_single_recorder, run_ntp_fix_all
 from ..poll_jobs import PollJob, PollJobManager
+from ..scheduler import MonitoringScheduler
 from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
-from ..ui.dependencies import get_poll_job_manager, get_state_store, get_store
+from ..ui.dependencies import (
+    get_monitoring_scheduler,
+    get_poll_job_manager,
+    get_state_store,
+    get_store,
+)
 from ..ui.grouping import (
     SortMode,
     effective_status,
@@ -394,6 +400,7 @@ def objects_page(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
 ) -> HTMLResponse:
     inventory_view = "table" if view.strip().lower() == "table" else "groups"
     recorders = store.list_recorders()
@@ -433,6 +440,7 @@ def objects_page(
             **_poll_ui_ctx(
                 poll_jobs,
                 store,
+                scheduler,
                 refresh_url=poll_refresh_url,
                 refresh_target=poll_refresh_target,
             ),
@@ -643,6 +651,7 @@ def status_page(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
 ) -> HTMLResponse:
     only_problems = problems_only.lower() not in ("false", "0", "no")
     category_filter: Optional[HealthCategory] = None
@@ -677,6 +686,7 @@ def status_page(
             **_poll_ui_ctx(
                 poll_jobs,
                 store,
+                scheduler,
                 refresh_url=dash_url,
                 refresh_target="#health-dashboard-stack",
             ),
@@ -1234,18 +1244,22 @@ def _toast_from_query(request: Request) -> Optional[dict[str, str]]:
     return None
 
 
-def _poll_schedule_hint(store: ConfigStore) -> str:
+def _poll_schedule_hint(store: ConfigStore, *, auto_paused: bool = False) -> str:
     m = store.load().monitoring
-    return (
-        f"Автоопрос: каждые {m.poll_interval_minutes} мин; "
+    schedule = (
+        f"каждые {m.poll_interval_minutes} мин; "
         f"полный — каждые {m.full_poll_interval_minutes} мин; "
         f"инвентаризация — раз в 24 ч"
     )
+    if auto_paused:
+        return f"Автоопрос приостановлен. Расписание без изменений: {schedule}"
+    return f"Автоопрос: {schedule}"
 
 
 def _poll_ui_ctx(
     poll_jobs: PollJobManager,
     store: ConfigStore,
+    scheduler: MonitoringScheduler,
     *,
     refresh_url: str,
     refresh_target: str,
@@ -1253,13 +1267,16 @@ def _poll_ui_ctx(
     inventory: bool = False,
 ) -> dict:
     active_job = poll_jobs.get_active_job()
+    auto_paused = scheduler.is_auto_paused()
     ctx: dict = {
-        "schedule_hint": _poll_schedule_hint(store),
+        "schedule_hint": _poll_schedule_hint(store, auto_paused=auto_paused),
         "refresh_url": refresh_url,
         "refresh_target": refresh_target,
         "refresh_select": refresh_select,
         "poll_job": active_job,
         "job": active_job,
+        "auto_poll_paused": auto_paused,
+        "auto_poll_active": not auto_paused,
     }
     if inventory:
         ctx.update(
@@ -1283,24 +1300,54 @@ def _poll_ui_ctx(
     return ctx
 
 
+def _poll_page_actions_response(
+    request: Request,
+    poll_jobs: PollJobManager,
+    store: ConfigStore,
+    scheduler: MonitoringScheduler,
+    *,
+    refresh_url: str,
+    refresh_target: str,
+    refresh_select: str = "",
+    inventory: bool = False,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/poll_page_actions.html",
+        _poll_ui_ctx(
+            poll_jobs,
+            store,
+            scheduler,
+            refresh_url=refresh_url,
+            refresh_target=refresh_target,
+            refresh_select=refresh_select,
+            inventory=inventory,
+        ),
+    )
+
+
 def _poll_job_panel_response(
     request: Request,
     job: PollJob,
     store: ConfigStore,
+    scheduler: MonitoringScheduler,
     *,
     refresh_url: str,
     refresh_target: str,
     refresh_select: str = "",
 ) -> HTMLResponse:
+    auto_paused = scheduler.is_auto_paused()
     return templates.TemplateResponse(
         request,
         "partials/poll_job_panel.html",
         {
             "job": job,
-            "schedule_hint": _poll_schedule_hint(store),
+            "schedule_hint": _poll_schedule_hint(store, auto_paused=auto_paused),
             "refresh_url": refresh_url,
             "refresh_target": refresh_target,
             "refresh_select": refresh_select,
+            "auto_poll_paused": auto_paused,
+            "auto_poll_active": not auto_paused,
         },
     )
 
@@ -1311,6 +1358,7 @@ def channels_page(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
     health: str = "",
     recorder_id: str = "",
 ) -> HTMLResponse:
@@ -1335,6 +1383,7 @@ def channels_page(
             **_poll_ui_ctx(
                 poll_jobs,
                 store,
+                scheduler,
                 refresh_url="/channels",
                 refresh_target=".page-content",
                 refresh_select=".page-content",
@@ -1379,6 +1428,7 @@ async def monitoring_poll_all(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
 ) -> HTMLResponse:
     job = poll_jobs.start_manual_poll(
         store,
@@ -1390,10 +1440,79 @@ async def monitoring_poll_all(
         request,
         job,
         store,
+        scheduler,
         refresh_url=refresh_url,
         refresh_target=refresh_target,
         refresh_select=refresh_select,
     )
+
+
+@router.post("/monitoring/auto-poll/stop", response_class=HTMLResponse)
+def monitoring_auto_poll_stop(
+    request: Request,
+    refresh_url: str = Form(default="/objects/partials/health-dashboard"),
+    refresh_target: str = Form(default="#health-dashboard-stack"),
+    refresh_select: str = Form(default=""),
+    inventory: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    scheduler.pause_auto()
+    response = _poll_page_actions_response(
+        request,
+        poll_jobs,
+        store,
+        scheduler,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+        inventory=inventory.lower() in ("true", "1", "yes", "on"),
+    )
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "showToast": {
+                "type": "success",
+                "message": "Автоматический опрос приостановлен",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response
+
+
+@router.post("/monitoring/auto-poll/resume", response_class=HTMLResponse)
+def monitoring_auto_poll_resume(
+    request: Request,
+    refresh_url: str = Form(default="/objects/partials/health-dashboard"),
+    refresh_target: str = Form(default="#health-dashboard-stack"),
+    refresh_select: str = Form(default=""),
+    inventory: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    scheduler.resume_auto()
+    response = _poll_page_actions_response(
+        request,
+        poll_jobs,
+        store,
+        scheduler,
+        refresh_url=refresh_url,
+        refresh_target=refresh_target,
+        refresh_select=refresh_select,
+        inventory=inventory.lower() in ("true", "1", "yes", "on"),
+    )
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "showToast": {
+                "type": "success",
+                "message": "Автоматический опрос возобновлён",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response
 
 
 @router.get("/monitoring/jobs/{job_id}", response_class=HTMLResponse)
@@ -1402,6 +1521,7 @@ def monitoring_job_status(
     job_id: str,
     store: ConfigStore = Depends(get_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
 ) -> HTMLResponse:
     job = poll_jobs.get_job(job_id)
     if not job:
@@ -1415,6 +1535,7 @@ def monitoring_job_status(
         request,
         job,
         store,
+        scheduler,
         refresh_url=refresh_url,
         refresh_target=refresh_target,
         refresh_select=refresh_select,
@@ -1488,6 +1609,7 @@ async def monitoring_inventory_all(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
 ) -> HTMLResponse:
     job = poll_jobs.start_manual_poll(
         store,
@@ -1499,6 +1621,7 @@ async def monitoring_inventory_all(
         request,
         job,
         store,
+        scheduler,
         refresh_url=refresh_url,
         refresh_target=refresh_target,
         refresh_select=refresh_select,

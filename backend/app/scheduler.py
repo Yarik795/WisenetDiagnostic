@@ -27,6 +27,18 @@ class MonitoringScheduler:
         self._stop = asyncio.Event()
         self._last_full: datetime | None = None
         self._last_inventory: datetime | None = None
+        self._auto_paused = False
+
+    def is_auto_paused(self) -> bool:
+        return self._auto_paused
+
+    def pause_auto(self) -> None:
+        self._auto_paused = True
+        logger.info("automatic poll paused")
+
+    def resume_auto(self) -> None:
+        self._auto_paused = False
+        logger.info("automatic poll resumed")
 
     def start(self) -> None:
         if self._task and not self._task.done():
@@ -61,6 +73,10 @@ class MonitoringScheduler:
 
     async def _tick(self) -> None:
         try:
+            if self._auto_paused:
+                logger.debug("scheduler tick skipped: auto poll paused")
+                return
+
             now = datetime.now(timezone.utc)
             config = self.config_store.load()
             full_min = config.monitoring.full_poll_interval_minutes

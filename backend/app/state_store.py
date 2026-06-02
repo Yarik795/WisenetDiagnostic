@@ -62,6 +62,23 @@ class RecorderMetricsRow:
     storageinfo_ok: bool = False
     archive_poll_error: Optional[str] = None
     recording_storage_enable: Optional[bool] = None
+    last_poll_job_id: Optional[str] = None
+    last_poll_attempts: Optional[int] = None
+    last_poll_success_attempt: Optional[int] = None
+    last_poll_first_try_ok: Optional[bool] = None
+
+
+@dataclass
+class RecorderPollAttemptRow:
+    id: int
+    job_id: str
+    recorder_id: str
+    attempt: int
+    outcome: str
+    online: bool
+    error: Optional[str]
+    duration_ms: Optional[int]
+    recorded_at: datetime
 
 
 @dataclass
@@ -165,6 +182,23 @@ class StateStore:
                     ON category_status_history(recorder_id, category, recorded_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_channels_recorder
                     ON channels(recorder_id);
+
+                CREATE TABLE IF NOT EXISTS recorder_poll_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL,
+                    recorder_id TEXT NOT NULL,
+                    attempt INTEGER NOT NULL,
+                    outcome TEXT NOT NULL,
+                    online INTEGER NOT NULL DEFAULT 0,
+                    error TEXT,
+                    duration_ms INTEGER,
+                    recorded_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_poll_attempts_recorder
+                    ON recorder_poll_attempts(recorder_id, recorded_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_poll_attempts_job
+                    ON recorder_poll_attempts(job_id, recorder_id, attempt);
                 """
             )
             self._migrate_schema(conn)
@@ -186,6 +220,10 @@ class StateStore:
             ("storageinfo_ok", "INTEGER NOT NULL DEFAULT 0"),
             ("archive_poll_error", "TEXT"),
             ("recording_storage_enable", "INTEGER"),
+            ("last_poll_job_id", "TEXT"),
+            ("last_poll_attempts", "INTEGER"),
+            ("last_poll_success_attempt", "INTEGER"),
+            ("last_poll_first_try_ok", "INTEGER"),
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -565,6 +603,88 @@ class StateStore:
                 result[(rid, cat)] = since
         return result
 
+    def insert_poll_attempt(
+        self,
+        *,
+        job_id: str,
+        recorder_id: str,
+        attempt: int,
+        outcome: str,
+        online: bool,
+        error: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        recorded_at: Optional[datetime] = None,
+    ) -> None:
+        ts = recorded_at or datetime.now(timezone.utc)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO recorder_poll_attempts (
+                    job_id, recorder_id, attempt, outcome, online,
+                    error, duration_ms, recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    recorder_id,
+                    attempt,
+                    outcome,
+                    int(online),
+                    error,
+                    duration_ms,
+                    _iso(ts),
+                ),
+            )
+
+    def list_poll_attempts(
+        self,
+        *,
+        job_id: Optional[str] = None,
+        recorder_id: Optional[str] = None,
+        limit: int = 500,
+    ) -> list[RecorderPollAttemptRow]:
+        sql = "SELECT * FROM recorder_poll_attempts WHERE 1=1"
+        params: list = []
+        if job_id:
+            sql += " AND job_id = ?"
+            params.append(job_id)
+        if recorder_id:
+            sql += " AND recorder_id = ?"
+            params.append(recorder_id)
+        sql += " ORDER BY recorded_at DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [_poll_attempt_from_row(r) for r in rows]
+
+    def update_poll_recorder_summary(
+        self,
+        recorder_id: str,
+        *,
+        job_id: str,
+        attempts: int,
+        success_attempt: Optional[int],
+        first_try_ok: bool,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE recorder_metrics SET
+                    last_poll_job_id = ?,
+                    last_poll_attempts = ?,
+                    last_poll_success_attempt = ?,
+                    last_poll_first_try_ok = ?
+                WHERE recorder_id = ?
+                """,
+                (
+                    job_id,
+                    attempts,
+                    success_attempt,
+                    int(first_try_ok),
+                    recorder_id,
+                ),
+            )
+
     def delete_recorder_data(self, recorder_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM channels WHERE recorder_id = ?", (recorder_id,))
@@ -577,6 +697,10 @@ class StateStore:
             )
             conn.execute(
                 "DELETE FROM category_status_history WHERE recorder_id = ?",
+                (recorder_id,),
+            )
+            conn.execute(
+                "DELETE FROM recorder_poll_attempts WHERE recorder_id = ?",
                 (recorder_id,),
             )
 
@@ -663,6 +787,37 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
             or row["recording_storage_enable"] is None
             else bool(row["recording_storage_enable"])
         ),
+        last_poll_job_id=(
+            row["last_poll_job_id"] if "last_poll_job_id" in row.keys() else None
+        ),
+        last_poll_attempts=(
+            row["last_poll_attempts"] if "last_poll_attempts" in row.keys() else None
+        ),
+        last_poll_success_attempt=(
+            row["last_poll_success_attempt"]
+            if "last_poll_success_attempt" in row.keys()
+            else None
+        ),
+        last_poll_first_try_ok=(
+            None
+            if "last_poll_first_try_ok" not in row.keys()
+            or row["last_poll_first_try_ok"] is None
+            else bool(row["last_poll_first_try_ok"])
+        ),
+    )
+
+
+def _poll_attempt_from_row(row: sqlite3.Row) -> RecorderPollAttemptRow:
+    return RecorderPollAttemptRow(
+        id=row["id"],
+        job_id=row["job_id"],
+        recorder_id=row["recorder_id"],
+        attempt=row["attempt"],
+        outcome=row["outcome"],
+        online=bool(row["online"]),
+        error=row["error"],
+        duration_ms=row["duration_ms"],
+        recorded_at=_parse_iso(row["recorded_at"]) or datetime.now(timezone.utc),
     )
 
 

@@ -11,11 +11,26 @@ from typing import Optional
 
 from .config_store import ConfigStore
 from .models import Recorder
-from .monitoring import run_poll_cycle
+from .monitoring import PollCycleStats, run_poll_cycle
 from .state_store import StateStore
 from .ui.helpers import display_recorder_name
 
 logger = logging.getLogger("poll_jobs")
+
+
+def _build_poll_completion_message(job: PollJob, stats: PollCycleStats) -> str:
+    if stats.total == 0:
+        return "Нет включённых регистраторов"
+    if job.kind == PollJobKind.INVENTORY:
+        prefix = "Инвентаризация завершена"
+    else:
+        prefix = "Опрос завершён"
+    parts = [f"{prefix}: {stats.responded} из {stats.total}"]
+    if stats.responded_after_retry:
+        parts.append(f"с повтора: {stats.responded_after_retry}")
+    if stats.still_unreachable:
+        parts.append(f"без ответа: {stats.still_unreachable}")
+    return "; ".join(parts)
 
 
 class PollJobKind(str, Enum):
@@ -57,6 +72,13 @@ class PollJob:
     recent_results: list[RecorderPollResult] = field(default_factory=list)
     message: Optional[str] = None
     refresh_url: Optional[str] = None
+    phase: str = "polling"
+    retry_round: int = 0
+    max_attempts: int = 1
+    pending_retry_count: int = 0
+    retry_delay_seconds: int = 5
+    responded_after_retry: int = 0
+    still_unreachable: int = 0
 
     @property
     def percent(self) -> int:
@@ -82,17 +104,48 @@ class PollJobTracker:
         async with self._mu:
             self.job.total = total
 
+    async def set_retry_config(self, max_attempts: int, delay_seconds: int) -> None:
+        async with self._mu:
+            self.job.max_attempts = max_attempts
+            self.job.retry_delay_seconds = delay_seconds
+
     async def recorder_started(self, recorder: Recorder) -> None:
         name = display_recorder_name(recorder)
         async with self._mu:
             self._running[recorder.id] = name
             self.job.running_names = list(self._running.values())
 
-    async def recorder_finished(
+    async def recorder_attempt_finished(self, recorder: Recorder) -> None:
+        async with self._mu:
+            self._running.pop(recorder.id, None)
+            self.job.running_names = list(self._running.values())
+
+    async def set_polling_round(self, attempt: int, pending_count: int) -> None:
+        async with self._mu:
+            self.job.phase = "polling"
+            self.job.retry_round = attempt
+            self.job.pending_retry_count = pending_count
+
+    async def set_waiting_retry(
+        self,
+        attempt: int,
+        pending_count: int,
+        delay_seconds: int,
+        max_attempts: int,
+    ) -> None:
+        async with self._mu:
+            self.job.phase = "waiting_retry"
+            self.job.retry_round = attempt
+            self.job.pending_retry_count = pending_count
+            self.job.retry_delay_seconds = delay_seconds
+            self.job.max_attempts = max_attempts
+
+    async def recorder_final_finished(
         self,
         recorder: Recorder,
         *,
         success: bool,
+        after_retry: bool = False,
         error: Optional[str] = None,
     ) -> None:
         name = display_recorder_name(recorder)
@@ -102,8 +155,11 @@ class PollJobTracker:
             self.job.done += 1
             if success:
                 self.job.success += 1
+                if after_retry:
+                    self.job.responded_after_retry += 1
             else:
                 self.job.failed += 1
+                self.job.still_unreachable += 1
             result = RecorderPollResult(
                 recorder_id=recorder.id,
                 display_name=name,
@@ -236,38 +292,14 @@ class PollJobManager:
             job.status = PollJobStatus.RUNNING
             tracker = PollJobTracker(job)
             try:
-                if job.include_inventory:
-                    await run_poll_cycle(
-                        config_store,
-                        state_store,
-                        include_inventory=True,
-                        tracker=tracker,
-                    )
-                else:
-                    await run_poll_cycle(
-                        config_store,
-                        state_store,
-                        include_inventory=False,
-                        tracker=tracker,
-                    )
-                if job.failed:
-                    msg = (
-                        f"Готово: {job.success} успешно, {job.failed} с ошибкой"
-                        if job.total
-                        else "Нет включённых регистраторов"
-                    )
-                else:
-                    msg = (
-                        f"Опрос завершён: {job.success} из {job.total}"
-                        if job.total
-                        else "Нет включённых регистраторов"
-                    )
-                if job.kind == PollJobKind.INVENTORY:
-                    msg = (
-                        f"Инвентаризация завершена: {job.success} из {job.total}"
-                        if job.total
-                        else "Нет включённых регистраторов"
-                    )
+                stats = await run_poll_cycle(
+                    config_store,
+                    state_store,
+                    include_inventory=job.include_inventory,
+                    job_id=job.job_id,
+                    tracker=tracker,
+                )
+                msg = _build_poll_completion_message(job, stats)
                 await tracker.finish(msg)
             except Exception as exc:
                 logger.exception("poll job failed", extra={"job_id": job.job_id})
