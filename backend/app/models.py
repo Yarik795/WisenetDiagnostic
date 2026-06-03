@@ -126,6 +126,7 @@ class EmailReportSettings(BaseModel):
     catchup_after_hours: int = Field(default=24, ge=1, le=168)
     history_max_entries: int = Field(default=90, ge=7, le=365)
     dashboard_history_days: int = Field(default=30, ge=7, le=90)
+    email_trend_days: int = Field(default=7, ge=7, le=14)
     failed_retry_minutes: int = Field(default=60, ge=5, le=240)
 
     @field_validator("send_time")

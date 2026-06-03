@@ -21,11 +21,18 @@ from .state_store import StateStore
 from .ui.error_report import ErrorReportContext, build_error_report_context
 from .ui.error_report_render import (
     build_email_dashboard_context,
+    build_email_subject,
     render_email_dashboard_html,
     render_error_report_html,
 )
+from .ui.email_history_series import (
+    aggregate_successful_by_local_day,
+    kpi_delta_vs_previous_day,
+)
 
 logger = get_logger("report_delivery")
+
+_SCHEDULED_TRIGGERS = frozenset({"scheduled", "catchup"})
 
 
 @dataclass(frozen=True)
@@ -33,6 +40,12 @@ class SendDecision:
     should_send: bool
     trigger: Optional[DeliveryTrigger] = None
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class SendResult:
+    ok: bool
+    message: str
 
 
 def parse_send_time(send_time: str) -> time:
@@ -55,6 +68,16 @@ def _sent_on_local_date(sent_at: datetime, tz: ZoneInfo) -> date:
     return sent_at.astimezone(tz).date()
 
 
+def _last_success_for_triggers(
+    history: ReportDeliveryHistory,
+    triggers: frozenset[str],
+) -> Optional[ReportDeliveryRecord]:
+    for entry in reversed(history.entries):
+        if entry.status == "success" and entry.trigger in triggers:
+            return entry
+    return None
+
+
 def _hours_since_last_success(
     now: datetime, history: ReportDeliveryHistory
 ) -> Optional[float]:
@@ -64,6 +87,17 @@ def _hours_since_last_success(
     ref = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
     sent = last.sent_at if last.sent_at.tzinfo else last.sent_at.replace(tzinfo=timezone.utc)
     return (ref - sent).total_seconds() / 3600.0
+
+
+def validate_email_config(settings: EmailReportSettings) -> list[str]:
+    errors: list[str] = []
+    if not settings.from_email:
+        errors.append("не задан from_email")
+    if not settings.to_emails:
+        errors.append("пустой to_emails")
+    if not settings.smtp_host:
+        errors.append("не задан smtp_host")
+    return errors
 
 
 def should_send_report(
@@ -81,9 +115,9 @@ def should_send_report(
     today = local_now.date()
     send_at = parse_send_time(settings.send_time)
 
-    last_success = history.last_success()
-    if last_success is not None:
-        if _sent_on_local_date(last_success.sent_at, tz) == today:
+    last_scheduled = _last_success_for_triggers(history, _SCHEDULED_TRIGGERS)
+    if last_scheduled is not None:
+        if _sent_on_local_date(last_scheduled.sent_at, tz) == today:
             return SendDecision(False, reason="already sent successfully today")
 
     hours_since = _hours_since_last_success(now, history)
@@ -131,6 +165,24 @@ def _has_poll_data(config: AppConfig, metrics_map: dict) -> bool:
     return any(r.id in metrics_map for r in pollable)
 
 
+def _subject_delta_problems(
+    history: ReportDeliveryHistory,
+    problem_count: int,
+    settings: EmailReportSettings,
+) -> Optional[int]:
+    tz = get_display_tz()
+    points = aggregate_successful_by_local_day(
+        history, tz=tz, days=settings.email_trend_days
+    )
+    delta_p, _ = kpi_delta_vs_previous_day(points)
+    if delta_p is not None:
+        return delta_p
+    last = history.last_success()
+    if last is not None:
+        return problem_count - last.problem_count
+    return None
+
+
 class ReportDeliveryService:
     def __init__(
         self,
@@ -155,14 +207,45 @@ class ReportDeliveryService:
             logger.debug("report delivery skip: %s", decision.reason)
             return
 
+        result = self.send_report_now(trigger=decision.trigger, now=now)
+        if not result.ok:
+            logger.info(
+                "report delivery skip: %s",
+                result.message,
+                extra={"event": "report_delivery_skip"},
+            )
+
+    def send_report_now(
+        self,
+        *,
+        trigger: DeliveryTrigger,
+        now: datetime | None = None,
+    ) -> SendResult:
+        config = self.config_store.load()
+        email_cfg = config.email_report
+        config_errors = validate_email_config(email_cfg)
+        if config_errors:
+            return SendResult(
+                ok=False,
+                message="Настройте email_report в config.json: " + "; ".join(config_errors),
+            )
+        if trigger == "manual" and not email_cfg.enabled:
+            logger.warning(
+                "manual report email while email_report.enabled is false",
+                extra={"event": "report_delivery_manual_disabled"},
+            )
+
+        if now is None:
+            now = datetime.now(timezone.utc)
+
         metrics_map = _metrics_map(self.state_store)
         if not _has_poll_data(config, metrics_map):
-            logger.info(
-                "report delivery skip: no poll metrics yet",
-                extra={"event": "report_delivery_skip", "extra_reason": "no_metrics"},
+            return SendResult(
+                ok=False,
+                message="Нет данных опроса — сначала выполните опрос регистраторов",
             )
-            return
 
+        history = self.history_store.load()
         recorders = self.config_store.list_recorders()
         report = build_error_report_context(
             recorders,
@@ -186,11 +269,19 @@ class ReportDeliveryService:
         dashboard_ctx = build_email_dashboard_context(
             report=report,
             history=history,
-            trigger=decision.trigger,
+            trigger=trigger,
             settings=email_cfg,
             recorders_with_errors=recorders_with_errors,
         )
         body_html = render_email_dashboard_html(dashboard_ctx)
+        delta_p = _subject_delta_problems(history, problem_count, email_cfg)
+        subject = build_email_subject(
+            email_cfg,
+            problem_count=problem_count,
+            recorders_with_errors=recorders_with_errors,
+            delta_problems=delta_p,
+            sent_at=now,
+        )
 
         error_msg: str | None = None
         status: Literal["success", "failed"] = "success"
@@ -200,12 +291,13 @@ class ReportDeliveryService:
                 body_html=body_html,
                 attachment_html=attachment_html,
                 attachment_filename=attachment_name,
+                subject=subject,
             )
             logger.info(
                 "report email sent",
                 extra={
                     "event": "report_delivery_sent",
-                    "extra_trigger": decision.trigger,
+                    "extra_trigger": trigger,
                     "extra_problem_count": problem_count,
                     "extra_recorders_with_errors": recorders_with_errors,
                 },
@@ -217,9 +309,11 @@ class ReportDeliveryService:
                 "report email failed",
                 extra={
                     "event": "report_delivery_failed",
-                    "extra_trigger": decision.trigger,
+                    "extra_trigger": trigger,
                 },
             )
+            short = error_msg[:200] + ("…" if len(error_msg) > 200 else "")
+            return SendResult(ok=False, message=f"Ошибка отправки: {short}")
 
         self.history_store.append(
             ReportDeliveryRecord(
@@ -228,11 +322,13 @@ class ReportDeliveryService:
                 recorders_with_errors=recorders_with_errors,
                 category_counts=category_counts,
                 status=status,
-                trigger=decision.trigger,
+                trigger=trigger,
                 error=error_msg,
             ),
             max_entries=email_cfg.history_max_entries,
         )
+        recipients = ", ".join(email_cfg.to_emails)
+        return SendResult(ok=True, message=f"Отчёт отправлен на {recipients}")
 
 
 def format_for_delivery_filename(now: datetime) -> str:

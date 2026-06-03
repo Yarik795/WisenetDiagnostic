@@ -9,106 +9,117 @@
       line-height: 1.45;
       margin: 0;
       padding: 16px;
+      max-width: 560px;
     }
-    h1 { font-size: 1.25rem; margin: 0 0 12px; }
-    h2 { font-size: 1rem; margin: 20px 0 8px; }
-    .meta { color: #5c6370; font-size: 0.9rem; margin-bottom: 16px; }
-    .meta p { margin: 4px 0; }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      font-size: 0.875rem;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
-    }
-    tr:nth-child(even) { background-color: #f2f2f2; }
-    th {
-      padding-top: 12px;
-      padding-bottom: 12px;
-      background-color: #04AA6D;
-      color: white;
-    }
+    h1 { font-size: 1.15rem; margin: 0 0 4px; font-weight: 600; }
+    .meta { color: #5c6370; font-size: 0.85rem; margin-bottom: 20px; }
+    h2 { font-size: 0.95rem; margin: 20px 0 8px; font-weight: 600; }
+    .kpi-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    .kpi-table td { padding: 8px 12px; vertical-align: top; }
+    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+    .kpi-label { font-size: 0.8rem; color: #5c6370; margin-top: 4px; }
+    .kpi-delta { font-size: 0.85rem; margin-top: 16px; }
     .delta-up { color: #c0392b; font-weight: 600; }
     .delta-down { color: #1a7f37; font-weight: 600; }
     .delta-neutral { color: #5c6370; }
-    .status-ok { color: #1a7f37; }
-    .status-fail { color: #c0392b; }
-    .note { font-size: 0.85rem; color: #5c6370; margin-top: 16px; }
+    table.data {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.8rem;
+    }
+    table.data th, table.data td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    table.data th {
+      background-color: #eef0f4;
+      color: #1a1d21;
+      font-weight: 600;
+    }
+    table.data tr:nth-child(even) { background-color: #f8f9fa; }
+    .trend-note { font-size: 0.8rem; color: #5c6370; margin: 4px 0 12px; }
+    .chart-wrap { margin: 8px 0 12px; }
+    .note { font-size: 0.85rem; color: #5c6370; margin-top: 20px; border-top: 1px solid #eee; padding-top: 12px; }
+    .empty-hint { font-size: 0.85rem; color: #5c6370; font-style: italic; }
   </style>
 </head>
 <body>
-  <h1>Wisenet Диагностика — сводка</h1>
-  <div class="meta">
-    <p><strong>Сформирован:</strong> {{ report.generated_at }}</p>
-    <p><strong>Записей с проблемами:</strong> {{ report.problem_count }}</p>
-    <p><strong>NVR с ошибками:</strong> {{ recorders_with_errors }}</p>
-    <p><strong>Отправка:</strong> {{ trigger_label }}</p>
-  </div>
+  <h1>Wisenet Диагностика</h1>
+  <p class="meta">{{ report.generated_at }} · {{ trigger_label }}</p>
 
-  <h2>Динамика по дням</h2>
-  {% if history_rows %}
-  <table>
+  <table class="kpi-table" role="presentation">
+    <tr>
+      <td width="50%">
+        <div class="kpi-value">{{ report.problem_count }}</div>
+        <div class="kpi-label">записей с проблемами</div>
+      </td>
+      <td width="50%">
+        <div class="kpi-value">{{ recorders_with_errors }}</div>
+        <div class="kpi-label">NVR с ошибками</div>
+      </td>
+    </tr>
+  </table>
+  <p class="kpi-delta">
+    К предыдущему дню с данными:
+    проблемы <span class="{{ kpi_delta_problems.css }}">{{ kpi_delta_problems.text }}</span>,
+    NVR <span class="{{ kpi_delta_nvr.css }}">{{ kpi_delta_nvr.text }}</span>
+  </p>
+
+  <h2>Динамика за {{ trend_days_total }} дней</h2>
+  <p class="trend-note">Доступно {{ trend_days_available }} из {{ trend_days_total }} дней с успешной отправкой</p>
+  {% if trend_days_available > 0 %}
+  <div class="chart-wrap">{{ trend_svg | safe }}</div>
+  <table class="data" role="presentation">
     <thead>
       <tr>
         <th>Дата</th>
-        <th>Записей</th>
-        <th>NVR с ошибками</th>
-        <th>Δ записей</th>
-        <th>Δ NVR</th>
-        <th>Тип</th>
-        <th>Статус</th>
+        <th>Проблем</th>
+        <th>NVR</th>
       </tr>
     </thead>
     <tbody>
-      {% for row in history_rows %}
+      {% for row in trend_rows %}
       <tr>
         <td>{{ row.date_label }}</td>
         <td>{{ row.problem_count }}</td>
         <td>{{ row.recorders_with_errors }}</td>
-        <td class="{{ row.delta_problems.css }}">{{ row.delta_problems.text }}</td>
-        <td class="{{ row.delta_recorders.css }}">{{ row.delta_recorders.text }}</td>
-        <td>{{ row.trigger_short }}</td>
-        <td class="{{ row.status_css }}">{{ row.status_label }}{% if row.error %} — {{ row.error }}{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p>История рассылок пока пуста — после этой отправки появится первая строка.</p>
+  <p class="empty-hint">История рассылок пока пуста — тренд появится после следующих успешных отправок.</p>
   {% endif %}
 
-  {% if show_category_compare and all_categories %}
-  <h2>Категории: сегодня vs предыдущий успешный день</h2>
-  <table>
+  <h2>Изменения по категориям</h2>
+  {% if category_changes %}
+  <table class="data" role="presentation">
     <thead>
       <tr>
         <th>Категория</th>
-        <th>Сегодня</th>
-        <th>Предыдущий день</th>
+        <th>Сейчас</th>
+        <th>Было</th>
         <th>Δ</th>
       </tr>
     </thead>
     <tbody>
-      {% for cat in all_categories %}
-      {% set today = category_today.get(cat, 0) %}
-      {% set yesterday = category_yesterday.get(cat, 0) %}
-      {% set d = today - yesterday %}
+      {% for cat in category_changes %}
       <tr>
-        <td>{{ cat }}</td>
-        <td>{{ today }}</td>
-        <td>{{ yesterday }}</td>
-        <td class="{% if d > 0 %}delta-up{% elif d < 0 %}delta-down{% else %}delta-neutral{% endif %}">
-          {% if d > 0 %}+{{ d }}{% else %}{{ d }}{% endif %}
+        <td>{{ cat.name }}</td>
+        <td>{{ cat.today }}</td>
+        <td>{{ cat.prev }}</td>
+        <td class="{% if cat.delta > 0 %}delta-up{% elif cat.delta < 0 %}delta-down{% else %}delta-neutral{% endif %}">
+          {% if cat.delta > 0 %}+{{ cat.delta }}{% else %}{{ cat.delta }}{% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <p class="empty-hint">Изменений по категориям нет (сравнение с предыдущей успешной отправкой).</p>
   {% endif %}
 
-  <p class="note">Подробный отчёт по всем проблемам — во вложении (HTML).</p>
+  <p class="note">Детали по каждой проблеме — во вложении (HTML).</p>
 </body>
 </html>

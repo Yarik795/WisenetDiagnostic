@@ -460,6 +460,21 @@ def objects_sync_cmdb(
     return _redirect("/objects", "error", result.message, request=request)
 
 
+@router.post("/objects/report/email", response_class=HTMLResponse)
+def objects_report_email(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..report_delivery import ReportDeliveryService
+
+    service = ReportDeliveryService(config_store=store, state_store=state)
+    result = service.send_report_now(trigger="manual")
+    if result.ok:
+        return _redirect("/objects", "success", result.message, request=request)
+    return _redirect("/objects", "error", result.message, request=request)
+
+
 @router.get("/objects/partials/health-dashboard", response_class=HTMLResponse)
 def objects_health_dashboard_partial(
     request: Request,

@@ -188,6 +188,21 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 ---
 
+## Email-отчёты (`report_delivery.py`, `email_sender.py`)
+
+Плановая рассылка: планировщик (`scheduler.py`) вызывает `ReportDeliveryService.tick_sync()` по `email_report.send_time` и `catchup_after_hours`. Настройки SMTP и получатели — секция `email_report` в `config.json` (см. `config.example.json`).
+
+| Часть письма | Содержание |
+|--------------|------------|
+| Тело (HTML) | KPI, тренд за `email_trend_days` (по умолчанию 7) из `data/report_delivery_history.json`, изменения по категориям |
+| Вложение | Тот же HTML, что `GET /objects/export/errors.html` — текущие проблемы |
+
+Ручная отправка: кнопка с иконкой почты на странице **Объекты** → `POST /objects/report/email`, `trigger=manual`. Успешная ручная отправка **не блокирует** плановую в тот же день (учитываются только `scheduled` / `catchup`).
+
+Тест SMTP без UI: `python scripts/send_test_email.py`.
+
+---
+
 ## Скрипты вне runtime (`scripts/`)
 
 ### `cmdb_reader.py`

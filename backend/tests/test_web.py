@@ -483,8 +483,30 @@ def test_objects_export_errors_html(client: TestClient) -> None:
     page = client.get("/objects")
     assert "Экспорт отчета" in page.text
     assert "/objects/export/errors.html" in page.text
+    assert "/objects/report/email" in page.text
+    assert "Отправить отчёт на почту" in page.text
     assert "Экспорт отчёта по ошибкам" not in page.text
     assert "Экспорт с авто-входом" not in page.text
+
+
+def test_objects_report_email_post(client: TestClient) -> None:
+    from unittest.mock import patch
+
+    from app.report_delivery import SendResult
+
+    with patch("app.report_delivery.ReportDeliveryService") as svc_cls:
+        svc_cls.return_value.send_report_now.return_value = SendResult(
+            ok=True,
+            message="Отчёт отправлен на a@test",
+        )
+        r = client.post(
+            "/objects/report/email",
+            headers={"HX-Request": "true"},
+        )
+    assert r.status_code == 200
+    assert "HX-Redirect" in r.headers
+    assert "toast=success" in r.headers["HX-Redirect"]
+    svc_cls.return_value.send_report_now.assert_called_once_with(trigger="manual")
 
 
 def test_objects_table_view(client: TestClient) -> None:

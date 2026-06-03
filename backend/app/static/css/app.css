@@ -573,6 +573,31 @@ a:hover {
   border-color: var(--text-muted);
 }
 
+.btn-group {
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: middle;
+}
+
+.btn-group .btn-outline {
+  border-radius: 8px 0 0 8px;
+}
+
+.btn-group .btn-icon {
+  border-radius: 0 8px 8px 0;
+  margin-left: -1px;
+  min-width: 40px;
+  padding: 0 10px;
+}
+
+.btn-icon .htmx-indicator {
+  position: absolute;
+}
+
+.btn-icon {
+  position: relative;
+}
+
 .btn-ghost:hover:not(:disabled) {
   background: var(--bg-elevated);
 }

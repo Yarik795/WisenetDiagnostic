@@ -41,6 +41,7 @@
     "catchup_after_hours": 24,
     "history_max_entries": 90,
     "dashboard_history_days": 30,
+    "email_trend_days": 7,
     "failed_retry_minutes": 60
   },
   "recorders": [

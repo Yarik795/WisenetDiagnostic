@@ -21,7 +21,6 @@ from app.report_delivery_history import (
     ReportDeliveryRecord,
 )
 from app.ui.error_report import ErrorReportContext, ErrorReportRow
-from app.ui.error_report_render import build_history_table_rows
 
 
 MSK = ZoneInfo("Europe/Moscow")
@@ -102,6 +101,21 @@ def test_should_not_send_twice_same_day() -> None:
     assert decision.should_send is False
 
 
+def test_manual_success_does_not_block_scheduled_same_day() -> None:
+    today_morning = datetime(2026, 6, 1, 6, 35, tzinfo=timezone.utc)
+    history = ReportDeliveryHistory(
+        entries=[_success_at(today_morning, trigger="manual")]
+    )
+    decision = should_send_report(
+        datetime(2026, 6, 1, 12, 0, tzinfo=MSK),
+        _settings(),
+        history,
+        display_tz=MSK,
+    )
+    assert decision.should_send is True
+    assert decision.trigger == "scheduled"
+
+
 def test_catchup_after_24h() -> None:
     old = datetime(2026, 5, 29, 6, 30, tzinfo=timezone.utc)
     history = ReportDeliveryHistory(entries=[_success_at(old)])
@@ -155,22 +169,6 @@ def test_history_store_append_and_trim(tmp_path: Path) -> None:
     loaded = store.load()
     assert len(loaded.entries) == 3
     assert loaded.entries[0].problem_count == 2
-
-
-def test_history_table_deltas() -> None:
-    t1 = datetime(2026, 6, 1, 6, 30, tzinfo=timezone.utc)
-    t2 = datetime(2026, 6, 2, 6, 30, tzinfo=timezone.utc)
-    history = ReportDeliveryHistory(
-        entries=[
-            _success_at(t1, problem_count=5, recorders_with_errors=2),
-            _success_at(t2, problem_count=8, recorders_with_errors=4),
-        ]
-    )
-    rows = build_history_table_rows(history, limit=30)
-    assert len(rows) == 2
-    assert rows[0]["problem_count"] == 8
-    assert rows[0]["delta_problems"]["text"] == "+3 ↑"
-    assert rows[1]["delta_problems"]["text"] == "—"
 
 
 def test_report_metrics_from_context() -> None:
@@ -292,6 +290,62 @@ def test_tick_sync_sends_and_records(tmp_path: Path) -> None:
     loaded = history_store.load()
     assert len(loaded.entries) == 1
     assert loaded.entries[0].status == "success"
+
+
+def test_send_report_now_manual(tmp_path: Path) -> None:
+    from app.report_delivery import ReportDeliveryService
+
+    config = SimpleNamespace(
+        email_report=_settings(
+            from_email="from@test",
+            to_emails=["to@test"],
+        ),
+        monitoring=SimpleNamespace(ntp_server="", display_timezone="Europe/Moscow"),
+        credentials=SimpleNamespace(username="a", password="b"),
+        exclusions=SimpleNamespace(recorder_ids=[]),
+        recorders=[
+            SimpleNamespace(
+                id="r1",
+                object_name="O",
+                name="N",
+                host="1.1.1.1",
+                port=80,
+                use_https=False,
+            )
+        ],
+    )
+    config_store = MagicMock()
+    config_store.load.return_value = config
+    config_store.list_recorders.return_value = config.recorders
+
+    state_store = MagicMock()
+    state_store.list_recorder_metrics.return_value = [
+        SimpleNamespace(recorder_id="r1")
+    ]
+    state_store.category_problem_since_map.return_value = {}
+
+    history_store = ReportDeliveryHistoryStore(tmp_path / "hist.json")
+    service = ReportDeliveryService(
+        config_store=config_store,
+        state_store=state_store,
+        history_store=history_store,
+    )
+    report = ErrorReportContext(generated_at="now", problem_count=2, rows=[])
+
+    with (
+        patch(
+            "app.report_delivery.build_error_report_context",
+            return_value=report,
+        ),
+        patch("app.report_delivery.render_error_report_html", return_value="<r/>"),
+        patch("app.report_delivery.render_email_dashboard_html", return_value="<d/>"),
+        patch("app.report_delivery.send_report_email") as send_mock,
+    ):
+        result = service.send_report_now(trigger="manual")
+
+    assert result.ok is True
+    send_mock.assert_called_once()
+    assert history_store.load().entries[0].trigger == "manual"
 
 
 def test_send_report_email_validates_recipients() -> None:

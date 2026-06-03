@@ -15,6 +15,7 @@ def send_report_email(
     body_html: str,
     attachment_html: str,
     attachment_filename: str,
+    subject: str | None = None,
 ) -> None:
     if not settings.to_emails:
         raise ValueError("email_report.to_emails is empty")
@@ -22,7 +23,7 @@ def send_report_email(
         raise ValueError("email_report.from_email is empty")
 
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = settings.subject
+    msg["Subject"] = subject if subject is not None else settings.subject
     msg["From"] = settings.from_email
     msg["To"] = ", ".join(settings.to_emails)
 
