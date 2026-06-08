@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Экспорт списка регистраторов в Excel: модель, IP, объект, S/N, дата производства.
+"""Экспорт списка регистраторов в Excel: модель, прошивка, IP, объект, S/N, дата производства.
 
 Данные:
   - config.json — объект, IP, имя регистратора;
-  - monitoring.db (recorder_metrics) — модель, серийный номер, дата производства.
+  - monitoring.db (recorder_metrics) — модель, прошивка, серийный номер, дата производства.
 
 Запуск (из корня репозитория):
   python scripts/export_recorders_serial.py
@@ -45,6 +45,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "data"
 HEADERS = (
     "Наименование объекта",
     "Модель",
+    "Версия прошивки",
     "IP-адрес",
     "Серийный номер",
     "Дата производства",
@@ -73,6 +74,12 @@ def _model_value(recorder: Recorder, metrics_model: Optional[str]) -> str:
     return "—"
 
 
+def _text_or_dash(raw: Optional[str]) -> str:
+    if raw and raw.strip():
+        return raw.strip()
+    return "—"
+
+
 def _serial_value(raw: Optional[str]) -> str:
     if raw and raw.strip():
         return raw.strip()
@@ -90,11 +97,12 @@ def _manufacture_date_value(raw: Optional[str], *, has_serial: bool) -> str:
 def build_rows(
     recorders: list[Recorder],
     metrics_by_id: dict[str, Any],
-) -> list[tuple[str, str, str, str, str]]:
-    rows: list[tuple[str, str, str, str, str]] = []
+) -> list[tuple[str, str, str, str, str, str]]:
+    rows: list[tuple[str, str, str, str, str, str]] = []
     for recorder in sorted(recorders, key=lambda r: (r.object_name.lower(), r.host)):
         metrics = metrics_by_id.get(recorder.id)
         model = _model_value(recorder, metrics.model if metrics else None)
+        firmware = _text_or_dash(metrics.firmware_version if metrics else None)
         serial_raw = metrics.serial_number if metrics else None
         serial = _serial_value(serial_raw)
         has_serial = serial != NO_SERIAL_TEXT
@@ -104,6 +112,7 @@ def build_rows(
             (
                 recorder.object_name,
                 model,
+                firmware,
                 _recorder_ip(recorder),
                 serial,
                 mfg,
@@ -112,7 +121,7 @@ def build_rows(
     return rows
 
 
-def write_xlsx(path: Path, rows: list[tuple[str, str, str, str, str]]) -> None:
+def write_xlsx(path: Path, rows: list[tuple[str, str, str, str, str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
@@ -140,7 +149,7 @@ def write_xlsx(path: Path, rows: list[tuple[str, str, str, str, str]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Экспорт регистраторов (модель, IP, объект, S/N, дата производства) в Excel"
+        description="Экспорт регистраторов (модель, прошивка, IP, объект, S/N, дата производства) в Excel"
     )
     parser.add_argument(
         "--config",
@@ -182,7 +191,7 @@ def main() -> int:
     rows = build_rows(config.recorders, metrics_by_id)
     write_xlsx(output_path, rows)
 
-    with_serial = sum(1 for r in rows if r[3] != NO_SERIAL_TEXT)
+    with_serial = sum(1 for r in rows if r[4] != NO_SERIAL_TEXT)
     print(f"Записано регистраторов: {len(rows)}")
     print(f"С серийным номером: {with_serial}")
     print(f"Без серийного номера: {len(rows) - with_serial}")
