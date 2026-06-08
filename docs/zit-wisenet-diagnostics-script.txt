@@ -1,0 +1,951 @@
+================================================================================
+ Wisenet Диагностика — материалы для ЗИТ (SV 1485111)
+ Дата формирования: 2026-06-04
+================================================================================
+
+1. НАЗНАЧЕНИЕ
+   Внутреннее приложение мониторинга видеорегистраторов Hanwha Wisenet (NVR).
+   Опрос по протоколу SUNAPI (HTTP/HTTPS) с рабочей станции специалиста.
+   Локальный веб-интерфейс: http://127.0.0.1:8000 (данные не публикуются в интернет).
+
+2. ХОСТ И УЧЁТНАЯ ЗАПИСЬ (по обращению ЗИТ)
+   Рабочая станция: MSK-WSN-0002935.sigma.sbrf.ru (10.31.55.5)
+   УЗ: 21204476
+
+3. СЕТЕВАЯ АКТИВНОСТЬ
+   - Штатный опрос NVR: Python, библиотека httpx, Digest-аутентификация, только IP
+     регистраторов из config.json (внутренняя сеть).
+   - System.Net.Sockets.TcpClient в данном приложении НЕ используется.
+   - Событие 03.06.2026 ~13:01 (TcpClient): разовая ручная проверка доступности
+     контроллера СКУД из PowerShell (не входит в репозиторий). Расширение на СКУД
+     в продукт не внедрялось.
+
+4. СОГЛАСОВАНИЕ ДКБ
+   Отдельное заключение ДКБ к данному инструменту не прилагается.
+   (При наличии — направить отдельным вложением.)
+
+5. ЗНИ / ЗНО
+   Изменений инфраструктуры не производилось; отдельное ЗНИ на опрос NVR с АРМ
+   не оформлялось (эксплуатационный мониторинг).
+
+6. СОСТАВ ВЛОЖЕНИЯ (исходный код, без паролей)
+   Ниже — фрагменты проекта. Полный репозиторий: backend/, scripts/, docs/
+
+==============================================================================
+FILE: config.example.json (шаблон, без рабочих паролей)
+
+==============================================================================
+{
+  "credentials": {
+    "username": "admin",
+    "password": ""
+  },
+  "monitoring": {
+    "poll_interval_minutes": 5,
+    "full_poll_interval_minutes": 15,
+    "max_concurrent_polls": 5,
+    "archive_days_required": 30,
+    "time_skew_warn_seconds": 60,
+    "time_skew_error_seconds": 300,
+    "hdd_temperature_warn_celsius": 50,
+    "hdd_temperature_error_celsius": 60,
+    "archive_days_error_threshold": 7,
+    "channels_error_threshold_percent": 25,
+    "cpu_usage_warn_percent": 80,
+    "cpu_usage_error_percent": 95,
+    "storage_drop_datarate_warn_percent": 5,
+    "ntp_server": "203.248.240.140",
+    "ntp_posix_timezone": "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00",
+    "display_timezone": "Europe/Moscow",
+    "poll_retry_enabled": true,
+    "poll_retry_max": 3,
+    "poll_retry_delay_seconds": 5
+  },
+  "exclusions": {
+    "recorder_ids": []
+  },
+  "email_report": {
+    "enabled": false,
+    "smtp_host": "MTA.SIGMA.SBRF.RU",
+    "smtp_port": 25,
+    "use_starttls": true,
+    "smtp_user": "",
+    "smtp_password": "",
+    "from_email": "monitoring@example.com",
+    "to_emails": ["recipient@example.com"],
+    "subject": "Wisenet Диагностика — отчёт по ошибкам",
+    "send_time": "09:30",
+    "catchup_after_hours": 24,
+    "history_max_entries": 90,
+    "dashboard_history_days": 30,
+    "email_trend_days": 7,
+    "failed_retry_minutes": 60
+  },
+  "recorders": [
+    {
+      "id": "nvr-001",
+      "object_name": "Отделение №12 — Москва",
+      "name": "NVR-1",
+      "host": "10.1.2.3",
+      "port": 80,
+      "use_https": false,
+      "last_status": null,
+      "last_check_at": null,
+      "last_error": null
+    }
+  ]
+}
+
+
+==============================================================================
+FILE: backend/app/main.py
+
+==============================================================================
+import time
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+
+from .config_store import ConfigStore
+from .logging_config import get_log_file_path, get_logger, setup_logging
+from .poll_jobs import PollJobManager
+from .scheduler import MonitoringScheduler
+from .state_store import StateStore
+from .ui.dependencies import get_state_store
+from .web.routes import router as web_router
+
+APP_DIR = Path(__file__).resolve().parent
+
+setup_logging()
+logger = get_logger("http")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log_path = get_log_file_path()
+    state_store = get_state_store()
+    poll_jobs = PollJobManager()
+    app.state.poll_job_manager = poll_jobs
+    scheduler = MonitoringScheduler(ConfigStore(), state_store, poll_jobs=poll_jobs)
+    app.state.scheduler = scheduler
+    scheduler.start()
+    logger.info(
+        "application startup",
+        extra={"event": "app_startup", "extra_log_file": str(log_path)},
+    )
+    yield
+    await scheduler.stop()
+
+
+app = FastAPI(
+    title="Wisenet Диагностика",
+    version="0.3.0",
+    description="Этап 1: мониторинг регистраторов и каналов (SUNAPI)",
+    lifespan=lifespan,
+)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    is_htmx = request.headers.get("HX-Request") == "true"
+    htmx_url = request.headers.get("HX-Current-URL", "")
+
+    logger.info(
+        "request",
+        extra={
+            "event": "http_request",
+            "extra_method": request.method,
+            "extra_path": request.url.path,
+            "extra_htmx": is_htmx,
+            "extra_htmx_url": htmx_url or None,
+            "extra_client": request.client.host if request.client else None,
+        },
+    )
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        logger.exception(
+            "request failed",
+            extra={
+                "event": "http_error",
+                "extra_method": request.method,
+                "extra_path": request.url.path,
+                "extra_duration_ms": duration_ms,
+            },
+        )
+        raise
+
+    duration_ms = round((time.perf_counter() - start) * 1000)
+    logger.info(
+        "response",
+        extra={
+            "event": "http_response",
+            "extra_method": request.method,
+            "extra_path": request.url.path,
+            "extra_status": response.status_code,
+            "extra_duration_ms": duration_ms,
+            "extra_htmx": is_htmx,
+        },
+    )
+    return response
+
+
+app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
+app.include_router(web_router)
+
+
+==============================================================================
+FILE: backend/app/scheduler.py
+
+==============================================================================
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import datetime, timezone
+
+from .config_store import ConfigStore
+from .poll_jobs import PollJobManager
+from .report_delivery import ReportDeliveryService
+from .state_store import StateStore
+
+logger = logging.getLogger("scheduler")
+
+
+class MonitoringScheduler:
+    def __init__(
+        self,
+        config_store: ConfigStore,
+        state_store: StateStore,
+        poll_jobs: PollJobManager | None = None,
+    ) -> None:
+        self.config_store = config_store
+        self.state_store = state_store
+        self.poll_jobs = poll_jobs or PollJobManager()
+        self.report_delivery = ReportDeliveryService(config_store, state_store)
+        self._task: asyncio.Task | None = None
+        self._stop = asyncio.Event()
+        self._last_full: datetime | None = None
+        self._last_inventory: datetime | None = None
+        self._auto_paused = False
+
+    def is_auto_paused(self) -> bool:
+        return self._auto_paused
+
+    def pause_auto(self) -> None:
+        self._auto_paused = True
+        logger.info("automatic poll paused")
+
+    def resume_auto(self) -> None:
+        self._auto_paused = False
+        logger.info("automatic poll resumed")
+
+    def start(self) -> None:
+        if self._task and not self._task.done():
+            return
+        self._stop.clear()
+        self._task = asyncio.create_task(self._loop())
+
+    async def stop(self) -> None:
+        self._stop.set()
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+    async def _loop(self) -> None:
+        logger.info("monitoring scheduler started")
+        while not self._stop.is_set():
+            try:
+                await self._tick()
+            except Exception:
+                logger.exception("scheduler tick failed")
+            config = self.config_store.load()
+            interval = config.monitoring.poll_interval_minutes * 60
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=interval)
+                break
+            except asyncio.TimeoutError:
+                continue
+        logger.info("monitoring scheduler stopped")
+
+    async def _tick(self) -> None:
+        try:
+            if self._auto_paused:
+                logger.debug("scheduler tick skipped: auto poll paused")
+                return
+
+            now = datetime.now(timezone.utc)
+            config = self.config_store.load()
+            full_min = config.monitoring.full_poll_interval_minutes
+            inventory_hours = 24
+
+            do_inventory = (
+                self._last_inventory is None
+                or (now - self._last_inventory).total_seconds()
+                >= inventory_hours * 3600
+            )
+            if do_inventory:
+                ran = await self.poll_jobs.try_run_scheduled(
+                    self.config_store,
+                    self.state_store,
+                    include_inventory=True,
+                )
+                if ran:
+                    self._last_inventory = now
+                    self._last_full = now
+                return
+
+            do_full = (
+                self._last_full is None
+                or (now - self._last_full).total_seconds() >= full_min * 60
+            )
+            ran = await self.poll_jobs.try_run_scheduled(
+                self.config_store,
+                self.state_store,
+                include_inventory=do_full,
+            )
+            if ran and do_full:
+                self._last_full = now
+        finally:
+            await asyncio.to_thread(self.report_delivery.tick_sync)
+
+
+==============================================================================
+FILE: backend/app/sunapi.py
+
+==============================================================================
+from __future__ import annotations
+
+import logging
+import re
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Optional
+from urllib.parse import urlencode
+
+import httpx
+
+from .logging_config import get_logger
+from .models import CheckStatus, Credentials, Recorder
+
+logger = get_logger("sunapi")
+
+
+@dataclass
+class DeviceInfo:
+    model: Optional[str] = None
+    firmware_version: Optional[str] = None
+    device_type: Optional[str] = None
+    cgi_version: Optional[str] = None
+
+
+@dataclass
+class SunapiCheckOutcome:
+    status: CheckStatus
+    checked_at: datetime
+    error: Optional[str] = None
+    device: Optional[DeviceInfo] = None
+
+
+def build_deviceinfo_url(recorder: Recorder) -> str:
+    scheme = "https" if recorder.use_https else "http"
+    base = f"{scheme}://{recorder.host}:{recorder.port}/stw-cgi/system.cgi"
+    query = urlencode({"msubmenu": "deviceinfo", "action": "view"})
+    return f"{base}?{query}"
+
+
+def parse_deviceinfo_response(text: str) -> DeviceInfo:
+    fields: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if "=" in line:
+            key, _, value = line.partition("=")
+            fields[key.strip()] = value.strip()
+    return DeviceInfo(
+        model=fields.get("Model"),
+        firmware_version=fields.get("FirmwareVersion"),
+        device_type=fields.get("DeviceType"),
+        cgi_version=fields.get("CGIVersion"),
+    )
+
+
+def _log_check_result(
+    recorder: Recorder,
+    outcome: SunapiCheckOutcome,
+    *,
+    duration_ms: int,
+    url: str | None = None,
+    http_status: int | None = None,
+) -> None:
+    extra: dict = {
+        "event": "sunapi_check_done",
+        "extra_recorder_id": recorder.id,
+        "extra_host": recorder.host,
+        "extra_port": recorder.port,
+        "extra_use_https": recorder.use_https,
+        "extra_excluded": kwargs.get("excluded", False),
+        "extra_status": outcome.status.value,
+        "extra_duration_ms": duration_ms,
+        "extra_error": outcome.error,
+    }
+    if url:
+        extra["extra_url"] = url
+    if http_status is not None:
+        extra["extra_http_status"] = http_status
+    if outcome.device and outcome.device.model:
+        extra["extra_model"] = outcome.device.model
+    level = logging.INFO if outcome.status == CheckStatus.ONLINE else logging.WARNING
+    logger.log(level, "sunapi check finished", extra=extra)
+
+
+async def check_recorder(
+    recorder: Recorder,
+    credentials: Credentials,
+    timeout: float = 15.0,
+    *,
+    excluded: bool = False,
+) -> SunapiCheckOutcome:
+    checked_at = datetime.now(timezone.utc)
+    start = time.perf_counter()
+
+    def finish(outcome: SunapiCheckOutcome, **kwargs) -> SunapiCheckOutcome:
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        _log_check_result(recorder, outcome, duration_ms=duration_ms, **kwargs)
+        return outcome
+
+    if excluded:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.DISABLED,
+                checked_at=checked_at,
+                error=None,
+            ),
+            excluded=True,
+        )
+
+    if not credentials.username or not credentials.password:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Не заданы учётные данные API. Укажите логин и пароль в настройках.",
+            )
+        )
+
+    url = build_deviceinfo_url(recorder)
+    logger.info(
+        "sunapi request",
+        extra={
+            "event": "sunapi_request",
+            "extra_recorder_id": recorder.id,
+            "extra_url": url,
+            "extra_timeout_s": timeout,
+        },
+    )
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            verify=False,
+            follow_redirects=True,
+        ) as client:
+            response = await client.get(
+                url,
+                auth=httpx.DigestAuth(credentials.username, credentials.password),
+            )
+    except httpx.TimeoutException:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Превышено время ожидания ответа устройства",
+            ),
+            url=url,
+        )
+    except httpx.ConnectError:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Не удалось установить соединение с устройством",
+            ),
+            url=url,
+        )
+    except httpx.RequestError as exc:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error=f"Ошибка сети: {exc}",
+            ),
+            url=url,
+        )
+
+    if response.status_code == 401:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Ошибка аутентификации (401). Проверьте логин и пароль.",
+            ),
+            url=url,
+            http_status=response.status_code,
+        )
+
+    if response.status_code >= 400:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error=f"HTTP {response.status_code}: устройство вернуло ошибку",
+            ),
+            url=url,
+            http_status=response.status_code,
+        )
+
+    body = response.text
+    if not body.strip():
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Пустой ответ от SUNAPI",
+            ),
+            url=url,
+            http_status=response.status_code,
+        )
+
+    if re.search(r"(?i)(error|fail|denied)", body) and "Model=" not in body:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error=body.strip()[:500],
+            ),
+            url=url,
+            http_status=response.status_code,
+        )
+
+    device = parse_deviceinfo_response(body)
+    if not device.model and not device.device_type:
+        return finish(
+            SunapiCheckOutcome(
+                status=CheckStatus.OFFLINE,
+                checked_at=checked_at,
+                error="Ответ получен, но не распознан как deviceinfo",
+            ),
+            url=url,
+            http_status=response.status_code,
+        )
+
+    return finish(
+        SunapiCheckOutcome(
+            status=CheckStatus.ONLINE,
+            checked_at=checked_at,
+            device=device,
+        ),
+        url=url,
+        http_status=response.status_code,
+    )
+
+
+==============================================================================
+FILE: backend/app/monitoring.py (фрагмент: run_poll_cycle)
+
+==============================================================================
+    if cancel_event.is_set():
+        raise PollCycleCancelled()
+
+
+async def _abort_wave_tasks(tasks: list[asyncio.Task]) -> None:
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _poll_retry_settings(config) -> tuple[int, int]:
+    settings = config.monitoring
+    if settings.poll_retry_enabled and settings.poll_retry_max > 0:
+        return 1 + settings.poll_retry_max, settings.poll_retry_delay_seconds
+    return 1, settings.poll_retry_delay_seconds
+
+
+async def run_poll_cycle(
+    config_store: ConfigStore,
+    state_store: StateStore,
+    *,
+    include_inventory: bool = False,
+    job_id: Optional[str] = None,
+    tracker: Optional["PollJobTracker"] = None,
+    cancel_event: Optional[asyncio.Event] = None,
+) -> PollCycleStats:
+    from .exclusions import pollable_recorders
+
+    config = config_store.load()
+    recorders = pollable_recorders(config)
+    stats = PollCycleStats(total=len(recorders))
+    max_attempts, retry_delay = _poll_retry_settings(config)
+
+    if tracker:
+        await tracker.set_total(len(recorders))
+        await tracker.set_retry_config(max_attempts, retry_delay)
+    if not recorders:
+        return stats
+    credentials = config.credentials
+    settings = config.monitoring
+    sem = asyncio.Semaphore(config.monitoring.max_concurrent_polls)
+    status_updates: list[RecorderStatusUpdate] = []
+    poll_states: dict[str, _RecorderPollState] = {
+        rec.id: _RecorderPollState() for rec in recorders
+    }
+    pending: list[Recorder] = list(recorders)
+    attempt = 0
+
+    async def _poll_wave_one(rec: Recorder) -> tuple[Recorder, _WavePollResult]:
+        if tracker:
+            await tracker.recorder_started(rec)
+        async with sem:
+            result = await _fetch_poll_for_recorder(
+                rec,
+                credentials,
+                include_inventory=include_inventory,
+            )
+        if tracker:
+            await tracker.recorder_attempt_finished(rec)
+        return rec, result
+
+    try:
+        while pending and attempt < max_attempts:
+            if cancel_event and cancel_event.is_set():
+                raise PollCycleCancelled()
+            attempt += 1
+            if attempt > 1 and tracker:
+                await tracker.set_waiting_retry(
+                    attempt, len(pending), retry_delay, max_attempts
+                )
+                await _interruptible_sleep(retry_delay, cancel_event)
+            if tracker:
+                await tracker.set_polling_round(attempt, len(pending))
+
+            still_pending: list[Recorder] = []
+            polled_at = datetime.now(timezone.utc)
+            wave_tasks = [
+                asyncio.create_task(_poll_wave_one(r), name=f"poll-{r.id}")
+                for r in pending
+            ]
+
+            async def _apply_wave_result(rec: Recorder, wave: _WavePollResult) -> None:
+                state = poll_states[rec.id]
+                state.attempts = attempt
+
+                if job_id:
+                    state_store.insert_poll_attempt(
+                        job_id=job_id,
+                        recorder_id=rec.id,
+                        attempt=attempt,
+                        outcome=wave.outcome,
+                        online=wave.online,
+                        error=wave.error,
+                        duration_ms=wave.duration_ms,
+                        recorded_at=polled_at,
+                    )
+
+                if wave.online:
+                    state.success_attempt = attempt
+                    update = apply_poll_result(
+                        config_store,
+                        state_store,
+                        rec,
+                        wave.poll,
+                        settings,
+                        polled_at,
+                        update_config=False,
+                    )
+                    if update is not None:
+                        status_updates.append(update)
+                    stats.responded += 1
+                    if attempt > 1:
+                        stats.responded_after_retry += 1
+                    if tracker:
+                        await tracker.recorder_final_finished(
+                            rec,
+                            success=True,
+                            after_retry=attempt > 1,
+                        )
+                elif attempt >= max_attempts:
+                    update = apply_poll_result(
+                        config_store,
+                        state_store,
+                        rec,
+                        wave.poll,
+                        settings,
+                        polled_at,
+                        update_config=False,
+                    )
+                    if update is not None:
+                        status_updates.append(update)
+                    stats.still_unreachable += 1
+                    if tracker:
+                        await tracker.recorder_final_finished(
+                            rec,
+                            success=False,
+                            after_retry=False,
+                            error=wave.error,
+                        )
+                else:
+                    still_pending.append(rec)
+
+            for finished in asyncio.as_completed(wave_tasks):
+                if cancel_event and cancel_event.is_set():
+                    await _abort_wave_tasks(wave_tasks)
+                    raise PollCycleCancelled()
+                rec, wave = await finished
+                await _apply_wave_result(rec, wave)
+
+            pending = still_pending
+    finally:
+        if job_id:
+            for rec in recorders:
+                state = poll_states[rec.id]
+                if state.attempts <= 0:
+                    continue
+                state_store.update_poll_recorder_summary(
+                    rec.id,
+                    job_id=job_id,
+                    attempts=state.attempts,
+                    success_attempt=state.success_attempt,
+                    first_try_ok=state.success_attempt == 1,
+                )
+        if status_updates:
+            config_store.update_recorder_statuses(status_updates)
+
+    logger.info(
+        "poll cycle done",
+        extra={
+            "recorders": len(recorders),
+            "responded": stats.responded,
+            "after_retry": stats.responded_after_retry,
+            "unreachable": stats.still_unreachable,
+            "attempts": max_attempts,
+        },
+    )
+    return stats
+
+
+
+==============================================================================
+FILE: backend/app/sunapi_extended.py (фрагмент: poll_recorder)
+
+==============================================================================
+                        _apply_channel_event_attr(channels[ch], key, val)
+                    elif key == "NetworkCameraConnect" and val is not None:
+                        _apply_channel_event_attr(
+                            channels[ch], "NetworkCameraConnect", val
+                        )
+        json_system = _collect_system_events_from_json(data)
+        if json_system:
+            system_events = json_system
+
+    return EventStatusResult(
+        channels=[channels[k] for k in sorted(channels)],
+        system_events=system_events,
+    )
+
+
+def compute_stream_metrics(
+    channels: list[ChannelInfo],
+    *,
+    profile: Optional[NvrApiProfile] = None,
+) -> tuple[Optional[float], Optional[float], Optional[float], int, int]:
+    """max CPU %, avg CPU %, sum DataRate Mbps, zero-bitrate IP channels (без analog)."""
+    active = [ch for ch in channels if channel_is_active(ch)]
+    cpus = [ch.cpu_usage for ch in active if ch.cpu_usage is not None]
+    rates = [ch.data_rate for ch in active if ch.data_rate is not None]
+    zero_bitrate = sum(
+        1
+        for ch in active
+        if not is_analog_channel(ch)
+        and ch.data_rate is not None
+        and ch.data_rate <= 0
+    )
+    cpu_max = max(cpus) if cpus else None
+    cpu_avg = round(sum(cpus) / len(cpus), 2) if cpus else None
+    rate_sum = round(sum(rates), 3) if rates else None
+    return cpu_max, cpu_avg, rate_sum, zero_bitrate, 0
+
+
+def _to_float(value) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", ".")
+    if not text:
+        return None
+    m = _SIZE_UNIT_RE.match(text)
+    if m:
+        try:
+            number = float(m.group(1))
+        except ValueError:
+            return None
+        unit = (m.group(2) or "").upper()
+        if unit in ("TB", "ТБ"):
+            return number * 1024 * 1024
+        if unit in ("GB", "ГБ"):
+            return number * 1024
+        if unit in ("MB", "МБ", "КБ", "KB"):
+            return number
+        return number
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+async def poll_recorder(
+    recorder: Recorder,
+    credentials: Credentials,
+    *,
+    include_inventory: bool = True,
+    timeout: float = 20.0,
+) -> RecorderPollData:
+    """Опрос NVR по SUNAPI.
+
+    include_inventory: детальный архив по каждому каналу (searchrecordingperiod).
+    Состояние канала (videosource) запрашивается при каждом опросе.
+    """
+    result = RecorderPollData()
+    if not credentials.username or not credentials.password:
+        result.error = "Не заданы учётные данные API"
+        return result
+
+    url = build_deviceinfo_url(recorder)
+    status, body, err = await _fetch(recorder, credentials, url, timeout)
+    if err or status >= 400 or not body.strip():
+        result.error = err or f"HTTP {status}"
+        return result
+
+    result.device = parse_deviceinfo_response(body)
+    if not result.device.model and not result.device.device_type:
+        result.error = "Не распознан ответ deviceinfo"
+        return result
+
+    result.online = True
+    profile = NvrApiProfile.from_device(result.device)
+
+    cam_url = build_url(recorder, "media.cgi", "cameraregister")
+    st, b, _ = await _fetch(recorder, credentials, cam_url, timeout)
+    cam_channels: list[ChannelInfo] = []
+    if st == 200:
+        cam_channels = parse_cameraregister(b)
+
+    vs_channels: list[ChannelInfo] = []
+    vs_url = build_url(recorder, "media.cgi", "videosource")
+    st, b, _ = await _fetch(recorder, credentials, vs_url, timeout)
+    if st == 200:
+        vs_channels = parse_videosource_channels(b)
+
+    if cam_channels or vs_channels:
+        result.channels = merge_channels(cam_channels, vs_channels)
+        result.channels_polled = True
+        (
+            result.cpu_usage_max,
+            result.cpu_usage_avg,
+            result.data_rate_total_mbps,
+            result.channels_zero_bitrate,
+            result.channels_poe_off,
+        ) = compute_stream_metrics(result.channels, profile=profile)
+
+    storage_url = build_url(recorder, "system.cgi", "storageinfo")
+    st, b, _ = await _fetch(recorder, credentials, storage_url, timeout)
+    device_model = result.device.model if result.device else None
+    if st == 200:
+        if parse_sunapi_error_body(b):
+            result.storage = StorageInfo(storageinfo_ok=False)
+        else:
+            result.storage = parse_storage(
+                b, model=device_model, profile=profile
+            )
+            result.storage.storageinfo_ok = True
+            if result.storage.disks:
+                result.storage.disks = await enrich_storage_temperatures(
+                    recorder,
+                    credentials,
+                    result.storage.disks,
+                    device_model=device_model,
+                    profile=profile,
+                    timeout=timeout,
+                )
+
+    date_url = build_url(recorder, "system.cgi", "date")
+    st, b, _ = await _fetch(recorder, credentials, date_url, timeout)
+    if st == 200:
+        result.date_time = parse_date(b)
+
+    period_url = build_url(recorder, "recording.cgi", "searchrecordingperiod")
+    st, b, _ = await _fetch(recorder, credentials, period_url, timeout)
+    if st == 200:
+        period_err = parse_sunapi_error_body(b)
+        if period_err:
+            result.recording_period_error = period_err
+        else:
+            result.recording_period = parse_recording_period(b)
+
+    rec_storage_url = build_url(recorder, "recording.cgi", "storage")
+    st, b, _ = await _fetch(recorder, credentials, rec_storage_url, timeout)
+    if st == 200 and not parse_sunapi_error_body(b):
+        enable, overwrite = parse_recording_storage(b)
+        result.recording_storage_enable = enable
+        result.recording_storage_overwrite = overwrite
+
+    if result.channels:
+        result.channel_recording_periods = await fetch_channel_recording_periods(
+            recorder,
+            credentials,
+            [ch.channel_no for ch in result.channels],
+            result.recording_period,
+            timeout=timeout,
+            detailed_archive=include_inventory,
+        )
+
+    event_url = build_url(recorder, "eventstatus.cgi", "eventstatus", action="check")
+    st, b, _ = await _fetch(recorder, credentials, event_url, timeout)
+    if st == 200:
+        event_result = parse_eventstatus(b)
+        result.events = event_result.channels
+        result.system_events = event_result.system_events
+
+    return result
+
+
+==============================================================================
+
+ПРИМЕЧАНИЕ: проверка СКУД 03.06.2026 (PowerShell, не в репозитории)
+
+==============================================================================
+
+Разовая ручная проверка с АРМ. Типовой вид (подставьте фактический IP/порт из алерта):
+
+  Test-Connection -ComputerName <IP_контроллера_СКУД> -Count 2
+  # и/или
+  $client = New-Object System.Net.Sockets.TcpClient
+  $client.Connect("<IP>", <порт>)
+  $client.Close()
+
+Заполните и приложите отдельно, если сохранился точный текст команд.
+
+
+==============================================================================
+
+КОНЕЦ ФАЙЛА
+
+==============================================================================
