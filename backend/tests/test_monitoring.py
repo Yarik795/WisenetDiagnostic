@@ -10,6 +10,7 @@ from app.monitoring import (
     evaluate_recorder_health,
 )
 from app.state_store import StateStore
+from app.sunapi import DeviceInfo
 from app.sunapi_extended import (
     ChannelInfo,
     EventChannelStatus,
@@ -440,3 +441,85 @@ def test_apply_poll_result_records_category_history(tmp_path: Path) -> None:
     fans_rows = [r for r in history if r.category == "fans"]
     assert fans_rows[-1].status == "error"
     assert state.get_category_problem_since("nvr1", "fans") == polled_at
+
+
+def test_apply_poll_result_stores_serial_and_manufacture_date(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(id="nvr1", object_name="Obj", host="10.0.0.1", port=80)
+    poll = RecorderPollData(
+        online=True,
+        device=DeviceInfo(
+            model="XRN-3210B2",
+            device_type="NVR",
+            serial_number="ZNWH6V4N90000KJ",
+        ),
+    )
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        datetime.now(timezone.utc),
+        update_config=False,
+    )
+    metrics = state.get_recorder_metrics("nvr1")
+    assert metrics is not None
+    assert metrics.serial_number == "ZNWH6V4N90000KJ"
+    assert metrics.manufacture_date == "2020-09"
+
+
+def test_apply_poll_result_preserves_serial_when_offline(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(id="nvr1", object_name="Obj", host="10.0.0.1", port=80)
+    state.upsert_recorder_metrics(
+        "nvr1",
+        serial_number="ZNWH6V4N90000KJ",
+        manufacture_date="2020-09",
+    )
+    poll = RecorderPollData(online=False, error="timeout")
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        datetime.now(timezone.utc),
+        update_config=False,
+    )
+    metrics = state.get_recorder_metrics("nvr1")
+    assert metrics is not None
+    assert metrics.serial_number == "ZNWH6V4N90000KJ"
+    assert metrics.manufacture_date == "2020-09"
+
+
+def test_apply_poll_result_ignores_camera_serial(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    config_store = ConfigStore(path=tmp_path / "config.json")
+    recorder = Recorder(id="nvr1", object_name="Obj", host="10.0.0.1", port=80)
+    poll = RecorderPollData(
+        online=True,
+        device=DeviceInfo(
+            model="QND-6082R",
+            device_type="NWC",
+            serial_number="ZNWH6V4N90000KJ",
+        ),
+    )
+    apply_poll_result(
+        config_store,
+        state,
+        recorder,
+        poll,
+        _settings(),
+        datetime.now(timezone.utc),
+        update_config=False,
+    )
+    metrics = state.get_recorder_metrics("nvr1")
+    assert metrics is not None
+    assert metrics.serial_number is None
+    assert metrics.manufacture_date is None

@@ -44,7 +44,10 @@ BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 
 from app.exclusions import migrate_config_raw  # noqa: E402
-from app.serial_manufacture_date import decode_samsung_manufacture_date  # noqa: E402
+from app.serial_manufacture_date import (  # noqa: E402
+    resolve_manufacture_date,
+    should_store_serial_metrics,
+)
 from app.sunapi_parsing import parse_key_value_body  # noqa: E402
 
 DEFAULT_CONFIG = ROOT / "config.json"
@@ -204,12 +207,10 @@ def probe_one(
         return _error_result(target, url, str(exc))
 
     fields = parse_key_value_body(body) if status == 200 and body.strip() else {}
-    serial = (fields.get("SerialNumber") or "").strip() or None
-    mfg: str | None = None
-    if serial:
-        decoded = decode_samsung_manufacture_date(serial)
-        if decoded:
-            mfg = decoded.strftime("%Y-%m")
+    device_type = fields.get("DeviceType")
+    raw_serial = (fields.get("SerialNumber") or "").strip() or None
+    serial = raw_serial if should_store_serial_metrics(device_type, raw_serial) else None
+    mfg = resolve_manufacture_date(raw_serial, device_type) if serial else None
 
     return ProbeResult(
         recorder_id=target["id"],
@@ -331,9 +332,14 @@ def _print_notes(results: list[ProbeResult]) -> None:
                 f"дата не распознана ({r.decode_rule})"
             )
         if r.http_status == 200 and not r.serial_number:
+            hint = (
+                f"DeviceType={r.device_type!r} — не регистратор"
+                if r.device_type and r.device_type.upper() not in {"NVR", "DVR", "HYBRID"}
+                else "нет SerialNumber в deviceinfo"
+            )
             print(
                 f"  [{r.host}] {r.model or '?'} — "
-                f"нет SerialNumber (BuildDate={r.build_date!r})"
+                f"{hint} (BuildDate={r.build_date!r})"
             )
 
 

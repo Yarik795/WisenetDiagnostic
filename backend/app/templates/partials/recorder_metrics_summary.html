@@ -3,6 +3,7 @@
 <div class="metrics-summary">
   {% include "partials/health_badges.html" %}
   {% if metrics.model %}<span>{{ metrics.model }}</span>{% endif %}
+  {% if metrics.manufacture_date %}<span>пр-во {{ format_manufacture_date(metrics.manufacture_date) }}</span>{% endif %}
   {% if metrics.firmware_version %}<span>FW {{ metrics.firmware_version }}</span>{% endif %}
   {% if metrics.storage_used_percent is not none %}
   <span>диск {{ format_percent(metrics.storage_used_percent) }}{% if metrics.storage_status %} ({{ metrics.storage_status }}){% endif %}</span>

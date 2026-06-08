@@ -15,6 +15,10 @@ from .health import HealthStatus, worst_status
 from .models import CheckStatus, MonitoringSettings, Recorder
 from .state_store import ChannelRow, StateStore
 from .sunapi import check_recorder
+from .serial_manufacture_date import (
+    resolve_manufacture_date,
+    should_store_serial_metrics,
+)
 from .sunapi_extended import (
     ChannelInfo,
     EventChannelStatus,
@@ -455,6 +459,20 @@ def apply_poll_result(
         global_period.archive_days if global_period else None
     )
 
+    existing_metrics = state.get_recorder_metrics(recorder.id)
+    if poll.online and poll.device:
+        raw_serial = poll.device.serial_number
+        device_type = poll.device.device_type
+        if should_store_serial_metrics(device_type, raw_serial):
+            serial_number = (raw_serial or "").strip()
+            manufacture_date = resolve_manufacture_date(serial_number, device_type)
+        else:
+            serial_number = None
+            manufacture_date = None
+    else:
+        serial_number = existing_metrics.serial_number if existing_metrics else None
+        manufacture_date = existing_metrics.manufacture_date if existing_metrics else None
+
     state.upsert_recorder_metrics(
         recorder.id,
         model=poll.device.model if poll.device else None,
@@ -493,6 +511,8 @@ def apply_poll_result(
         data_rate_total_mbps=poll.data_rate_total_mbps,
         channels_zero_bitrate=poll.channels_zero_bitrate or None,
         channels_poe_off=None,
+        serial_number=serial_number,
+        manufacture_date=manufacture_date,
     )
     metrics = state.get_recorder_metrics(recorder.id)
     for category in CATEGORY_LABELS:

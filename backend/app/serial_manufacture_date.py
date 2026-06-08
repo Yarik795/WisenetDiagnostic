@@ -100,3 +100,33 @@ def decode_samsung_manufacture_date(
         return None
 
     return date(year, month, 1)
+
+
+RECORDER_DEVICE_TYPES = frozenset({"NVR", "DVR", "HYBRID"})
+
+
+def should_store_serial_metrics(
+    device_type: str | None,
+    serial_number: str | None,
+) -> bool:
+    """Записывать S/N и дату только для регистраторов с непустым SerialNumber в deviceinfo."""
+    serial = (serial_number or "").strip()
+    if not serial:
+        return False
+    return (device_type or "").upper() in RECORDER_DEVICE_TYPES
+
+
+def resolve_manufacture_date(
+    serial_number: str | None,
+    device_type: str | None,
+    *,
+    reference_date: date | None = None,
+) -> str | None:
+    """YYYY-MM или None. Эмпирически S/N в API отдают XRN-3210B2 и XRN-6410B2."""
+    if not should_store_serial_metrics(device_type, serial_number):
+        return None
+    decoded = decode_samsung_manufacture_date(
+        serial_number or "",
+        reference_date=reference_date,
+    )
+    return decoded.strftime("%Y-%m") if decoded else None

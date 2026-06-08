@@ -171,6 +171,36 @@ def disk_power_on_hours(disk: dict[str, Any]) -> Optional[str]:
     return f"{hours} ч"
 
 
+_MONTH_SHORT_RU = (
+    "янв.",
+    "фев.",
+    "мар.",
+    "апр.",
+    "май",
+    "июн.",
+    "июл.",
+    "авг.",
+    "сен.",
+    "окт.",
+    "ноя.",
+    "дек.",
+)
+
+
+def format_manufacture_date(value: Optional[str]) -> str:
+    """YYYY-MM из S/N → «сен. 2020»."""
+    if not value:
+        return "—"
+    m = re.match(r"^(\d{4})-(\d{2})$", value.strip())
+    if not m:
+        return value
+    year = int(m.group(1))
+    month = int(m.group(2))
+    if 1 <= month <= 12:
+        return f"{_MONTH_SHORT_RU[month - 1]} {year}"
+    return value
+
+
 def format_archive_days_value(days: Optional[float]) -> str:
     if days is None:
         return "—"

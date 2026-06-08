@@ -9,6 +9,8 @@
       <h4>Устройство</h4>
       <dl class="metrics-dl">
         <dt>Модель</dt><dd>{{ metrics.model or '—' }}</dd>
+        <dt>Серийный номер</dt><dd>{{ metrics.serial_number or '—' }}</dd>
+        <dt>Дата производства</dt><dd>{% if metrics.manufacture_date %}{{ format_manufacture_date(metrics.manufacture_date) }} <span class="metrics-hint">(по S/N)</span>{% else %}—{% endif %}</dd>
         <dt>Прошивка</dt><dd>{{ metrics.firmware_version or '—' }}</dd>
         <dt>SUNAPI</dt><dd>{{ 'доступен' if metrics.device_online else 'недоступен' }}</dd>
         <dt>Опрос</dt><dd>{{ format_datetime(metrics.last_polled_at) }}</dd>

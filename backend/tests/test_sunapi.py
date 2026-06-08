@@ -34,8 +34,10 @@ def test_parse_deviceinfo() -> None:
 Model=XND-8080R
 FirmwareVersion=1.29.99
 DeviceType=NVR
+SerialNumber=ZNWH6V4N90000KJ
 """
     info = parse_deviceinfo_response(body)
     assert info.model == "XND-8080R"
     assert info.firmware_version == "1.29.99"
     assert info.device_type == "NVR"
+    assert info.serial_number == "ZNWH6V4N90000KJ"

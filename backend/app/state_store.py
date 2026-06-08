@@ -71,6 +71,8 @@ class RecorderMetricsRow:
     data_rate_total_mbps: Optional[float] = None
     channels_zero_bitrate: Optional[int] = None
     channels_poe_off: Optional[int] = None
+    serial_number: Optional[str] = None
+    manufacture_date: Optional[str] = None
     last_poll_job_id: Optional[str] = None
     last_poll_attempts: Optional[int] = None
     last_poll_success_attempt: Optional[int] = None
@@ -239,6 +241,8 @@ class StateStore:
             ("data_rate_total_mbps", "REAL"),
             ("channels_zero_bitrate", "INTEGER"),
             ("channels_poe_off", "INTEGER"),
+            ("serial_number", "TEXT"),
+            ("manufacture_date", "TEXT"),
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -404,6 +408,8 @@ class StateStore:
         data_rate_total_mbps: Optional[float] = None,
         channels_zero_bitrate: Optional[int] = None,
         channels_poe_off: Optional[int] = None,
+        serial_number: Optional[str] = None,
+        manufacture_date: Optional[str] = None,
     ) -> None:
         disks_json = json.dumps(disks, ensure_ascii=False) if disks else None
         system_events_json = (
@@ -423,9 +429,10 @@ class StateStore:
                     storage_used_mb, storage_total_mb, disks_json, system_events_json,
                     storageinfo_ok, archive_poll_error, recording_storage_enable,
                     recording_storage_overwrite, cpu_usage_max, cpu_usage_avg,
-                    data_rate_total_mbps, channels_zero_bitrate, channels_poe_off
+                    data_rate_total_mbps, channels_zero_bitrate, channels_poe_off,
+                    serial_number, manufacture_date
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -462,7 +469,9 @@ class StateStore:
                     cpu_usage_avg=excluded.cpu_usage_avg,
                     data_rate_total_mbps=excluded.data_rate_total_mbps,
                     channels_zero_bitrate=excluded.channels_zero_bitrate,
-                    channels_poe_off=excluded.channels_poe_off
+                    channels_poe_off=excluded.channels_poe_off,
+                    serial_number=excluded.serial_number,
+                    manufacture_date=excluded.manufacture_date
                 """,
                 (
                     recorder_id,
@@ -502,6 +511,8 @@ class StateStore:
                     data_rate_total_mbps,
                     channels_zero_bitrate,
                     channels_poe_off,
+                    serial_number,
+                    manufacture_date,
                 ),
             )
 
@@ -862,6 +873,10 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
         ),
         channels_poe_off=(
             row["channels_poe_off"] if "channels_poe_off" in row.keys() else None
+        ),
+        serial_number=row["serial_number"] if "serial_number" in row.keys() else None,
+        manufacture_date=(
+            row["manufacture_date"] if "manufacture_date" in row.keys() else None
         ),
         last_poll_job_id=(
             row["last_poll_job_id"] if "last_poll_job_id" in row.keys() else None

@@ -22,6 +22,7 @@ class DeviceInfo:
     firmware_version: Optional[str] = None
     device_type: Optional[str] = None
     cgi_version: Optional[str] = None
+    serial_number: Optional[str] = None
 
 
 @dataclass
@@ -46,11 +47,13 @@ def parse_deviceinfo_response(text: str) -> DeviceInfo:
         if "=" in line:
             key, _, value = line.partition("=")
             fields[key.strip()] = value.strip()
+    serial = (fields.get("SerialNumber") or "").strip() or None
     return DeviceInfo(
         model=fields.get("Model"),
         firmware_version=fields.get("FirmwareVersion"),
         device_type=fields.get("DeviceType"),
         cgi_version=fields.get("CGIVersion"),
+        serial_number=serial,
     )
 
 

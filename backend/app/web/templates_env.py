@@ -33,6 +33,7 @@ from ..ui.metrics_helpers import (
     format_archive_days,
     format_archive_days_value,
     format_archive_range,
+    format_manufacture_date,
     format_bool_ru,
     format_channel_counts,
     format_mb,
@@ -69,6 +70,7 @@ templates.env.globals["disk_power_on_hours"] = disk_power_on_hours
 templates.env.globals["format_archive_days"] = format_archive_days
 templates.env.globals["format_archive_days_value"] = format_archive_days_value
 templates.env.globals["format_archive_range"] = format_archive_range
+templates.env.globals["format_manufacture_date"] = format_manufacture_date
 templates.env.globals["format_skew"] = format_skew
 templates.env.globals["format_channel_counts"] = format_channel_counts
 templates.env.globals["format_bool_ru"] = format_bool_ru
