@@ -216,6 +216,19 @@ def format_archive_days(days: Optional[float], required: int = 30) -> str:
     return text
 
 
+ARCHIVE_RANGE_MERGE_THRESHOLD_DAYS = 0.05
+ARCHIVE_RANGE_DISPLAY_DECIMALS = 1
+
+
+def archive_range_differs(min_days: float, max_days: float) -> bool:
+    """True, если min/max нужно показать как диапазон, а не одно число."""
+    if abs(min_days - max_days) < ARCHIVE_RANGE_MERGE_THRESHOLD_DAYS:
+        return False
+    return round(min_days, ARCHIVE_RANGE_DISPLAY_DECIMALS) != round(
+        max_days, ARCHIVE_RANGE_DISPLAY_DECIMALS
+    )
+
+
 def format_archive_range(
     min_days: Optional[float],
     max_days: Optional[float],
@@ -223,7 +236,11 @@ def format_archive_range(
 ) -> str:
     if min_days is None and max_days is None:
         return "—"
-    if min_days is not None and max_days is not None and min_days != max_days:
+    if (
+        min_days is not None
+        and max_days is not None
+        and archive_range_differs(min_days, max_days)
+    ):
         text = f"{min_days:.1f}-{max_days:.1f} сут."
         if min_days < required:
             return f"{text} (норма {required})"
