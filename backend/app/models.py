@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .device_kinds import DeviceKind
+
 
 class CheckStatus(str, Enum):
     ONLINE = "online"
@@ -30,11 +32,21 @@ class RecorderBase(BaseModel):
     host: str = Field(..., min_length=1)
     port: int = Field(default=80, ge=1, le=65535)
     use_https: bool = False
+    device_kind: DeviceKind = "tsv"
+    mac: Optional[str] = None
 
     @field_validator("object_name", "host")
     @classmethod
     def strip_whitespace(cls, v: str) -> str:
         return v.strip()
+
+    @field_validator("mac")
+    @classmethod
+    def strip_mac(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
 
 
 class Recorder(RecorderBase):

@@ -1,7 +1,7 @@
 <div class="drawer-backdrop" onclick="document.getElementById('drawer-root').innerHTML=''"></div>
 <aside class="drawer" role="dialog" aria-labelledby="drawer-title">
   <div class="drawer-header">
-    <h2 id="drawer-title">{% if recorder %}Изменить регистратор{% else %}Добавить регистратор{% endif %}</h2>
+    <h2 id="drawer-title">{% if recorder %}Изменить устройство{% else %}Добавить устройство{% endif %}</h2>
     <button type="button" class="btn btn-ghost" onclick="document.getElementById('drawer-root').innerHTML=''" aria-label="Закрыть">✕</button>
   </div>
   <form
@@ -9,6 +9,18 @@
     hx-target="#drawer-root"
     hx-swap="innerHTML"
   >
+    {% if recorder %}
+    <input type="hidden" name="device_kind" value="{{ recorder.device_kind }}">
+    {% else %}
+    <div class="field">
+      <label class="label" for="device_kind">Вид системы</label>
+      <select class="input" id="device_kind" name="device_kind">
+        {% for kind in device_kinds %}
+        <option value="{{ kind }}" {% if (form and form.device_kind == kind) or (not form and kind == 'tsv') %}selected{% endif %}>{{ kind_labels[kind] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="field">
       <label class="label" for="object_name">Название объекта *</label>
       <input class="input" id="object_name" name="object_name" list="object-names"
@@ -22,7 +34,7 @@
       {% if errors and errors.object_name %}<div class="field-error">{{ errors.object_name }}</div>{% endif %}
     </div>
     <div class="field">
-      <label class="label" for="name">Имя регистратора</label>
+      <label class="label" for="name">Имя / модель</label>
       <input class="input" id="name" name="name"
         value="{{ form.name if form else (recorder.name or '' if recorder else '') }}"
         placeholder="NVR-1">
@@ -33,6 +45,12 @@
         value="{{ form.host if form else (recorder.host if recorder else '') }}"
         placeholder="10.1.2.3" required>
       {% if errors and errors.host %}<div class="field-error">{{ errors.host }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label class="label" for="mac">MAC</label>
+      <input class="input" id="mac" name="mac"
+        value="{{ form.mac if form else (recorder.mac or '' if recorder else '') }}"
+        placeholder="AA:BB:CC:DD:EE:FF">
     </div>
     <div class="field">
       <label class="label" for="port">Порт *</label>

@@ -29,6 +29,9 @@ def source_label(source_key: str) -> str:
     return SOURCE_KEY_LABELS.get(source_key, source_key)
 
 
-def recorder_device_kind(_recorder: object) -> DeviceKind:
-    """Все текущие Recorder — устройства ТСВ."""
-    return "tsv"
+CMDB_MANAGED_KINDS: tuple[DeviceKind, ...] = ("tsv", "skud", "bio")
+
+
+def recorder_device_kind(recorder: object) -> DeviceKind:
+    kind = getattr(recorder, "device_kind", None)
+    return kind if kind in ALL_DEVICE_KINDS else "tsv"

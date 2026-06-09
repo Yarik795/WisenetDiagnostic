@@ -2,7 +2,7 @@
   id="recorder-row-{{ recorder.id }}"
   class="recorder-row recorder-row--stacked{% if is_excluded %} recorder-row--excluded{% endif %}"
   data-recorder-row
-  data-search-text="{{ recorder.object_name }} {{ recorder.host }} {{ recorder.name or '' }}"
+  data-search-text="{{ recorder.object_name }} {{ recorder.host }} {{ recorder.name or '' }} {{ recorder.mac or '' }}"
 >
   <div class="recorder-row-main">
     <div class="recorder-row-info">
@@ -17,7 +17,12 @@
       {% if recorder.name and recorder.name.strip() %}
       <div class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</div>
       {% endif %}
+      {% if recorder.device_kind in ('skud', 'bio') and recorder.mac %}
+      <div class="recorder-row-host" style="font-size:12px;">MAC: {{ recorder.mac }}</div>
+      {% endif %}
+      {% if recorder.device_kind == 'tsv' %}
       {% include "partials/recorder_metrics_summary.html" %}
+      {% endif %}
     </div>
     <div class="recorder-row-actions">
       {% include "partials/status_badge.html" %}
@@ -38,12 +43,14 @@
         <details>
           <summary class="btn btn-ghost" style="min-width:40px;padding:0;" aria-label="Действия">⋯</summary>
           <div class="menu-panel">
+            {% if recorder.device_kind == 'tsv' %}
             <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="text-decoration:none;">Каналы</a>
             <button
               type="button"
               hx-post="/recorders/{{ recorder.id }}/inventory"
               hx-swap="none"
             >↻ Каналы</button>
+            {% endif %}
             {% if is_excluded %}
             <button
               type="button"
@@ -70,15 +77,17 @@
               class="danger"
               hx-post="/recorders/{{ recorder.id }}/delete"
               hx-swap="none"
-              hx-confirm="Удалить регистратор {{ display_recorder_name(recorder) }} на объекте {{ recorder.object_name }}?"
+              hx-confirm="Удалить {{ display_recorder_name(recorder) }} на объекте {{ recorder.object_name }}?"
             >🗑 Удалить</button>
           </div>
         </details>
       </div>
     </div>
   </div>
+  {% if recorder.device_kind == 'tsv' %}
   <details class="metrics-details-toggle">
     <summary>Метрики NVR (диски, архив, NTP)</summary>
     {% include "partials/recorder_metrics_detail.html" %}
   </details>
+  {% endif %}
 </div>

@@ -2,16 +2,17 @@
   <td>
     <a href="/monitoring?object={{ recorder.object_name|urlencode }}">{{ recorder.object_name }}</a>
   </td>
-  <td>{{ kind_labels.tsv }}</td>
+  <td>{{ kind_labels[recorder.device_kind] }}</td>
   <td>{{ display_recorder_name(recorder) }}</td>
   <td class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</td>
-  <td>{{ recorder.port }}</td>
+  <td>{% if recorder.device_kind in ('skud', 'bio') and recorder.mac %}{{ recorder.mac }}{% else %}{{ recorder.port }}{% endif %}</td>
   <td>
     {% set metrics = metrics_map.get(recorder.id) if metrics_map is defined else none %}
     {% set status = effective_status(recorder, metrics) %}
     {% set error = metrics.health_reason if metrics else recorder.last_error %}
     {% include "partials/status_badge.html" %}
   </td>
+  {% if recorder.device_kind == 'tsv' %}
   <td class="recorder-row-host" style="font-size:12px;">
     {% if metrics and metrics.storage_used_percent is not none %}{{ format_percent(metrics.storage_used_percent) }}{% else %}—{% endif %}
   </td>
@@ -21,6 +22,11 @@
   <td class="recorder-row-host" style="font-size:12px;">
     {% if metrics %}{{ metrics.ntp_status or '—' }}{% else %}—{% endif %}
   </td>
+  {% else %}
+  <td class="recorder-row-host" style="font-size:12px;">—</td>
+  <td class="recorder-row-host" style="font-size:12px;">—</td>
+  <td class="recorder-row-host" style="font-size:12px;">—</td>
+  {% endif %}
   <td style="font-size:12px;color:var(--text-secondary);">
     {{ format_datetime(metrics.last_polled_at) if metrics and metrics.last_polled_at else format_time(recorder.last_check_at) }}
   </td>
@@ -35,7 +41,9 @@
         hx-target="#recorder-row-{{ recorder.id }}"
         hx-swap="outerHTML"
       >Проверить</button>
+      {% if recorder.device_kind == 'tsv' %}
       <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="min-height:36px;text-decoration:none;">Каналы</a>
+      {% endif %}
       {% if is_excluded %}
       <button type="button" class="btn btn-ghost" style="min-height:36px;"
         hx-post="/recorders/{{ recorder.id }}/unexclude"

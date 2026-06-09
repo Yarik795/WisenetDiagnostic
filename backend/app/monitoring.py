@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .poll_jobs import PollJobTracker
 
 from .config_store import ConfigStore, RecorderStatusUpdate
+from .device_kinds import recorder_device_kind
 from .health import HealthStatus, worst_status
 from .models import CheckStatus, MonitoringSettings, Recorder
 from .state_store import ChannelRow, StateStore
@@ -371,6 +372,29 @@ def apply_poll_result(
     *,
     update_config: bool = True,
 ) -> Optional[RecorderStatusUpdate]:
+    kind = recorder_device_kind(recorder)
+    if kind in ("skud", "bio"):
+        rec_status: HealthStatus = "ok" if poll.online else "error"
+        rec_reason = None if poll.online else (poll.error or "нет ответа ping")
+        state.upsert_recorder_metrics(
+            recorder.id,
+            device_online=poll.online,
+            health_status=rec_status,
+            health_reason=rec_reason,
+            last_polled_at=polled_at,
+        )
+        state.record_history("recorder", recorder.id, rec_status, rec_reason, polled_at)
+        check_status = CheckStatus.ONLINE if poll.online else CheckStatus.OFFLINE
+        status_update = RecorderStatusUpdate(
+            recorder_id=recorder.id,
+            status=check_status,
+            checked_at=polled_at,
+            error=poll.error if not poll.online else None,
+        )
+        if update_config:
+            store.update_recorder_statuses([status_update])
+        return status_update
+
     events_map = {e.channel_no: e for e in poll.events}
     channel_statuses: list[str] = []
     channel_nos: list[int] = []
@@ -578,6 +602,39 @@ async def _fetch_poll_for_recorder(
     include_inventory: bool,
 ) -> _WavePollResult:
     start = time.perf_counter()
+    kind = recorder_device_kind(recorder)
+    if kind in ("skud", "bio"):
+        from .ping_check import ping_host
+
+        try:
+            ping = await ping_host(recorder.host)
+            duration_ms = round((time.perf_counter() - start) * 1000)
+            poll = RecorderPollData(online=ping.reachable, error=ping.error)
+            if ping.reachable:
+                return _WavePollResult(
+                    online=True,
+                    poll=poll,
+                    duration_ms=duration_ms,
+                    outcome="success",
+                )
+            return _WavePollResult(
+                online=False,
+                poll=poll,
+                error=ping.error,
+                duration_ms=duration_ms,
+                outcome="offline",
+            )
+        except Exception as exc:
+            duration_ms = round((time.perf_counter() - start) * 1000)
+            logger.exception("ping failed for %s", recorder.id)
+            return _WavePollResult(
+                online=False,
+                poll=RecorderPollData(online=False, error=str(exc)),
+                error=str(exc),
+                duration_ms=duration_ms,
+                outcome="error",
+            )
+
     try:
         poll = await poll_recorder(
             recorder,

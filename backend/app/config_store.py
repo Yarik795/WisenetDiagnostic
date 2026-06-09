@@ -101,7 +101,8 @@ class ConfigStore:
 
     def create_recorder(self, data: RecorderCreate) -> Recorder:
         config = self.load()
-        recorder = Recorder(id=_new_id(), **data.model_dump())
+        kind = getattr(data, "device_kind", "tsv") or "tsv"
+        recorder = Recorder(id=_new_id(kind), **data.model_dump())
         config.recorders.append(recorder)
         self.save(config)
         return recorder
@@ -231,5 +232,11 @@ class ConfigStore:
         return config.credentials
 
 
-def _new_id() -> str:
-    return f"nvr-{uuid.uuid4().hex[:8]}"
+def _new_id(device_kind: str = "tsv") -> str:
+    prefix = {
+        "tsv": "nvr",
+        "skud": "skud",
+        "bio": "bio",
+        "sots": "sots",
+    }.get(device_kind, "nvr")
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"

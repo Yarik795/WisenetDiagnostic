@@ -17,6 +17,8 @@ class RecorderFormData:
     host: str
     port: int
     use_https: bool
+    mac: str = ""
+    device_kind: str = "tsv"
 
 
 def parse_recorder_form(
@@ -25,6 +27,8 @@ def parse_recorder_form(
     host: str,
     port: str,
     use_https: str,
+    mac: str = "",
+    device_kind: str = "tsv",
 ) -> tuple[Optional[RecorderFormData], dict[str, str]]:
     errors: dict[str, str] = {}
     obj = object_name.strip()
@@ -47,6 +51,10 @@ def parse_recorder_form(
     if errors:
         return None, errors
 
+    kind = device_kind.strip() if device_kind else "tsv"
+    if kind not in ("tsv", "skud", "bio", "sots"):
+        kind = "tsv"
+
     return (
         RecorderFormData(
             object_name=obj,
@@ -54,6 +62,8 @@ def parse_recorder_form(
             host=h,
             port=port_num,
             use_https=use_https == "true",
+            mac=mac.strip(),
+            device_kind=kind,
         ),
         {},
     )

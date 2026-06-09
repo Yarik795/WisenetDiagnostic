@@ -14,10 +14,14 @@ sys.path.insert(0, str(BACKEND))
 
 from app.models import CheckStatus, Recorder  # noqa: E402
 from cmdb_reader import (  # noqa: E402
-    CmdbRecorderRow,
+    MANUFACTURER_BIO,
+    MANUFACTURER_SKUD,
+    CmdbDeviceRow,
     FUNCTIONAL_TYPE_VIDEO,
     build_col_index,
+    classify_cmdb_row,
     find_header_row,
+    merge_devices_from_cmdb,
     merge_recorders_from_cmdb,
     parse_cmdb_grid,
 )
@@ -56,9 +60,35 @@ def _grid_with_data(*data_rows: list) -> list[list]:
     ]
 
 
+def _cmdb_row(
+    host: str,
+    object_name: str,
+    *,
+    name: str | None = None,
+    mac: str | None = None,
+    device_kind: str = "tsv",
+    source_row: int = 5,
+) -> CmdbDeviceRow:
+    return CmdbDeviceRow(
+        host=host,
+        object_name=object_name,
+        name=name,
+        mac=mac,
+        device_kind=device_kind,  # type: ignore[arg-type]
+        source_row=source_row,
+    )
+
+
 def test_find_header_row_skips_description_rows() -> None:
     grid = _grid_with_data()
     assert find_header_row(grid) == 1
+
+
+def test_classify_cmdb_row() -> None:
+    assert classify_cmdb_row(FUNCTIONAL_TYPE_VIDEO, "Hanwha") == "tsv"
+    assert classify_cmdb_row("", MANUFACTURER_SKUD) == "skud"
+    assert classify_cmdb_row("", MANUFACTURER_BIO) == "bio"
+    assert classify_cmdb_row("Камера", "Hanwha") is None
 
 
 def test_parse_cmdb_filters_videoregistratory() -> None:
@@ -67,7 +97,7 @@ def test_parse_cmdb_filters_videoregistratory() -> None:
             "538000001",
             "Оборудование ТСО",
             "10.0.0.1",
-            "",
+            "E8:FF:1E:30:15:3F",
             "",
             "г. Москва",
             "",
@@ -121,21 +151,104 @@ def test_parse_cmdb_filters_videoregistratory() -> None:
     assert result.rows[0].host == "10.0.0.1"
     assert result.rows[0].object_name == "г. Москва"
     assert result.rows[0].name == "HRX-1620"
-    assert result.skipped_wrong_type == 1
+    assert result.rows[0].device_kind == "tsv"
+    assert result.rows[0].mac == "E8:FF:1E:30:15:3F"
+    assert result.skipped_unclassified == 1
+    assert result.counts_by_kind["tsv"] == 1
+
+
+def test_parse_cmdb_skud_and_bio() -> None:
+    grid = _grid_with_data(
+        [
+            "538000001",
+            "Оборудование ТСО",
+            "100.111.46.66",
+            "E8:FF:1E:30:15:3F",
+            "",
+            "г. Москва, ул. Федосьино",
+            "",
+            "СКУД",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            MANUFACTURER_SKUD,
+            "NG NET",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ],
+        [
+            "538000001",
+            "Оборудование ТСО",
+            "100.111.47.19",
+            "0C:63:FC:0A:E8:E2",
+            "",
+            "г. Москва, ул. Череповецкая",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            MANUFACTURER_BIO,
+            "Pocket Face FS6",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ],
+    )
+    result = parse_cmdb_grid(grid)
+    assert len(result.rows) == 2
+    by_host = {r.host: r for r in result.rows}
+    assert by_host["100.111.46.66"].device_kind == "skud"
+    assert by_host["100.111.46.66"].name == "NG NET"
+    assert by_host["100.111.47.19"].device_kind == "bio"
+    assert by_host["100.111.47.19"].mac == "0C:63:FC:0A:E8:E2"
+    assert result.counts_by_kind["skud"] == 1
+    assert result.counts_by_kind["bio"] == 1
 
 
 def test_build_col_index_normalizes_spaces() -> None:
-    header = ["  IP  ", "Функциональный  тип", "Адрес", "Модель устройства"]
+    header = [
+        "  IP  ",
+        "Адрес",
+        "Модель  устройства",
+        "Производитель устройства",
+        "MAC",
+        "Функциональный  тип",
+    ]
     idx = build_col_index(header)
     assert idx["IP"] == 0
-    assert idx["Функциональный тип"] == 1
+    assert idx["Функциональный тип"] == 5
 
 
 def test_build_col_index_accepts_latin_homoglyph_address() -> None:
-    header = ["IP", "Функциональный тип", "Адреc", "Модель уcтройcтва"]
+    header = [
+        "IP",
+        "Адреc",
+        "Модель уcтройcтва",
+        "Производитель устройства",
+        "MAC",
+        "Функциональный тип",
+    ]
     idx = build_col_index(header)
-    assert idx["Адрес"] == 2
-    assert idx["Модель устройства"] == 3
+    assert idx["Адрес"] == 1
+    assert idx["Модель устройства"] == 2
 
 
 def test_parse_cmdb_with_homoglyph_functional_type() -> None:
@@ -191,18 +304,8 @@ def test_merge_preserves_id_and_last_by_host() -> None:
         ),
     ]
     cmdb_rows = [
-        CmdbRecorderRow(
-            host="10.1.1.1",
-            object_name="новый адрес",
-            name="HRX-1620",
-            source_row=5,
-        ),
-        CmdbRecorderRow(
-            host="10.2.2.2",
-            object_name="новый объект",
-            name=None,
-            source_row=6,
-        ),
+        _cmdb_row("10.1.1.1", "новый адрес", name="HRX-1620", source_row=5),
+        _cmdb_row("10.2.2.2", "новый объект", source_row=6),
     ]
     merged, stats, errors = merge_recorders_from_cmdb(cmdb_rows, existing)
     assert not errors
@@ -219,13 +322,13 @@ def test_merge_preserves_id_and_last_by_host() -> None:
     assert "10.9.9.9" not in by_host
 
 
-def test_merge_duplicate_ip_in_cmdb_second_gets_new_id() -> None:
+def test_merge_duplicate_ip_same_kind_second_gets_new_id() -> None:
     existing = [
         Recorder(id="nvr-first", object_name="o", host="10.0.0.5"),
     ]
     rows = [
-        CmdbRecorderRow(host="10.0.0.5", object_name="a1", name="M1", source_row=2),
-        CmdbRecorderRow(host="10.0.0.5", object_name="a2", name="M2", source_row=3),
+        _cmdb_row("10.0.0.5", "a1", name="M1", source_row=2),
+        _cmdb_row("10.0.0.5", "a2", name="M2", source_row=3),
     ]
     merged, stats, errors = merge_recorders_from_cmdb(rows, existing)
     assert not errors
@@ -236,11 +339,45 @@ def test_merge_duplicate_ip_in_cmdb_second_gets_new_id() -> None:
     assert ids[1] != "nvr-first"
 
 
-def test_merge_fail_on_empty_object_name() -> None:
+def test_merge_same_ip_different_kinds() -> None:
     existing: list[Recorder] = []
     rows = [
-        CmdbRecorderRow(host="10.0.0.1", object_name="", name="X", source_row=4),
+        _cmdb_row("10.0.0.5", "addr", name="NVR", device_kind="tsv"),
+        _cmdb_row("10.0.0.5", "addr", name="NG NET", device_kind="skud"),
     ]
+    merged, stats, errors = merge_devices_from_cmdb(rows, existing)
+    assert not errors
+    assert len(merged) == 2
+    kinds = {r.device_kind for r in merged}
+    assert kinds == {"tsv", "skud"}
+
+
+def test_merge_preserves_sots_devices() -> None:
+    existing = [
+        Recorder(
+            id="sots-1",
+            object_name="Obj",
+            host="10.8.8.8",
+            device_kind="sots",
+        ),
+        Recorder(
+            id="nvr-remove",
+            object_name="gone",
+            host="10.9.9.9",
+        ),
+    ]
+    rows = [_cmdb_row("10.1.1.1", "new", name="NVR")]
+    merged, stats, errors = merge_devices_from_cmdb(rows, existing)
+    assert not errors
+    ids = {r.id for r in merged}
+    assert "sots-1" in ids
+    assert "nvr-remove" not in ids
+    assert stats.removed == 1
+
+
+def test_merge_fail_on_empty_object_name() -> None:
+    existing: list[Recorder] = []
+    rows = [_cmdb_row("10.0.0.1", "", name="X", source_row=4)]
     merged, stats, errors = merge_recorders_from_cmdb(rows, existing)
     assert merged == []
     assert len(errors) == 1
@@ -272,19 +409,13 @@ def test_sync_preserves_exclusions(tmp_path: Path) -> None:
     from unittest.mock import patch
     from cmdb_reader import CmdbParseResult
 
-    rows = [
-        CmdbRecorderRow(
-            host="10.1.1.1",
-            object_name="New name",
-            name="NVR",
-            source_row=5,
-        )
-    ]
+    rows = [_cmdb_row("10.1.1.1", "New name", name="NVR", source_row=5)]
     parsed = CmdbParseResult(
         rows=rows,
         skipped_empty_ip=0,
-        skipped_wrong_type=0,
+        skipped_unclassified=0,
         total_data_rows=1,
+        counts_by_kind={"tsv": 1, "skud": 0, "bio": 0},
     )
 
     with patch("app.cmdb_sync.read_cmdb_xlsx", return_value=parsed):

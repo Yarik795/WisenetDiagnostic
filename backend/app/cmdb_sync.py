@@ -1,10 +1,10 @@
-"""Синхронизация recorders в config.json из cmdb.xlsx."""
+"""Синхронизация устройств в config.json из cmdb.xlsx."""
 
 from __future__ import annotations
 
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -24,9 +24,11 @@ if str(_SCRIPTS) not in sys.path:
 
 from cmdb_reader import (  # noqa: E402
     FUNCTIONAL_TYPE_VIDEO,
+    MANUFACTURER_BIO,
+    MANUFACTURER_SKUD,
     MergeError,
     MergeStats,
-    merge_recorders_from_cmdb,
+    merge_devices_from_cmdb,
     read_cmdb_xlsx,
 )
 
@@ -40,14 +42,26 @@ class CmdbSyncResult:
     total_recorders: int = 0
     cmdb_row_count: int = 0
     skipped_empty_ip: int = 0
-    skipped_wrong_type: int = 0
+    skipped_unclassified: int = 0
     total_data_rows: int = 0
+    counts_by_kind: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def skipped_wrong_type(self) -> int:
+        return self.skipped_unclassified
 
 
-def _success_message(stats: MergeStats, total: int) -> str:
+def _kind_breakdown(counts: dict[str, int]) -> str:
+    tsv = counts.get("tsv", 0)
+    skud = counts.get("skud", 0)
+    bio = counts.get("bio", 0)
+    return f"ТСВ {tsv}, СКУД {skud}, Био {bio}"
+
+
+def _success_message(stats: MergeStats, total: int, counts: dict[str, int]) -> str:
     return (
-        f"Обновлено из CMDB: {total} регистраторов "
-        f"(новых {stats.added}, сохранено {stats.preserved}, удалено {stats.removed})"
+        f"Обновлено из CMDB: {total} устройств ({_kind_breakdown(counts)}); "
+        f"новых {stats.added}, сохранено {stats.preserved}, удалено {stats.removed}"
     )
 
 
@@ -77,7 +91,7 @@ def sync_from_cmdb(
     except Exception as e:
         return CmdbSyncResult(ok=False, message=f"Ошибка чтения config: {e}")
 
-    merged, stats, errors = merge_recorders_from_cmdb(
+    merged, stats, errors = merge_devices_from_cmdb(
         parsed.rows, old_config.recorders
     )
 
@@ -90,20 +104,23 @@ def sync_from_cmdb(
             stats=stats,
             cmdb_row_count=len(parsed.rows),
             skipped_empty_ip=parsed.skipped_empty_ip,
-            skipped_wrong_type=parsed.skipped_wrong_type,
+            skipped_unclassified=parsed.skipped_unclassified,
             total_data_rows=parsed.total_data_rows,
+            counts_by_kind=dict(parsed.counts_by_kind),
         )
 
     if dry_run:
         return CmdbSyncResult(
             ok=True,
-            message=_success_message(stats, len(merged)) + " (dry-run, без записи)",
+            message=_success_message(stats, len(merged), parsed.counts_by_kind)
+            + " (dry-run, без записи)",
             stats=stats,
             total_recorders=len(merged),
             cmdb_row_count=len(parsed.rows),
             skipped_empty_ip=parsed.skipped_empty_ip,
-            skipped_wrong_type=parsed.skipped_wrong_type,
+            skipped_unclassified=parsed.skipped_unclassified,
             total_data_rows=parsed.total_data_rows,
+            counts_by_kind=dict(parsed.counts_by_kind),
         )
 
     from .exclusions import prune_exclusions
@@ -144,18 +161,19 @@ def sync_from_cmdb(
             filename=path.name,
             record_count=len(merged),
             status="ok",
-            message=_success_message(stats, len(merged)),
+            message=_success_message(stats, len(merged), parsed.counts_by_kind),
         )
 
     return CmdbSyncResult(
         ok=True,
-        message=_success_message(stats, len(merged)),
+        message=_success_message(stats, len(merged), parsed.counts_by_kind),
         stats=stats,
         total_recorders=len(merged),
         cmdb_row_count=len(parsed.rows),
         skipped_empty_ip=parsed.skipped_empty_ip,
-        skipped_wrong_type=parsed.skipped_wrong_type,
+        skipped_unclassified=parsed.skipped_unclassified,
         total_data_rows=parsed.total_data_rows,
+        counts_by_kind=dict(parsed.counts_by_kind),
     )
 
 
@@ -166,16 +184,22 @@ def cmdb_sync_report_lines(result: CmdbSyncResult) -> list[str]:
         lines.append(
             f"CMDB: строк данных после заголовка — {result.total_data_rows}"
         )
+        counts = result.counts_by_kind
         lines.append(
-            f"Фильтр «{FUNCTIONAL_TYPE_VIDEO}»: {result.cmdb_row_count} регистраторов"
+            f"Импортировано: {_kind_breakdown(counts)} "
+            f"(всего {result.cmdb_row_count})"
+        )
+        lines.append(
+            f"Фильтры: «{FUNCTIONAL_TYPE_VIDEO}», "
+            f"«{MANUFACTURER_SKUD}», «{MANUFACTURER_BIO}»"
         )
         lines.append(
             f"Пропущено: пустой IP — {result.skipped_empty_ip}, "
-            f"другой тип — {result.skipped_wrong_type}"
+            f"не классифицировано — {result.skipped_unclassified}"
         )
     if result.stats:
         lines.append(
-            f"Итог: сохранено по IP — {result.stats.preserved}, "
+            f"Итог: сохранено — {result.stats.preserved}, "
             f"новых — {result.stats.added}, "
             f"удалено из старого config — {result.stats.removed}"
         )

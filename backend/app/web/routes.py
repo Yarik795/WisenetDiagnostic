@@ -1064,9 +1064,13 @@ async def recorder_create(
     host: str = Form(""),
     port: str = Form("80"),
     use_https: str = Form("false"),
+    mac: str = Form(""),
+    device_kind: str = Form("tsv"),
     store: ConfigStore = Depends(get_store),
 ) -> Response:
-    data, errors = parse_recorder_form(object_name, name, host, port, use_https)
+    data, errors = parse_recorder_form(
+        object_name, name, host, port, use_https, mac, device_kind
+    )
     if errors or data is None:
         return templates.TemplateResponse(
             request,
@@ -1086,6 +1090,8 @@ async def recorder_create(
             host=data.host,
             port=data.port,
             use_https=data.use_https,
+            mac=data.mac or None,
+            device_kind=data.device_kind,  # type: ignore[arg-type]
         )
     except ValidationError as e:
         return _form_validation_error(request, None, store, e)
@@ -1103,13 +1109,17 @@ async def recorder_update(
     host: str = Form(""),
     port: str = Form("80"),
     use_https: str = Form("false"),
+    mac: str = Form(""),
+    device_kind: str = Form("tsv"),
     store: ConfigStore = Depends(get_store),
 ) -> Response:
     recorder = store.get_recorder(recorder_id)
     if not recorder:
         return HTMLResponse("Не найден", status_code=404)
 
-    data, errors = parse_recorder_form(object_name, name, host, port, use_https)
+    data, errors = parse_recorder_form(
+        object_name, name, host, port, use_https, mac, device_kind
+    )
     if errors or data is None:
         return templates.TemplateResponse(
             request,
@@ -1129,6 +1139,8 @@ async def recorder_update(
             host=data.host,
             port=data.port,
             use_https=data.use_https,
+            mac=data.mac or None,
+            device_kind=data.device_kind,  # type: ignore[arg-type]
         )
     except ValidationError as e:
         return _form_validation_error(request, recorder, store, e)

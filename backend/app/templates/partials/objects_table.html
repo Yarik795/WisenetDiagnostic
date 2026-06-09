@@ -1,7 +1,7 @@
 {% if not recorders %}
 <div class="empty-state">
   <h2>Нет устройств</h2>
-  <p>Загрузите инвентарь ТСВ из CMDB в разделе <a href="/sources">Исходные данные</a> или добавьте устройство вручную.</p>
+  <p>Загрузите инвентарь из CMDB в разделе <a href="/sources">Исходные данные</a> или добавьте устройство вручную.</p>
   <button type="button" class="btn btn-primary" style="margin-top:16px;"
     hx-get="/recorders/new" hx-target="#drawer-root" hx-swap="innerHTML"
   >+ Добавить ТСВ</button>

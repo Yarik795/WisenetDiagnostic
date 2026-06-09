@@ -11,7 +11,7 @@
   {% if latest_cmdb_import %}
   <p class="source-cmdb-last">
     Последняя загрузка: {{ format_datetime(latest_cmdb_import.imported_at) }} —
-    {{ latest_cmdb_import.record_count }} регистраторов ТСВ
+    {{ latest_cmdb_import.record_count }} устройств
     {% if latest_cmdb_import.message %}<span class="text-secondary">({{ latest_cmdb_import.message }})</span>{% endif %}
   </p>
   {% else %}
@@ -24,6 +24,6 @@
     hx-swap="none"
     hx-disabled-elt="#cmdb-sync-btn"
     hx-indicator="#cmdb-sync-indicator"
-    hx-confirm="Обновить список регистраторов ТСВ из cmdb.xlsx? Записи, которых нет в CMDB, будут удалены."
+    hx-confirm="Обновить инвентарь (ТСВ, СКУД, биотерминалы) из cmdb.xlsx? Записи CMDB, которых нет в файле, будут удалены."
   ><span id="cmdb-sync-indicator" class="htmx-indicator spinner" aria-hidden="true"></span>Обновить из CMDB</button>
 </section>
