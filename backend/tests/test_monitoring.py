@@ -187,6 +187,51 @@ def test_stale_connectfail_video_loss_still_error() -> None:
     assert "VideoLoss" in reason
 
 
+def test_on_authfail_is_warn_without_live_event() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        source_state="On",
+        camera_ip="10.89.188.147",
+        register_status="AuthFail",
+    )
+    status, reason = evaluate_channel_health(ch, None, _settings())
+    assert status == "warn"
+    assert "AuthFail" in reason
+
+
+def test_stale_authfail_xrn2010_live_stream_is_ok() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        source_state="On",
+        camera_ip="10.89.188.147",
+        register_status="AuthFail",
+        data_rate=2.688,
+    )
+    event = EventChannelStatus(channel_no=0, connected=True, video_loss=False)
+    status, reason = evaluate_channel_health(
+        ch, event, _settings(), device_model="XRN-2010"
+    )
+    assert status == "ok"
+    assert "AuthFail" in reason
+    assert "поток в норме" in reason
+
+
+def test_stale_authfail_is_warn_on_unsupported_model() -> None:
+    ch = ChannelInfo(
+        channel_no=0,
+        source_state="On",
+        camera_ip="10.0.0.5",
+        register_status="AuthFail",
+        data_rate=2.9,
+    )
+    event = EventChannelStatus(channel_no=0, connected=True, video_loss=False)
+    status, reason = evaluate_channel_health(
+        ch, event, _settings(), device_model="XRN-3210B2"
+    )
+    assert status == "warn"
+    assert "AuthFail" in reason
+
+
 def test_on_disconnected_is_error() -> None:
     ch = ChannelInfo(
         channel_no=1,

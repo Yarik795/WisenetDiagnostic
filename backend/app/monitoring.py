@@ -29,7 +29,7 @@ from .sunapi_extended import (
     enable_recorder_ntp,
     is_register_status_error,
     is_analog_channel,
-    is_stale_connectfail_on_live_channel,
+    is_stale_register_status_on_live_channel,
     normalize_register_status,
     poll_recorder,
 )
@@ -81,10 +81,11 @@ def evaluate_channel_health(
     if event and event.connected is False:
         return HealthStatus.ERROR.value, "Камера не подключена"
 
-    if is_stale_connectfail_on_live_channel(ch, event, device_model=device_model):
+    if is_stale_register_status_on_live_channel(ch, event, device_model=device_model):
+        reg = ch.register_status or "?"
         return (
             HealthStatus.OK.value,
-            "Канал активен (в API регистрации ConnectFail, поток в норме)",
+            f"Канал активен (в API регистрации {reg}, поток в норме)",
         )
 
     if is_analog_channel(ch):

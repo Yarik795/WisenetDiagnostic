@@ -35,8 +35,9 @@ NTP_LOCAL_UTC_OFFSET = timedelta(hours=3)
 MODELS_CELSIUS_ONLY_TEMPERATURE = frozenset(
     {"XRN-2010", "XRN-2010A", "XRN-2010P", "HRX-1620"}
 )
-# ConnectFail в cameraregister при живом потоке (eventstatus) — устаревшее поле Status
-MODELS_STALE_CONNECTFAIL_PREFIXES = ("HRX-1620", "XRN-2010")
+# ConnectFail / AuthFail в cameraregister при живом потоке (eventstatus) — устаревшее поле Status
+MODELS_STALE_REGISTER_STATUS_PREFIXES = ("HRX-1620", "XRN-2010")
+_STALE_REGISTER_STATUSES = frozenset({"connectfail", "authfail"})
 
 _CGI_VERSION_RE = re.compile(r"(\d+)\.(\d+)")
 _SIZE_UNIT_RE = re.compile(
@@ -64,15 +65,24 @@ def is_connectfail_register_status(status: Optional[str]) -> bool:
     return normalize_register_status(status) == "connectfail"
 
 
-def model_ignores_stale_connectfail(model: Optional[str]) -> bool:
+def is_stale_register_status(status: Optional[str]) -> bool:
+    return normalize_register_status(status) in _STALE_REGISTER_STATUSES
+
+
+def model_ignores_stale_register_status(model: Optional[str]) -> bool:
     if not model:
         return False
     model_upper = model.strip().upper()
     if model_upper in MODELS_CELSIUS_ONLY_TEMPERATURE:
         return True
     return any(
-        model_upper.startswith(prefix) for prefix in MODELS_STALE_CONNECTFAIL_PREFIXES
+        model_upper.startswith(prefix)
+        for prefix in MODELS_STALE_REGISTER_STATUS_PREFIXES
     )
+
+
+def model_ignores_stale_connectfail(model: Optional[str]) -> bool:
+    return model_ignores_stale_register_status(model)
 
 
 def channel_stream_appears_live(
@@ -90,19 +100,30 @@ def channel_stream_appears_live(
     return True
 
 
+def is_stale_register_status_on_live_channel(
+    ch: "ChannelInfo",
+    event: Optional["EventChannelStatus"],
+    *,
+    device_model: Optional[str] = None,
+) -> bool:
+    if not model_ignores_stale_register_status(device_model):
+        return False
+    if (ch.source_state or "").lower() != "on":
+        return False
+    if not is_stale_register_status(ch.register_status):
+        return False
+    return channel_stream_appears_live(ch, event)
+
+
 def is_stale_connectfail_on_live_channel(
     ch: "ChannelInfo",
     event: Optional["EventChannelStatus"],
     *,
     device_model: Optional[str] = None,
 ) -> bool:
-    if not model_ignores_stale_connectfail(device_model):
-        return False
-    if (ch.source_state or "").lower() != "on":
-        return False
-    if not is_connectfail_register_status(ch.register_status):
-        return False
-    return channel_stream_appears_live(ch, event)
+    return is_stale_register_status_on_live_channel(
+        ch, event, device_model=device_model
+    )
 
 
 _COMBINED_TEMP_RE = re.compile(
