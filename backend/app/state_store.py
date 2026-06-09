@@ -112,6 +112,17 @@ class CategoryStatusHistoryRow:
     recorded_at: datetime
 
 
+@dataclass
+class SourceImportRow:
+    id: int
+    source_key: str
+    filename: Optional[str]
+    imported_at: datetime
+    record_count: int
+    status: str
+    message: Optional[str]
+
+
 _CATEGORY_PROBLEM_STATUSES = frozenset({"warn", "error"})
 # unknown между warn/error не завершает эпизод (пропуск опроса, нет метрик).
 _TRANSPARENT_GAP_STATUSES = frozenset({"unknown"})
@@ -210,6 +221,19 @@ class StateStore:
                     ON recorder_poll_attempts(recorder_id, recorded_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_poll_attempts_job
                     ON recorder_poll_attempts(job_id, recorder_id, attempt);
+
+                CREATE TABLE IF NOT EXISTS source_imports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_key TEXT NOT NULL,
+                    filename TEXT,
+                    imported_at TEXT NOT NULL,
+                    record_count INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL,
+                    message TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_source_imports_key
+                    ON source_imports(source_key, imported_at DESC);
                 """
             )
             self._migrate_schema(conn)
@@ -264,6 +288,98 @@ class StateStore:
         for name, col_type in channel_additions:
             if name not in channel_columns:
                 conn.execute(f"ALTER TABLE channels ADD COLUMN {name} {col_type}")
+
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "source_imports" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE source_imports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_key TEXT NOT NULL,
+                    filename TEXT,
+                    imported_at TEXT NOT NULL,
+                    record_count INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL,
+                    message TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_source_imports_key
+                    ON source_imports(source_key, imported_at DESC)
+                """
+            )
+
+    def record_source_import(
+        self,
+        source_key: str,
+        *,
+        filename: Optional[str] = None,
+        record_count: int = 0,
+        status: str = "ok",
+        message: Optional[str] = None,
+        imported_at: Optional[datetime] = None,
+    ) -> SourceImportRow:
+        when = imported_at or datetime.now(timezone.utc)
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO source_imports (
+                    source_key, filename, imported_at, record_count, status, message
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source_key,
+                    filename,
+                    _iso(when),
+                    record_count,
+                    status,
+                    message,
+                ),
+            )
+            row_id = cur.lastrowid
+        return SourceImportRow(
+            id=row_id,
+            source_key=source_key,
+            filename=filename,
+            imported_at=when,
+            record_count=record_count,
+            status=status,
+            message=message,
+        )
+
+    def list_source_imports(self, limit: int = 50) -> list[SourceImportRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM source_imports
+                ORDER BY imported_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_source_import_from_row(r) for r in rows]
+
+    def get_latest_source_import(self, source_key: str) -> Optional[SourceImportRow]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM source_imports
+                WHERE source_key = ?
+                ORDER BY imported_at DESC
+                LIMIT 1
+                """,
+                (source_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _source_import_from_row(row)
 
     def upsert_channel(
         self,
@@ -920,6 +1036,18 @@ def _history_from_row(row: sqlite3.Row) -> HistoryRow:
         status=row["status"],
         reason=row["reason"],
         recorded_at=_parse_iso(row["recorded_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _source_import_from_row(row: sqlite3.Row) -> SourceImportRow:
+    return SourceImportRow(
+        id=row["id"],
+        source_key=row["source_key"],
+        filename=row["filename"],
+        imported_at=_parse_iso(row["imported_at"]) or datetime.now(timezone.utc),
+        record_count=row["record_count"],
+        status=row["status"],
+        message=row["message"],
     )
 
 

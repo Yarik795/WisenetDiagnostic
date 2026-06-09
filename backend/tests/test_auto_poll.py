@@ -105,7 +105,7 @@ def client(tmp_path: Path) -> TestClient:
 
 
 def test_objects_page_has_auto_poll_controls(client: TestClient) -> None:
-    r = client.get("/objects")
+    r = client.get("/monitoring")
     assert r.status_code == 200
     assert "Остановить обновление" in r.text
     assert 'hx-post="/monitoring/auto-poll/stop"' in r.text
@@ -123,7 +123,7 @@ def test_auto_poll_stop_and_resume(client: TestClient) -> None:
     r_stop = client.post(
         "/monitoring/auto-poll/stop",
         data={
-            "refresh_url": "/objects/partials/groups",
+            "refresh_url": "/monitoring/partials/groups",
             "refresh_target": "#object-groups",
         },
     )
@@ -135,7 +135,7 @@ def test_auto_poll_stop_and_resume(client: TestClient) -> None:
     r_resume = client.post(
         "/monitoring/auto-poll/resume",
         data={
-            "refresh_url": "/objects/partials/groups",
+            "refresh_url": "/monitoring/partials/groups",
             "refresh_target": "#object-groups",
         },
     )
@@ -152,7 +152,7 @@ def test_manual_poll_works_when_auto_paused(client: TestClient) -> None:
         r = client.post(
             "/monitoring/poll-all",
             data={
-                "refresh_url": "/objects/partials/health-dashboard",
+                "refresh_url": "/monitoring/partials/health-dashboard",
                 "refresh_target": "#health-dashboard-stack",
             },
         )

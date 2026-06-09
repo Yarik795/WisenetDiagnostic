@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block title %}Сводка — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Сводка{% endblock %}
+{% block page_actions %}
+<a href="/monitoring" class="btn btn-outline">Детальный мониторинг</a>
+{% endblock %}
+{% block content %}
+{% include "partials/inventory_kpi_strip.html" %}
+
+{% if kind_counts_fleet is defined %}
+<div class="kind-fleet-counts card" aria-label="Устройства по видам систем">
+  {% for kind in device_kinds %}
+  <span class="kind-fleet-count">
+    <span class="kind-fleet-count-label">{{ kind_labels[kind] }}</span>
+    <span class="kind-fleet-count-value">{{ kind_counts_fleet[kind] }}</span>
+  </span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% include "partials/object_health_matrix.html" %}
+
+{% if groups %}
+<section class="summary-objects-section" aria-label="Объекты">
+  <h2 class="summary-section-title">Объекты</h2>
+  <div class="summary-objects-grid">
+    {% for group in groups %}
+    {% include "partials/object_summary_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<div class="empty-state">
+  <h2>Нет объектов</h2>
+  <p>Загрузите инвентарь ТСВ из CMDB в разделе <a href="/sources">Исходные данные</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

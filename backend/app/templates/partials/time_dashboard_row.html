@@ -2,7 +2,7 @@
 {% set m = row.metrics %}
 <tr class="time-problem-row time-problem-row--{{ row.category }}">
   <td>
-    <a href="/objects?object={{ rec.object_name|urlencode }}#recorder-row-{{ rec.id }}">{{ rec.object_name }}</a>
+    <a href="/monitoring?object={{ rec.object_name|urlencode }}#recorder-row-{{ rec.id }}">{{ rec.object_name }}</a>
   </td>
   <td>{% include "partials/recorder_nvr_cell.html" %}</td>
   <td class="time-mono">{% if m and m.local_time %}{{ m.local_time }}{% else %}—{% endif %}</td>

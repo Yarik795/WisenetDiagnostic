@@ -1,0 +1,19 @@
+<article class="summary-object-card summary-object-card--{{ group.aggregate_status }}">
+  <header class="summary-object-card-header">
+    <h3 class="summary-object-card-title">
+      <a href="/monitoring?object={{ group.object_name|urlencode }}">{{ group.object_name }}</a>
+    </h3>
+    {% set status = group.aggregate_status %}
+    {% include "partials/status_badge.html" %}
+  </header>
+  <div class="summary-object-card-kinds">
+    {% for kind in device_kinds %}
+    {% set cnt = group.devices_by_kind[kind]|length if group.devices_by_kind is defined else (group.recorders|length if kind == 'tsv' else 0) %}
+    <span class="summary-kind-chip" title="{{ kind_labels[kind] }}">{{ kind_labels[kind] }}: {{ cnt }}</span>
+    {% endfor %}
+  </div>
+  {% set pc = problem_count(group.recorders, metrics_map) %}
+  {% if pc > 0 %}
+  <p class="summary-object-card-problems">{{ pc }} из {{ group.recorders|length }} с проблемами</p>
+  {% endif %}
+</article>

@@ -45,13 +45,32 @@ def test_health(client: TestClient) -> None:
 def test_root_redirects(client: TestClient) -> None:
     r = client.get("/", follow_redirects=False)
     assert r.status_code == 302
-    assert r.headers["location"] == "/objects"
+    assert r.headers["location"] == "/summary"
 
 
-def test_objects_page_empty(client: TestClient) -> None:
-    r = client.get("/objects")
+def test_monitoring_page_empty(client: TestClient) -> None:
+    r = client.get("/monitoring")
     assert r.status_code == 200
-    assert "Нет регистраторов" in r.text
+    assert "Нет устройств" in r.text
+
+
+def test_summary_page_renders(client: TestClient) -> None:
+    r = client.get("/summary")
+    assert r.status_code == 200
+    assert "Дашборд руководителя ТСО" in r.text or "Сводка" in r.text
+
+
+def test_placeholder_sections(client: TestClient) -> None:
+    for path in ("/budget", "/arsenal", "/smartview"):
+        r = client.get(path)
+        assert r.status_code == 200
+        assert "в разработке" in r.text.lower()
+
+
+def test_objects_redirects_to_monitoring(client: TestClient) -> None:
+    r = client.get("/objects", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/monitoring"
 
 
 def test_recorders_crud_via_forms(client: TestClient) -> None:
@@ -67,14 +86,14 @@ def test_recorders_crud_via_forms(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert "/objects" in r.headers["location"]
+    assert "/monitoring" in r.headers["location"]
 
-    page = client.get("/objects")
+    page = client.get("/monitoring")
     assert "ВСП-045" in page.text
     assert "10.1.2.3" in page.text
 
     list_page = client.get("/recorders", follow_redirects=True)
-    assert list_page.url.path == "/objects"
+    assert list_page.url.path == "/monitoring"
     assert "view=table" in str(list_page.url.query)
     assert "ВСП-045" in list_page.text
 
@@ -229,7 +248,7 @@ def test_enable_ntp_success(
 def test_time_redirects_to_status(client: TestClient) -> None:
     r = client.get("/time", follow_redirects=False)
     assert r.status_code == 302
-    assert r.headers["location"].startswith("/status?")
+    assert r.headers["location"].startswith("/monitoring?tab=health")
     assert "category=time" in r.headers["location"]
 
     page = client.get("/time", follow_redirects=True)
@@ -241,7 +260,7 @@ def test_time_redirects_to_status(client: TestClient) -> None:
 def test_recorders_redirects_to_objects_table(client: TestClient) -> None:
     r = client.get("/recorders", follow_redirects=False)
     assert r.status_code == 302
-    assert r.headers["location"] == "/objects?view=table"
+    assert r.headers["location"] == "/monitoring?view=table"
 
 
 def test_status_time_category_ntp_fail_in_critical_kpi(client: TestClient) -> None:
@@ -267,7 +286,7 @@ def test_status_time_category_ntp_fail_in_critical_kpi(client: TestClient) -> No
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/status?category=time&problems_only=true")
+    r = client.get("/status?category=time&problems_only=true", follow_redirects=True)
     assert r.status_code == 200
     assert 'time-kpi--error' in r.text
     assert "time-problem-row--error" in r.text
@@ -284,7 +303,7 @@ def test_objects_page_has_inventory_kpi_not_dashboard_stack(client: TestClient) 
             use_https=False,
         )
     )
-    r = client.get("/objects")
+    r = client.get("/monitoring")
     assert r.status_code == 200
     assert "fleet-overview" in r.text
     assert "object-health-matrix" in r.text
@@ -306,7 +325,7 @@ def test_status_page_has_category_dashboard_stack(client: TestClient) -> None:
             use_https=False,
         )
     )
-    r = client.get("/status")
+    r = client.get("/status", follow_redirects=True)
     assert r.status_code == 200
     assert "status-overview" in r.text
     assert "Исправность парка" in r.text
@@ -337,12 +356,12 @@ def test_objects_fleet_category_chip_links(
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    page = client.get("/objects")
+    page = client.get("/monitoring")
     assert "category=temperature" in page.text
     assert "problems_only=true" in page.text
     assert "TEMP:" in page.text
 
-    status = client.get("/status?category=temperature&problems_only=true")
+    status = client.get("/status?category=temperature&problems_only=true", follow_redirects=True)
     assert status.status_code == 200
     assert "category-dashboard-temperature" in status.text
 
@@ -371,10 +390,10 @@ def test_status_top_problem_objects(
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/status")
+    r = client.get("/status", follow_redirects=True)
     assert "top-problem-objects" in r.text
     assert "Проблемный объект" in r.text
-    assert 'href="/objects?object=' in r.text
+    assert 'href="/monitoring?object=' in r.text
 
 
 def test_objects_health_matrix_deep_link_without_object_groups_hash(
@@ -402,12 +421,12 @@ def test_objects_health_matrix_deep_link_without_object_groups_hash(
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/objects")
+    r = client.get("/monitoring")
     assert r.status_code == 200
     assert "Проблемы по объектам" in r.text
-    expected_href = f'/objects?object={quote(object_name)}">'
+    expected_href = f'/monitoring?object={quote(object_name)}">'
     assert expected_href in r.text
-    assert f'/objects?object={quote(object_name)}#object-groups">' not in r.text
+    assert f'/monitoring?object={quote(object_name)}#object-groups">' not in r.text
 
 
 def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
@@ -434,12 +453,12 @@ def test_objects_dashboard_nvr_column_shows_ip(client: TestClient) -> None:
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/objects")
+    r = client.get("/monitoring")
     assert r.status_code == 200
     assert "NVR-корпус" in r.text
     assert "192.168.1.10" in r.text
 
-    status_page = client.get("/status?category=temperature")
+    status_page = client.get("/status?category=temperature", follow_redirects=True)
     assert "category-dashboard-temperature" in status_page.text
 
 
@@ -467,7 +486,7 @@ def test_objects_export_errors_html(client: TestClient) -> None:
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/objects/export/errors.html")
+    r = client.get("/monitoring/export/errors.html")
     assert r.status_code == 200
     assert "text/html" in r.headers.get("content-type", "")
     assert "attachment" in r.headers.get("content-disposition", "").lower()
@@ -480,10 +499,10 @@ def test_objects_export_errors_html(client: TestClient) -> None:
     assert "Не пересылайте файл" not in r.text
     assert "Режим ссылок на NVR" not in r.text
 
-    page = client.get("/objects")
+    page = client.get("/monitoring")
     assert "Экспорт отчета" in page.text
-    assert "/objects/export/errors.html" in page.text
-    assert "/objects/report/email" in page.text
+    assert "/monitoring/export/errors.html" in page.text
+    assert "/monitoring/report/email" in page.text
     assert "Отправить отчёт на почту" in page.text
     assert "Экспорт отчёта по ошибкам" not in page.text
     assert "Экспорт с авто-входом" not in page.text
@@ -519,10 +538,10 @@ def test_objects_table_view(client: TestClient) -> None:
             use_https=False,
         )
     )
-    r = client.get("/objects?view=table")
+    r = client.get("/monitoring?view=table")
     assert r.status_code == 200
     assert "recorders-table-body" in r.text
-    assert "Таблица NVR" in r.text
+    assert "Таблица устройств" in r.text
     assert "data-object-group" not in r.text
     assert "fleet-overview" in r.text
     assert "object-health-matrix" not in r.text

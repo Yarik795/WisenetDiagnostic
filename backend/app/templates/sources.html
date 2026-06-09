@@ -1,0 +1,13 @@
+{% extends "layout.html" %}
+{% block title %}Исходные данные — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Исходные данные{% endblock %}
+{% block content %}
+<p class="page-lead">Загруженные выгрузки из внешних АС для анализа в разделах дашборда.</p>
+
+{% include "partials/source_cmdb_panel.html" %}
+
+<section class="card" style="margin-top:24px;">
+  <h2 class="card-section-title">Реестр загрузок</h2>
+  {% include "partials/source_imports_table.html" %}
+</section>
+{% endblock %}

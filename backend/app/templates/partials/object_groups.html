@@ -7,9 +7,8 @@
   <p class="empty-state">Ничего не найдено по запросу</p>
   {% else %}
   <div class="empty-state">
-    <p style="font-size:48px;margin:0;">📹</p>
-    <h2>Нет регистраторов</h2>
-    <p>Добавьте первый регистратор для начала мониторинга</p>
+    <h2>Нет устройств</h2>
+    <p>Загрузите инвентарь ТСВ из CMDB в разделе <a href="/sources">Исходные данные</a> или добавьте устройство вручную.</p>
     <button
       type="button"
       class="btn btn-primary"
@@ -17,7 +16,7 @@
       hx-get="/recorders/new"
       hx-target="#drawer-root"
       hx-swap="innerHTML"
-    >+ Добавить регистратор</button>
+    >+ Добавить ТСВ</button>
   </div>
   {% endif %}
 {% endif %}

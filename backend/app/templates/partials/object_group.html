@@ -2,7 +2,7 @@
   <div class="object-group-header" data-toggle-group role="button" tabindex="0">
     <span class="object-group-chevron" aria-hidden="true">▼</span>
     <h2 class="object-group-title">{{ group.object_name }}</h2>
-    <span class="object-group-meta">{{ group.recorders|length }} NVR</span>
+    <span class="object-group-meta">{{ group.total_device_count or group.recorders|length }} устр.</span>
     {% set status = group.aggregate_status %}
     {% include "partials/status_badge.html" %}
     {% set pc = problem_count(group.recorders, metrics_map) %}
@@ -11,18 +11,18 @@
       {{ pc }} из {{ group.recorders|length }} с проблемами
     </span>
     {% endif %}
+    {% for kind in device_kinds %}
+    {% set kcnt = group.devices_by_kind[kind]|length if group.devices_by_kind is defined else (group.recorders|length if kind == 'tsv' else 0) %}
+    {% if kcnt > 0 %}
+    <span class="object-group-meta kind-meta-chip">{{ kind_labels[kind] }}: {{ kcnt }}</span>
+    {% endif %}
+    {% endfor %}
     {% set cat_counts = object_category_problem_counts(group.recorders, metrics_map, get_monitoring_settings()) %}
     {% for cat, cnt in cat_counts.items() if cnt > 0 %}
     <span class="health-badge health-badge--warn object-health-badge" title="Проблемы: {{ category_label(cat) }}">{{ category_badge_code(cat) }}: {{ cnt }}</span>
     {% endfor %}
   </div>
   <div class="object-group-body">
-    {% for recorder in group.recorders %}
-    {% set metrics = metrics_map.get(recorder.id) %}
-    {% set is_excluded = recorder.id in excluded_ids %}
-    {% set status = effective_status(recorder, metrics, excluded_ids=excluded_ids) %}
-    {% set error = metrics.health_reason if metrics else recorder.last_error %}
-    {% include "partials/recorder_row.html" %}
-    {% endfor %}
+    {% include "partials/object_kind_tabs.html" %}
   </div>
 </div>

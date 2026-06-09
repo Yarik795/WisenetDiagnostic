@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+{% block title %}Мониторинг — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Мониторинг{% endblock %}
+{% block page_actions %}
+{% if monitoring_tab != 'health' %}
+<div class="btn-group">
+  <a
+    href="/monitoring/export/errors.html"
+    class="btn btn-outline"
+    download
+    title="Скачать HTML-отчёт по ошибкам дашбордов"
+  >Экспорт отчета</a>
+  <button
+    type="button"
+    class="btn btn-outline btn-icon"
+    title="Отправить сводку и HTML-отчёт на почту"
+    hx-post="/monitoring/report/email"
+    hx-swap="none"
+    hx-disabled-elt="this"
+    hx-indicator="#report-email-indicator"
+    hx-confirm="Отправить сводку и HTML-отчёт на адреса из config.json?"
+    aria-label="Отправить отчёт на почту"
+  >
+    <span id="report-email-indicator" class="htmx-indicator spinner" aria-hidden="true"></span>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="2" y="4" width="20" height="16" rx="2"/>
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+    </svg>
+  </button>
+</div>
+{% include "partials/poll_page_actions.html" %}
+{% else %}
+{% include "partials/poll_page_actions.html" %}
+{% endif %}
+{% endblock %}
+{% block content %}
+<nav class="inventory-view-tabs" aria-label="Раздел мониторинга">
+  <a href="/monitoring{% if sort != 'status' %}?sort={{ sort }}{% endif %}" class="{% if monitoring_tab != 'health' and inventory_view != 'table' %}active{% endif %}">По объектам</a>
+  <a href="/monitoring?view=table{% if sort != 'status' %}&sort={{ sort }}{% endif %}" class="{% if monitoring_tab != 'health' and inventory_view == 'table' %}active{% endif %}">Таблица устройств</a>
+  <a href="/monitoring?tab=health" class="{% if monitoring_tab == 'health' %}active{% endif %}">Дашборды ТСВ</a>
+</nav>
+
+{% if monitoring_tab == 'health' %}
+<form class="toolbar" style="flex-wrap:wrap;gap:8px;"
+  hx-get="/monitoring/partials/health-dashboard"
+  hx-target="#health-dashboard-stack"
+  hx-swap="outerHTML"
+  hx-trigger="change, submit"
+>
+  <input type="search" name="search" class="input" placeholder="Поиск…" value="{{ health_search }}" style="min-width:200px;">
+  <select name="category" class="select" style="max-width:220px;">
+    <option value="">Все метрики</option>
+    {% for cat, label in health_category_options %}
+    <option value="{{ cat }}" {% if health_category_filter == cat %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <input type="hidden" name="problems_only" value="false">
+  <label class="checkbox-label">
+    <input type="checkbox" name="problems_only" value="true" {% if health_problems_only %}checked{% endif %} onchange="this.previousElementSibling.disabled=this.checked">
+    Только проблемы
+  </label>
+  <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+</form>
+{% include "partials/status_overview.html" %}
+{% set health_refresh_url = '/monitoring/partials/health-dashboard' %}
+{% include "partials/health_dashboard_stack.html" %}
+{% else %}
+{% include "partials/inventory_header.html" %}
+
+{% if inventory_view == 'table' %}
+<div id="inventory-table-root">
+{% include "partials/objects_table.html" %}
+</div>
+{% else %}
+<div class="toolbar">
+  <input type="search" id="objects-search" class="input" placeholder="Поиск по объекту, IP, имени…" aria-label="Поиск">
+  <button type="button" class="btn btn-outline" id="objects-collapse-all">Свернуть все</button>
+  <button type="button" class="btn btn-outline" id="objects-expand-all">Развернуть все</button>
+  <select class="select" style="max-width:200px;"
+    name="sort"
+    hx-get="/monitoring/partials/groups"
+    hx-target="#object-groups"
+    hx-include="#objects-search"
+    hx-trigger="change"
+  >
+    <option value="status" {% if sort == 'status' %}selected{% endif %}>Сначала проблемные</option>
+    <option value="name" {% if sort == 'name' %}selected{% endif %}>По имени (А–Я)</option>
+  </select>
+</div>
+<div id="object-groups">
+  {% include "partials/object_groups.html" %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

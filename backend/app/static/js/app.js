@@ -101,6 +101,31 @@ function initMobileSidebar() {
   });
 }
 
+function initKindTabs(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-kind-tabs]").forEach((tabsNav) => {
+    const group = tabsNav.closest("[data-object-group]");
+    if (!group) return;
+    tabsNav.querySelectorAll("[data-kind-tab]").forEach((btn) => {
+      if (btn.dataset.kindTabBound === "1") return;
+      btn.dataset.kindTabBound = "1";
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const kind = btn.dataset.kindTab;
+        if (!kind) return;
+        tabsNav.querySelectorAll("[data-kind-tab]").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+        });
+        group.querySelectorAll("[data-kind-panel]").forEach((panel) => {
+          const active = panel.dataset.kindPanel === kind;
+          panel.hidden = !active;
+          panel.classList.toggle("active", active);
+        });
+      });
+    });
+  });
+}
+
 function initClientSearch() {
   const input = document.getElementById("objects-search");
   if (!input) return;
@@ -340,14 +365,16 @@ document.addEventListener("DOMContentLoaded", () => {
   scrollToObjectDeepLinkOnce();
   initTimeDashboard();
   initCategoryDashboards();
+  initKindTabs();
   scrollToHighlightedCategory();
 });
 
-document.body.addEventListener("htmx:afterSwap", () => {
+document.body.addEventListener("htmx:afterSwap", (e) => {
   applyCollapsedState();
   applyObjectDeepLinkFromUrl();
   applyTimeDashboardState();
   applyCategoryDashboardState();
+  initKindTabs(e.detail?.target);
   scrollToHighlightedCategory();
 });
 
@@ -382,13 +409,15 @@ function logHtmxClient(eventName, detail) {
 
 document.body.addEventListener("htmx:sendError", (e) => {
   logHtmxClient("htmx_send_error", e.detail);
-  if (e.detail?.requestConfig?.path === "/objects/sync-cmdb") {
+  const cmdbPath = e.detail?.requestConfig?.path;
+  if (cmdbPath === "/sources/sync-cmdb" || cmdbPath === "/objects/sync-cmdb") {
     showToast("error", "Нет связи с сервером при обновлении из CMDB.");
   }
 });
 document.body.addEventListener("htmx:responseError", (e) => {
   logHtmxClient("htmx_response_error", e.detail);
-  if (e.detail?.requestConfig?.path === "/objects/sync-cmdb") {
+  const cmdbPath = e.detail?.requestConfig?.path;
+  if (cmdbPath === "/sources/sync-cmdb" || cmdbPath === "/objects/sync-cmdb") {
     showToast("error", "Не удалось обновить список из CMDB. Проверьте cmdb.xlsx и логи.");
   }
 });

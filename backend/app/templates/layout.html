@@ -2,16 +2,25 @@
 {% block body %}
 <div class="app-shell">
   <aside id="sidebar" class="sidebar">
-    <div class="sidebar-brand">Wisenet Диагностика</div>
+    <div class="sidebar-brand">Дашборд руководителя ТСО</div>
     <nav class="sidebar-nav" aria-label="Основная навигация">
       <div class="sidebar-nav-group">
-        <span class="sidebar-nav-label">Инвентарь</span>
-        <a href="/objects" class="{% if active_nav == 'objects' %}active{% endif %}">Объекты</a>
+        <a href="/summary" class="{% if active_nav == 'summary' %}active{% endif %}">Сводка</a>
+        <a href="/monitoring" class="{% if active_nav == 'monitoring' %}active{% endif %}">Мониторинг</a>
       </div>
-      <div class="sidebar-nav-group sidebar-nav-group--monitoring {% if active_nav in ('status', 'channels', 'history') %}is-open{% endif %}">
-        <span class="sidebar-nav-label">Мониторинг</span>
-        <a href="/status" class="{% if active_nav == 'status' %}active{% endif %}">Сводка</a>
-        <a href="/channels" class="{% if active_nav == 'channels' %}active{% endif %}">Каналы</a>
+      <div class="sidebar-nav-group">
+        <span class="sidebar-nav-label">Аналитика</span>
+        <a href="/budget" class="{% if active_nav == 'budget' %}active{% endif %}">Бюджет</a>
+        <a href="/arsenal" class="{% if active_nav == 'arsenal' %}active{% endif %}">Арсенал</a>
+        <a href="/smartview" class="{% if active_nav == 'smartview' %}active{% endif %}">Smartview</a>
+      </div>
+      <div class="sidebar-nav-group">
+        <span class="sidebar-nav-label">Данные</span>
+        <a href="/sources" class="{% if active_nav == 'sources' %}active{% endif %}">Исходные данные</a>
+      </div>
+      <div class="sidebar-nav-group sidebar-nav-group--monitoring {% if active_nav in ('channels', 'history') %}is-open{% endif %}">
+        <span class="sidebar-nav-label">Детализация</span>
+        <a href="/channels" class="{% if active_nav == 'channels' %}active{% endif %}">Каналы ТСВ</a>
         <a href="/history" class="{% if active_nav == 'history' %}active{% endif %}">История</a>
       </div>
       <div class="sidebar-nav-group sidebar-nav-group--bottom">

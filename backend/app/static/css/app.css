@@ -1668,6 +1668,172 @@ tr.recorder-row--excluded {
   }
 }
 
+.kind-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.kind-tab {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.kind-tab:hover {
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.kind-tab.active {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.kind-panel-empty {
+  padding: 16px 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0;
+}
+
+.kind-fleet-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.kind-fleet-count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kind-fleet-count-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.kind-fleet-count-value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.summary-objects-section {
+  margin-top: 24px;
+}
+
+.summary-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.summary-objects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.summary-object-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+}
+
+.summary-object-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.summary-object-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.summary-object-card-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.summary-kind-chip {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.summary-object-card-problems {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--status-error);
+}
+
+.placeholder-section {
+  padding: 32px;
+  text-align: center;
+}
+
+.placeholder-section-title {
+  margin: 0 0 8px;
+}
+
+.placeholder-section-text {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.page-lead {
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+.card-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.source-cmdb-path {
+  margin: 0 0 8px;
+}
+
+.source-cmdb-last {
+  margin: 0 0 16px;
+}
+
+.mono {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 13px;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.kind-meta-chip {
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

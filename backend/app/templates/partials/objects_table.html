@@ -1,10 +1,10 @@
 {% if not recorders %}
 <div class="empty-state">
-  <h2>Нет регистраторов</h2>
-  <p>Добавьте регистратор кнопкой «+ Добавить регистратор».</p>
+  <h2>Нет устройств</h2>
+  <p>Загрузите инвентарь ТСВ из CMDB в разделе <a href="/sources">Исходные данные</a> или добавьте устройство вручную.</p>
   <button type="button" class="btn btn-primary" style="margin-top:16px;"
     hx-get="/recorders/new" hx-target="#drawer-root" hx-swap="innerHTML"
-  >+ Добавить</button>
+  >+ Добавить ТСВ</button>
 </div>
 {% else %}
 <div class="table-wrap card">
@@ -12,7 +12,8 @@
     <thead>
       <tr>
         <th>Объект</th>
-        <th>Имя NVR</th>
+        <th>Вид системы</th>
+        <th>Имя</th>
         <th>Host</th>
         <th>Порт</th>
         <th>Статус</th>

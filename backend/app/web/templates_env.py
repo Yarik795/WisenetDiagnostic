@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from ..config_store import ConfigStore
+from ..device_kinds import ALL_DEVICE_KINDS, SYSTEM_KIND_LABELS, kind_label, source_label
 from ..exclusions import excluded_ids_set
 from ..ui.grouping import (
     STATUS_LABELS,
@@ -107,3 +108,7 @@ def _is_recorder_excluded(recorder_id: str) -> bool:
 
 
 templates.env.globals["is_recorder_excluded"] = _is_recorder_excluded
+templates.env.globals["device_kinds"] = ALL_DEVICE_KINDS
+templates.env.globals["kind_labels"] = SYSTEM_KIND_LABELS
+templates.env.globals["kind_label"] = kind_label
+templates.env.globals["source_label"] = source_label

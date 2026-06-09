@@ -9,7 +9,7 @@
       <thead>
         <tr>
           <th scope="col">Объект</th>
-          <th scope="col" class="matrix-col-narrow" title="Состояние NVR">NVR</th>
+          <th scope="col" class="matrix-col-narrow" title="Состояние ТСВ">ТСВ</th>
           <th scope="col" class="matrix-col-narrow" title="Время / NTP">NTP</th>
           <th scope="col" class="matrix-col-narrow" title="Накопители">HDD</th>
           <th scope="col" class="matrix-col-narrow" title="Температура HDD">TEMP</th>
@@ -22,11 +22,11 @@
         {% for row in object_matrix_rows %}
         <tr class="object-matrix-row object-matrix-row--{{ row.aggregate_status }}">
           <th scope="row" class="object-matrix-object">
-            <a href="/objects?object={{ row.object_name|urlencode }}">{{ row.object_name }}</a>
+            <a href="/monitoring?object={{ row.object_name|urlencode }}">{{ row.object_name }}</a>
             {% if row.problem_nvr_count > 0 %}
             <span class="object-matrix-problems">{{ row.problem_nvr_count }}/{{ row.nvr_count }}</span>
             {% else %}
-            <span class="object-matrix-problems object-matrix-problems--ok">{{ row.nvr_count }} NVR</span>
+            <span class="object-matrix-problems object-matrix-problems--ok">{{ row.nvr_count }} ТСВ</span>
             {% endif %}
           </th>
           {% for cell in row.cells %}

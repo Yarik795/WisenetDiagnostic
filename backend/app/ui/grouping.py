@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
+from ..device_kinds import ALL_DEVICE_KINDS, DeviceKind, recorder_device_kind
 from ..health import HEALTH_SEVERITY, HealthStatus, worst_status
 from ..models import Recorder
 from ..state_store import RecorderMetricsRow
@@ -27,6 +28,16 @@ class ObjectGroup:
     object_name: str
     recorders: list[Recorder]
     aggregate_status: str
+    devices_by_kind: dict[str, list[Recorder]] = field(default_factory=dict)
+    total_device_count: int = 0
+
+
+def build_devices_by_kind(recorders: list[Recorder]) -> dict[str, list[Recorder]]:
+    by_kind: dict[str, list[Recorder]] = {kind: [] for kind in ALL_DEVICE_KINDS}
+    for rec in recorders:
+        kind: DeviceKind = recorder_device_kind(rec)
+        by_kind[kind].append(rec)
+    return by_kind
 
 
 def effective_status(
@@ -106,16 +117,20 @@ def group_by_object(
     for r in filtered:
         groups_map.setdefault(r.object_name, []).append(r)
 
-    groups = [
-        ObjectGroup(
-            object_name=name,
-            recorders=recs,
-            aggregate_status=aggregate_status(
-                recs, metrics_map, excluded_ids=excluded
-            ),
+    groups = []
+    for name, recs in groups_map.items():
+        by_kind = build_devices_by_kind(recs)
+        groups.append(
+            ObjectGroup(
+                object_name=name,
+                recorders=recs,
+                aggregate_status=aggregate_status(
+                    recs, metrics_map, excluded_ids=excluded
+                ),
+                devices_by_kind=by_kind,
+                total_device_count=len(recs),
+            )
         )
-        for name, recs in groups_map.items()
-    ]
 
     if sort == "name":
         groups.sort(key=lambda g: g.object_name.lower())

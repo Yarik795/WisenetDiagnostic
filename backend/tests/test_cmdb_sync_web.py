@@ -85,11 +85,11 @@ def client(tmp_path: Path) -> TestClient:
     app.dependency_overrides.clear()
 
 
-def test_objects_page_has_cmdb_sync_button(client: TestClient) -> None:
-    r = client.get("/objects")
+def test_sources_page_has_cmdb_sync_button(client: TestClient) -> None:
+    r = client.get("/sources")
     assert r.status_code == 200
     assert "Обновить из CMDB" in r.text
-    assert 'hx-post="/objects/sync-cmdb"' in r.text
+    assert 'hx-post="/sources/sync-cmdb"' in r.text
     assert 'hx-target="body"' in r.text
     assert 'hx-swap="none"' in r.text
 
@@ -165,9 +165,13 @@ def test_sync_cmdb_success(
     assert "toast=success" in r.headers["hx-redirect"]
     assert "showToast" in r.headers.get("hx-trigger", "")
 
-    page = client.get("/objects")
+    page = client.get("/monitoring", follow_redirects=True)
     assert "10.88.1.1" in page.text
     assert "Объект А" in page.text
+
+    sources = client.get("/sources")
+    assert "CMDB" in sources.text
+    assert "cmdb.xlsx" in sources.text
 
 
 def test_sync_from_cmdb_replaces_recorders(

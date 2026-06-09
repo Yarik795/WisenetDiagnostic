@@ -37,9 +37,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Wisenet Диагностика",
-    version="0.3.0",
-    description="Этап 1: мониторинг регистраторов и каналов (SUNAPI)",
+    title="Дашборд руководителя ТСО",
+    version="0.4.0",
+    description="Сводный дашборд ТСО: мониторинг техники (ТСВ, СКУД, Биотерминалы, СОТС)",
     lifespan=lifespan,
 )
 

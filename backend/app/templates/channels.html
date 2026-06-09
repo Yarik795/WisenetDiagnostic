@@ -1,8 +1,8 @@
 {% extends "layout.html" %}
-{% block title %}Каналы — Wisenet Диагностика{% endblock %}
-{% block page_title %}Каналы{% endblock %}
+{% block title %}Каналы ТСВ — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Каналы ТСВ{% endblock %}
 {% block page_actions %}
-<a href="/status?category=channels&problems_only=true" class="btn btn-outline">Сводка по каналам</a>
+<a href="/monitoring?tab=health&category=channels&problems_only=true" class="btn btn-outline">Сводка по каналам</a>
 {% include "partials/poll_page_actions.html" %}
 {% endblock %}
 {% block content %}

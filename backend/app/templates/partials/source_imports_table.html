@@ -1,0 +1,33 @@
+{% if source_imports %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Источник</th>
+        <th>Файл</th>
+        <th>Дата загрузки</th>
+        <th>Записей</th>
+        <th>Статус</th>
+        <th>Сообщение</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in source_imports %}
+      <tr>
+        <td>{{ source_label(row.source_key) }}</td>
+        <td class="mono">{{ row.filename or '—' }}</td>
+        <td>{{ format_datetime(row.imported_at) }}</td>
+        <td>{{ row.record_count }}</td>
+        <td>
+          {% set status = row.status %}
+          {% include "partials/status_badge.html" %}
+        </td>
+        <td class="text-secondary">{{ row.message or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-secondary">Загрузок пока нет.</p>
+{% endif %}

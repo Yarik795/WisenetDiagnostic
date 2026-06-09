@@ -1,7 +1,8 @@
 <tr id="recorder-row-{{ recorder.id }}" data-recorder-row class="{% if is_excluded %}recorder-row--excluded{% endif %}">
   <td>
-    <a href="/objects?object={{ recorder.object_name|urlencode }}">{{ recorder.object_name }}</a>
+    <a href="/monitoring?object={{ recorder.object_name|urlencode }}">{{ recorder.object_name }}</a>
   </td>
+  <td>{{ kind_labels.tsv }}</td>
   <td>{{ display_recorder_name(recorder) }}</td>
   <td class="recorder-row-host">{{ format_host_port(recorder.host, recorder.port, recorder.use_https) }}</td>
   <td>{{ recorder.port }}</td>

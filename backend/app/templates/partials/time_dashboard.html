@@ -17,7 +17,7 @@
       <button
         type="button"
         class="btn btn-outline btn-sm"
-        hx-get="{{ time_refresh_url|default('/objects/partials/time-dashboard') }}"
+        hx-get="{{ time_refresh_url|default('/monitoring/partials/time-dashboard') }}"
         hx-target="{{ time_hx_target|default('#time-dashboard') }}"
         hx-swap="outerHTML"
         hx-indicator="#time-dashboard-refresh-spinner"

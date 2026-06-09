@@ -176,7 +176,7 @@ def poll_web_client(tmp_path: Path) -> tuple:
 
 
 _POLL_REFRESH = {
-    "refresh_url": "/objects/partials/groups",
+    "refresh_url": "/monitoring/partials/groups",
     "refresh_target": "#object-groups",
 }
 
@@ -200,7 +200,7 @@ def test_poll_ui_idle_includes_watch_polling(poll_web_client: tuple) -> None:
 
 def test_objects_page_idle_includes_watch_polling(poll_web_client: tuple) -> None:
     client, _, _ = poll_web_client
-    r = client.get("/objects")
+    r = client.get("/monitoring")
     assert r.status_code == 200
     snippet = _poll_page_actions_snippet(r.text)
     assert 'hx-get="/monitoring/poll-ui' in snippet
@@ -370,7 +370,7 @@ def test_poll_all_endpoint_returns_progress_panel(poll_web_client: tuple) -> Non
     r = client.post(
         "/monitoring/poll-all",
         data={
-            "refresh_url": "/objects/partials/health-dashboard",
+            "refresh_url": "/monitoring/partials/health-dashboard",
             "refresh_target": "#health-dashboard-stack",
         },
     )

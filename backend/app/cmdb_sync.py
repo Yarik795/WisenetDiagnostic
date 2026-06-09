@@ -139,6 +139,13 @@ def sync_from_cmdb(
     if state is not None:
         for recorder_id in removed_ids:
             state.delete_recorder_data(recorder_id)
+        state.record_source_import(
+            "cmdb",
+            filename=path.name,
+            record_count=len(merged),
+            status="ok",
+            message=_success_message(stats, len(merged)),
+        )
 
     return CmdbSyncResult(
         ok=True,

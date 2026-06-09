@@ -84,7 +84,7 @@
       <ol class="top-problem-objects">
         {% for item in top_problem_objects %}
         <li class="top-problem-object top-problem-object--{{ item.worst_status }}">
-          <a href="/objects?object={{ item.object_name|urlencode }}">{{ item.object_name }}</a>
+          <a href="/monitoring?object={{ item.object_name|urlencode }}">{{ item.object_name }}</a>
           <span class="top-problem-object-meta">
             <span class="status-dot {{ item.worst_status }}" aria-hidden="true"></span>
             {{ item.problem_nvr_count }} из {{ item.nvr_count }} NVR
