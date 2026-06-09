@@ -131,24 +131,50 @@ function findObjectGroup(name) {
   return null;
 }
 
-function highlightObjectFromUrl() {
+let objectDeepLinkScrolledKey = null;
+
+function getObjectDeepLinkKey() {
   const params = new URLSearchParams(window.location.search);
   const obj = params.get("object");
-  if (obj) {
-    const collapsed = loadCollapsed();
-    collapsed.delete(obj);
-    saveCollapsed(collapsed);
-    const group = findObjectGroup(obj);
-    if (group) {
-      group.classList.remove("collapsed");
-      group.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+  const hash = window.location.hash;
+  if (!obj && !(hash && hash.startsWith("#recorder-row-"))) {
+    return null;
   }
+  return `${obj || ""}|${hash}`;
+}
+
+function applyObjectDeepLinkFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const obj = params.get("object");
+  if (!obj) return;
+  const collapsed = loadCollapsed();
+  collapsed.delete(obj);
+  saveCollapsed(collapsed);
+  const group = findObjectGroup(obj);
+  if (group) {
+    group.classList.remove("collapsed");
+  }
+}
+
+function scrollToObjectDeepLinkOnce() {
+  const key = getObjectDeepLinkKey();
+  if (!key || key === objectDeepLinkScrolledKey) return;
+  objectDeepLinkScrolledKey = key;
+
   const hash = window.location.hash;
   if (hash && hash.startsWith("#recorder-row-")) {
     const row = document.querySelector(hash);
     if (row) {
       row.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+  }
+
+  const obj = new URLSearchParams(window.location.search).get("object");
+  if (obj) {
+    const group = findObjectGroup(obj);
+    if (group) {
+      group.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
 }
@@ -310,7 +336,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initGroupToggles();
   initMobileSidebar();
   initClientSearch();
-  highlightObjectFromUrl();
+  applyObjectDeepLinkFromUrl();
+  scrollToObjectDeepLinkOnce();
   initTimeDashboard();
   initCategoryDashboards();
   scrollToHighlightedCategory();
@@ -318,7 +345,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.body.addEventListener("htmx:afterSwap", () => {
   applyCollapsedState();
-  highlightObjectFromUrl();
+  applyObjectDeepLinkFromUrl();
   applyTimeDashboardState();
   applyCategoryDashboardState();
   scrollToHighlightedCategory();
