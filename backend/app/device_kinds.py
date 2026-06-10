@@ -35,3 +35,12 @@ CMDB_MANAGED_KINDS: tuple[DeviceKind, ...] = ("tsv", "skud", "bio")
 def recorder_device_kind(recorder: object) -> DeviceKind:
     kind = getattr(recorder, "device_kind", None)
     return kind if kind in ALL_DEVICE_KINDS else "tsv"
+
+
+def filter_recorders_by_kind(
+    recorders: list[object],
+    kind: DeviceKind | None,
+) -> list[object]:
+    if kind is None:
+        return list(recorders)
+    return [r for r in recorders if recorder_device_kind(r) == kind]

@@ -80,6 +80,10 @@ class PollJob:
     retry_delay_seconds: int = 5
     responded_after_retry: int = 0
     still_unreachable: int = 0
+    ping_total: int = 0
+    ping_done: int = 0
+    ping_success: int = 0
+    ping_failed: int = 0
 
     @property
     def percent(self) -> int:
@@ -101,9 +105,10 @@ class PollJobTracker:
         self._mu = asyncio.Lock()
         self._running: dict[str, str] = {}
 
-    async def set_total(self, total: int) -> None:
+    async def set_total(self, total: int, *, ping_total: int = 0) -> None:
         async with self._mu:
             self.job.total = total
+            self.job.ping_total = ping_total
 
     async def set_retry_config(self, max_attempts: int, delay_seconds: int) -> None:
         async with self._mu:
@@ -148,6 +153,7 @@ class PollJobTracker:
         success: bool,
         after_retry: bool = False,
         error: Optional[str] = None,
+        is_ping_device: bool = False,
     ) -> None:
         name = display_recorder_name(recorder)
         async with self._mu:
@@ -161,6 +167,12 @@ class PollJobTracker:
             else:
                 self.job.failed += 1
                 self.job.still_unreachable += 1
+            if is_ping_device:
+                self.job.ping_done += 1
+                if success:
+                    self.job.ping_success += 1
+                else:
+                    self.job.ping_failed += 1
             result = RecorderPollResult(
                 recorder_id=recorder.id,
                 display_name=name,

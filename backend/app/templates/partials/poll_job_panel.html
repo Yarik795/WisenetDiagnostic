@@ -61,7 +61,7 @@
         Повтор {{ job.retry_round }}/{{ job.max_attempts }} через {{ job.retry_delay_seconds }} с, ожидают {{ job.pending_retry_count }} NVR
       {% elif job.status.value == 'running' %}
         {% if job.total > 0 %}
-        ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}{% if job.pending_retry_count and job.phase == 'polling' %} · в очереди {{ job.pending_retry_count }}{% endif %}
+        ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}{% if job.pending_retry_count and job.phase == 'polling' %} · в очереди {{ job.pending_retry_count }}{% endif %}{% if job.ping_total > 0 %} · Ping {{ job.ping_done }}/{{ job.ping_total }}{% if job.ping_success or job.ping_failed %} (✓{{ job.ping_success }}{% if job.ping_failed %} · ✗{{ job.ping_failed }}{% endif %}){% endif %}{% endif %}
         {% else %}
         Нет включённых регистраторов
         {% endif %}

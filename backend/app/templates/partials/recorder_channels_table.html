@@ -1,0 +1,45 @@
+{% set channels = list_channels_for_recorder(recorder.id) %}
+{% if channels %}
+<div class="table-wrap" style="margin-top:12px;">
+  <table class="data-table data-table--compact">
+    <thead>
+      <tr>
+        <th>Канал</th>
+        <th>Имя</th>
+        <th>IP камеры</th>
+        <th>Модель</th>
+        <th>Состояние</th>
+        <th>Мбит/с</th>
+        <th>CPU %</th>
+        <th>Архив</th>
+        <th>Video loss</th>
+        <th>Статус</th>
+        <th>Причина</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ch in channels %}
+      <tr>
+        <td>{{ ch.channel_no }}</td>
+        <td>{{ ch.name or '—' }}</td>
+        <td class="recorder-row-host">{{ ch.camera_ip or '—' }}</td>
+        <td>{{ ch.camera_model or '—' }}</td>
+        <td>{{ ch.source_state or '—' }}</td>
+        <td class="recorder-row-host">{{ format_mbps(ch.data_rate) }}</td>
+        <td>{{ format_cpu_usage(ch.cpu_usage) }}</td>
+        <td class="recorder-row-host">{{ format_archive_days_value(ch.archive_days) }}</td>
+        <td>{{ format_bool_ru(ch.video_loss, 'Да', 'Нет') }}</td>
+        <td>
+          {% set status = ch.health_status %}
+          {% set error = ch.health_reason %}
+          {% include "partials/status_badge.html" %}
+        </td>
+        <td style="font-size:12px;color:var(--text-secondary);max-width:220px;">{{ ch.health_reason or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="metrics-detail-empty">Данные по каналам появятся после инвентаризации или полного опроса.</p>
+{% endif %}

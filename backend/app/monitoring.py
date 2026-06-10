@@ -750,8 +750,13 @@ async def run_poll_cycle(
     stats = PollCycleStats(total=len(recorders))
     max_attempts, retry_delay = _poll_retry_settings(config)
 
+    from .device_kinds import recorder_device_kind
+
+    ping_total = sum(
+        1 for rec in recorders if recorder_device_kind(rec) in ("skud", "bio")
+    )
     if tracker:
-        await tracker.set_total(len(recorders))
+        await tracker.set_total(len(recorders), ping_total=ping_total)
         await tracker.set_retry_config(max_attempts, retry_delay)
     if not recorders:
         return stats
@@ -835,6 +840,8 @@ async def run_poll_cycle(
                             rec,
                             success=True,
                             after_retry=attempt > 1,
+                            is_ping_device=recorder_device_kind(rec)
+                            in ("skud", "bio"),
                         )
                 elif attempt >= max_attempts:
                     update = apply_poll_result(
@@ -855,6 +862,8 @@ async def run_poll_cycle(
                             success=False,
                             after_retry=False,
                             error=wave.error,
+                            is_ping_device=recorder_device_kind(rec)
+                            in ("skud", "bio"),
                         )
                 else:
                     still_pending.append(rec)

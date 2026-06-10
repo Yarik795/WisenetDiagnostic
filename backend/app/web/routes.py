@@ -40,6 +40,8 @@ from ..ui.health_classifiers import CATEGORY_LABELS, HealthCategory
 from ..ui.error_report import build_error_report_context
 from ..ui.error_report_render import render_error_report_html
 from ..ui.health_dashboard import health_dashboard_context
+from ..device_kinds import filter_recorders_by_kind
+from ..ui.kind_dashboard import kind_section_page_context
 from ..ui.summary_dashboard import summary_page_context
 from ..ui.source_imports import sources_page_context
 from ..ui.time_dashboard import time_dashboard_context
@@ -90,16 +92,25 @@ def _metrics_map(state: StateStore):
     return metrics_map_from_list(state.list_recorder_metrics())
 
 
-def _inventory_kpi_ctx(store: ConfigStore, state: StateStore) -> dict:
+def _inventory_kpi_ctx(
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    kind: str | None = "tsv",
+) -> dict:
     from ..ui.health_dashboard import fleet_overview_context
 
     config = store.load()
-    recorders = store.list_recorders()
+    recorders = filter_recorders_by_kind(store.list_recorders(), kind)  # type: ignore[arg-type]
     metrics = _metrics_map(state)
     settings = config.monitoring
     excluded = excluded_ids_set(config)
     ctx = fleet_overview_context(
-        recorders, metrics, settings, excluded_ids=excluded
+        recorders,
+        metrics,
+        settings,
+        excluded_ids=excluded,
+        include_kind_columns=False,
     )
     ctx["inventory_problem_nvr_count"] = ctx["fleet_problem_nvr_count"]
     ctx["inventory_enabled_count"] = ctx["fleet_enabled_count"]
@@ -168,7 +179,7 @@ def _health_dashboard_ctx(
     refresh_url: str = "/monitoring/partials/health-dashboard",
 ) -> dict:
     config = store.load()
-    recorders = store.list_recorders()
+    recorders = filter_recorders_by_kind(store.list_recorders(), "tsv")  # type: ignore[arg-type]
     metrics = _metrics_map(state)
     ctx = health_dashboard_context(
         recorders,
@@ -351,8 +362,6 @@ def _recorder_partial_template(referer: str) -> str:
         "/recorders" in parsed.path and "/monitoring" not in parsed.path
     ):
         return "partials/recorder_table_row.html"
-    if "/channels" in referer:
-        return "partials/recorder_metrics_panel.html"
     return "partials/recorder_row.html"
 
 
@@ -497,7 +506,7 @@ def _monitoring_page_ctx(
 ) -> dict:
     inventory_view = "table" if view.strip().lower() == "table" else "groups"
     monitoring_tab = "health" if tab.strip().lower() == "health" else "inventory"
-    recorders = store.list_recorders()
+    recorders = filter_recorders_by_kind(store.list_recorders(), "tsv")  # type: ignore[arg-type]
     metrics = _metrics_map(state)
     excluded = _excluded_ids(store)
     if inventory_view == "table":
@@ -520,7 +529,8 @@ def _monitoring_page_ctx(
         "metrics_map": metrics,
         "excluded_ids": excluded,
         "sort": sort,
-        **_inventory_kpi_ctx(store, state),
+        "visible_device_kinds": ("tsv",),
+        **_inventory_kpi_ctx(store, state, kind="tsv"),
     }
     if monitoring_tab == "health":
         category_filter: Optional[HealthCategory] = None
@@ -727,7 +737,7 @@ def monitoring_table_partial(
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     recorders = sorted(
-        store.list_recorders(),
+        filter_recorders_by_kind(store.list_recorders(), "tsv"),  # type: ignore[arg-type]
         key=lambda r: (r.object_name.lower(), r.host),
     )
     excluded = _excluded_ids(store)
@@ -755,7 +765,7 @@ def monitoring_groups_partial(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
-    recorders = store.list_recorders()
+    recorders = filter_recorders_by_kind(store.list_recorders(), "tsv")  # type: ignore[arg-type]
     metrics = _metrics_map(state)
     excluded = _excluded_ids(store)
     groups = group_by_object(
@@ -767,12 +777,136 @@ def monitoring_groups_partial(
         "metrics_map": metrics,
         "excluded_ids": excluded,
         "inventory_view": "groups",
-        **_inventory_kpi_ctx(store, state),
+        "visible_device_kinds": ("tsv",),
+        **_inventory_kpi_ctx(store, state, kind="tsv"),
     }
     return templates.TemplateResponse(
         request,
         "partials/objects_groups_refresh.html",
         ctx,
+    )
+
+
+def _kind_section_response(
+    request: Request,
+    kind: str,
+    *,
+    sort: SortMode = "status",
+    store: ConfigStore,
+    state: StateStore,
+    poll_jobs: PollJobManager,
+    scheduler: MonitoringScheduler,
+) -> HTMLResponse:
+    active_nav = kind
+    groups_partial_url = f"/{kind}/partials/groups"
+    ctx = kind_section_page_context(store, state, kind, sort=sort)  # type: ignore[arg-type]
+    ctx.update(
+        {
+            "active_nav": active_nav,
+            "groups_partial_url": groups_partial_url,
+            "toast": _toast_from_query(request),
+            **_poll_ui_ctx(
+                poll_jobs,
+                store,
+                scheduler,
+                refresh_url=f"/{kind}",
+                refresh_target=".page-content",
+                refresh_select=".page-content",
+            ),
+        }
+    )
+    return templates.TemplateResponse(request, "kind_section.html", ctx)
+
+
+@router.get("/skud", response_class=HTMLResponse)
+def skud_page(
+    request: Request,
+    sort: SortMode = "status",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    return _kind_section_response(
+        request,
+        "skud",
+        sort=sort,
+        store=store,
+        state=state,
+        poll_jobs=poll_jobs,
+        scheduler=scheduler,
+    )
+
+
+@router.get("/bio", response_class=HTMLResponse)
+def bio_page(
+    request: Request,
+    sort: SortMode = "status",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    return _kind_section_response(
+        request,
+        "bio",
+        sort=sort,
+        store=store,
+        state=state,
+        poll_jobs=poll_jobs,
+        scheduler=scheduler,
+    )
+
+
+def _kind_groups_partial(
+    request: Request,
+    kind: str,
+    *,
+    search: str = "",
+    sort: SortMode = "status",
+    store: ConfigStore,
+    state: StateStore,
+) -> HTMLResponse:
+    recorders = filter_recorders_by_kind(store.list_recorders(), kind)  # type: ignore[arg-type]
+    metrics = _metrics_map(state)
+    excluded = _excluded_ids(store)
+    groups = group_by_object(
+        recorders, search, sort, metrics, excluded_ids=excluded
+    )
+    return templates.TemplateResponse(
+        request,
+        "partials/kind_object_groups.html",
+        {
+            "groups": groups,
+            "metrics_map": metrics,
+            "excluded_ids": excluded,
+        },
+    )
+
+
+@router.get("/skud/partials/groups", response_class=HTMLResponse)
+def skud_groups_partial(
+    request: Request,
+    search: str = "",
+    sort: SortMode = "status",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _kind_groups_partial(
+        request, "skud", search=search, sort=sort, store=store, state=state
+    )
+
+
+@router.get("/bio/partials/groups", response_class=HTMLResponse)
+def bio_groups_partial(
+    request: Request,
+    search: str = "",
+    sort: SortMode = "status",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _kind_groups_partial(
+        request, "bio", search=search, sort=sort, store=store, state=state
     )
 
 
@@ -1561,73 +1695,6 @@ def _poll_job_panel_response(
     )
 
 
-@router.get("/channels", response_class=HTMLResponse)
-def channels_page(
-    request: Request,
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
-    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
-    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
-    health: str = "",
-    recorder_id: str = "",
-) -> HTMLResponse:
-    recorders = store.list_recorders()
-    metrics = _metrics_map(state)
-    channels = state.list_channels(
-        recorder_id=recorder_id or None,
-        health=health or None,
-    )
-    return templates.TemplateResponse(
-        request,
-        "channels.html",
-        {
-            "active_nav": "channels",
-            "channels": channels,
-            "recorders": recorders,
-            "recorders_by_id": _recorders_by_id(store),
-            "metrics_map": metrics,
-            "filter_health": health,
-            "filter_recorder": recorder_id,
-            "toast": _toast_from_query(request),
-            **_poll_ui_ctx(
-                poll_jobs,
-                store,
-                scheduler,
-                refresh_url="/channels",
-                refresh_target=".page-content",
-                refresh_select=".page-content",
-                inventory=True,
-            ),
-        },
-    )
-
-
-@router.get("/history", response_class=HTMLResponse)
-def history_page(
-    request: Request,
-    state: StateStore = Depends(get_state_store),
-    store: ConfigStore = Depends(get_store),
-    entity_type: str = "",
-    entity_id: str = "",
-) -> HTMLResponse:
-    history = state.list_history(
-        entity_type=entity_type or None,
-        entity_id=entity_id or None,
-        limit=300,
-    )
-    return templates.TemplateResponse(
-        request,
-        "history.html",
-        {
-            "active_nav": "history",
-            "history": history,
-            "recorders": store.list_recorders(),
-            "filter_entity_type": entity_type,
-            "filter_entity_id": entity_id,
-        },
-    )
-
-
 @router.get("/monitoring/poll-ui", response_class=HTMLResponse)
 def monitoring_poll_ui(
     request: Request,
@@ -1870,7 +1937,7 @@ async def monitoring_ntp_fix_all(
 @router.post("/monitoring/inventory-all", response_class=HTMLResponse)
 async def monitoring_inventory_all(
     request: Request,
-    refresh_url: str = Form(default="/channels"),
+    refresh_url: str = Form(default="/monitoring"),
     refresh_target: str = Form(default=".page-content"),
     refresh_select: str = Form(default=".page-content"),
     store: ConfigStore = Depends(get_store),
@@ -1907,6 +1974,4 @@ async def recorder_inventory(
         return HTMLResponse("Не найден", status_code=404)
     await poll_single_recorder(store, state, recorder, include_inventory=True)
     referer = request.headers.get("HX-Current-URL", "")
-    if "/channels" in referer:
-        return _redirect("/channels", "success", "Каналы обновлены", request=request)
     return _redirect("/monitoring", "success", "Каналы обновлены", request=request)

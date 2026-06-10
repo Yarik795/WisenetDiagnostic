@@ -22,23 +22,13 @@ def summary_page_context(store: ConfigStore, state: StateStore) -> dict:
     metrics = metrics_map_from_list(state.list_recorder_metrics())
     excluded = excluded_ids_set(config)
     settings = config.monitoring
-    groups = group_by_object(
-        recorders, "", "status", metrics, excluded_ids=excluded
+    return fleet_overview_context(
+        recorders,
+        metrics,
+        settings,
+        excluded_ids=excluded,
+        include_kind_columns=True,
     )
-    ctx = fleet_overview_context(
-        recorders, metrics, settings, excluded_ids=excluded
-    )
-    ctx.update(
-        {
-            "groups": groups,
-            "metrics_map": metrics,
-            "excluded_ids": excluded,
-            "device_kinds": ALL_DEVICE_KINDS,
-            "kind_labels": SYSTEM_KIND_LABELS,
-            "kind_counts_fleet": kind_counts_for_recorders(recorders),
-        }
-    )
-    return ctx
 
 
 def object_group_kind_counts(group: ObjectGroup) -> dict[str, int]:

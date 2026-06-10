@@ -65,6 +65,26 @@ def _success_message(stats: MergeStats, total: int, counts: dict[str, int]) -> s
     )
 
 
+def _no_change_message(total: int, counts: dict[str, int]) -> str:
+    return f"Изменений нет: {total} устройств ({_kind_breakdown(counts)})"
+
+
+def _recorders_snapshot(recorders: list) -> list[dict]:
+    return sorted(
+        (r.model_dump(mode="json") for r in recorders),
+        key=lambda item: item["id"],
+    )
+
+
+def _configs_equivalent(old_config: AppConfig, new_config: AppConfig) -> bool:
+    return (
+        _recorders_snapshot(old_config.recorders)
+        == _recorders_snapshot(new_config.recorders)
+        and old_config.exclusions.model_dump(mode="json")
+        == new_config.exclusions.model_dump(mode="json")
+    )
+
+
 def sync_from_cmdb(
     store: ConfigStore,
     cmdb_path: Path | None = None,
@@ -139,6 +159,28 @@ def sync_from_cmdb(
         return CmdbSyncResult(
             ok=False,
             message=f"Ошибка валидации итогового config: {e}",
+        )
+
+    if _configs_equivalent(old_config, new_config):
+        message = _no_change_message(len(merged), parsed.counts_by_kind)
+        if state is not None:
+            state.record_source_import(
+                "cmdb",
+                filename=path.name,
+                record_count=len(merged),
+                status="ok",
+                message=message,
+            )
+        return CmdbSyncResult(
+            ok=True,
+            message=message,
+            stats=stats,
+            total_recorders=len(merged),
+            cmdb_row_count=len(parsed.rows),
+            skipped_empty_ip=parsed.skipped_empty_ip,
+            skipped_unclassified=parsed.skipped_unclassified,
+            total_data_rows=parsed.total_data_rows,
+            counts_by_kind=dict(parsed.counts_by_kind),
         )
 
     old_ids = {r.id for r in old_config.recorders}

@@ -9,13 +9,10 @@
       <thead>
         <tr>
           <th scope="col">Объект</th>
-          <th scope="col" class="matrix-col-narrow" title="Состояние ТСВ">ТСВ</th>
-          <th scope="col" class="matrix-col-narrow" title="Время / NTP">NTP</th>
-          <th scope="col" class="matrix-col-narrow" title="Накопители">HDD</th>
-          <th scope="col" class="matrix-col-narrow" title="Температура HDD">TEMP</th>
-          <th scope="col" class="matrix-col-narrow" title="Вентиляторы">FAN</th>
-          <th scope="col" class="matrix-col-narrow" title="Каналы">CH</th>
-          <th scope="col" class="matrix-col-narrow" title="Глубина архива">ARCH</th>
+          {% set col_keys = object_matrix_column_keys if object_matrix_column_keys is defined else ['nvr', 'time', 'storage', 'temperature', 'fans', 'channels', 'archive'] %}
+          {% for col_key in col_keys %}
+          <th scope="col" class="matrix-col-narrow" title="{{ object_matrix_headers[col_key] }}">{{ object_matrix_headers[col_key] }}</th>
+          {% endfor %}
         </tr>
       </thead>
       <tbody>
@@ -36,7 +33,7 @@
               title="{{ cell.title }}"
               aria-label="{{ object_matrix_headers[cell.column] }}: {{ status_label(cell.status) }}{% if cell.problem_count > 0 %}, {{ cell.problem_count }}{% endif %}"
             >
-              {% if cell.problem_count > 0 %}{{ cell.problem_count }}{% else %}<span class="matrix-cell-ok" aria-hidden="true">✓</span>{% endif %}
+              {% if cell.status == 'na' %}—{% elif cell.problem_count > 0 %}{{ cell.problem_count }}{% else %}<span class="matrix-cell-ok" aria-hidden="true">✓</span>{% endif %}
             </span>
           </td>
           {% endfor %}

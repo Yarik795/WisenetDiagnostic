@@ -1,12 +1,12 @@
 <nav class="kind-tabs" data-kind-tabs aria-label="Вид системы для {{ group.object_name }}">
-  {% for kind in device_kinds %}
+  {% for kind in visible_device_kinds|default(device_kinds) %}
   {% set kcnt = group.devices_by_kind[kind]|length if group.devices_by_kind is defined else (group.recorders|length if kind == 'tsv' else 0) %}
   <button type="button" class="kind-tab{% if loop.first %} active{% endif %}" data-kind-tab="{{ kind }}">
     {{ kind_labels[kind] }} ({{ kcnt }})
   </button>
   {% endfor %}
 </nav>
-{% for kind in device_kinds %}
+{% for kind in visible_device_kinds|default(device_kinds) %}
 {% set devices = group.devices_by_kind[kind] if group.devices_by_kind is defined else (group.recorders if kind == 'tsv' else []) %}
 <div class="kind-panel{% if loop.first %} active{% endif %}" data-kind-panel="{{ kind }}" {% if not loop.first %}hidden{% endif %}>
   {% if devices %}

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Optional
 
+from ..device_kinds import DeviceKind, recorder_device_kind
 from ..display_time import format_for_display
 from ..models import MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
@@ -430,7 +431,21 @@ _MATRIX_HEADERS: dict[str, str] = {
     "fans": "FAN",
     "channels": "CH",
     "archive": "ARCH",
+    "skud": "СКУД",
+    "bio": "Биотерминалы",
 }
+
+_MATRIX_KIND_COLUMNS: list[tuple[str, DeviceKind]] = [
+    ("skud", "skud"),
+    ("bio", "bio"),
+]
+
+
+def matrix_column_keys(*, include_kind_columns: bool = False) -> list[str]:
+    keys = [col for col, _ in _MATRIX_COLUMNS]
+    if include_kind_columns:
+        keys.extend(col for col, _ in _MATRIX_KIND_COLUMNS)
+    return keys
 
 
 def _status_rank(status: str) -> int:
@@ -664,12 +679,63 @@ def _cell_for_column(
     )
 
 
+def _cell_for_ping_kind(
+    column: str,
+    kind: DeviceKind,
+    recs: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    *,
+    excluded_ids: set[str] | None = None,
+) -> ObjectMatrixCell:
+    excluded = _excluded_set(excluded_ids)
+    kind_recs = [r for r in recs if recorder_device_kind(r) == kind]
+    if not kind_recs:
+        return ObjectMatrixCell(
+            column=column,
+            status="na",
+            problem_count=0,
+            title="Нет устройств на объекте",
+        )
+    monitored = [r for r in kind_recs if r.id not in excluded]
+    if not monitored:
+        return ObjectMatrixCell(
+            column=column,
+            status="excluded",
+            problem_count=0,
+            title="Все устройства исключены из мониторинга",
+        )
+    statuses = [
+        effective_status(r, metrics_map.get(r.id), excluded_ids=excluded)
+        for r in monitored
+    ]
+    worst = max(statuses, key=_status_rank) if statuses else "unknown"
+    problems = sum(
+        1
+        for status in statuses
+        if status in ("warn", "error", "offline", "unknown")
+    )
+    label = _MATRIX_HEADERS.get(column, column)
+    if problems:
+        title = f"{label}: {problems} из {len(monitored)} недоступны или с отклонением"
+    elif worst == "unknown":
+        title = f"{label}: нет данных опроса"
+    else:
+        title = f"{label}: в норме"
+    return ObjectMatrixCell(
+        column=column,
+        status=worst,
+        problem_count=problems,
+        title=title,
+    )
+
+
 def build_object_health_matrix(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     settings: MonitoringSettings,
     *,
     excluded_ids: set[str] | None = None,
+    include_kind_columns: bool = False,
 ) -> list[ObjectMatrixRow]:
     excluded = _excluded_set(excluded_ids)
     by_object: dict[str, list[Recorder]] = {}
@@ -678,26 +744,36 @@ def build_object_health_matrix(
 
     rows: list[ObjectMatrixRow] = []
     for name, recs in by_object.items():
-        monitored = [r for r in recs if r.id not in excluded]
+        tsv_recs = [r for r in recs if recorder_device_kind(r) == "tsv"]
+        standard_recs = tsv_recs if include_kind_columns else recs
+        monitored_tsv = [r for r in tsv_recs if r.id not in excluded]
         problem_nvr = sum(
             1
-            for r in monitored
+            for r in monitored_tsv
             if recorder_has_health_problems(
                 r, metrics_map.get(r.id), settings, excluded_ids=excluded
             )
         )
         cells = [
             _cell_for_column(
-                col, cat, recs, metrics_map, settings, excluded_ids=excluded
+                col, cat, standard_recs, metrics_map, settings, excluded_ids=excluded
             )
             for col, cat in _MATRIX_COLUMNS
         ]
+        if include_kind_columns:
+            cells.extend(
+                _cell_for_ping_kind(
+                    col, kind, recs, metrics_map, excluded_ids=excluded
+                )
+                for col, kind in _MATRIX_KIND_COLUMNS
+            )
+        status_recs = recs if include_kind_columns else tsv_recs
         rows.append(
             ObjectMatrixRow(
                 object_name=name,
-                nvr_count=len(recs),
+                nvr_count=len(tsv_recs),
                 problem_nvr_count=problem_nvr,
-                aggregate_status=aggregate_status(recs, metrics_map),
+                aggregate_status=aggregate_status(status_recs, metrics_map),
                 cells=cells,
             )
         )
@@ -738,6 +814,8 @@ def fleet_overview_context(
     settings: MonitoringSettings,
     *,
     excluded_ids: set[str] | None = None,
+    include_kind_columns: bool = False,
+    fleet_count_label: str = "NVR всего",
 ) -> dict:
     excluded = _excluded_set(excluded_ids)
     object_names = {r.object_name for r in recorders}
@@ -790,9 +868,17 @@ def fleet_overview_context(
         "fleet_unknown_count": status_counts.unknown,
         "health_category_options": list(CATEGORY_LABELS.items()),
         "object_matrix_rows": build_object_health_matrix(
-            recorders, metrics_map, settings, excluded_ids=excluded
+            recorders,
+            metrics_map,
+            settings,
+            excluded_ids=excluded,
+            include_kind_columns=include_kind_columns,
         ),
         "object_matrix_headers": _MATRIX_HEADERS,
+        "object_matrix_column_keys": matrix_column_keys(
+            include_kind_columns=include_kind_columns
+        ),
+        "fleet_count_label": fleet_count_label,
         "top_problem_objects": build_top_problem_objects(
             recorders, metrics_map, settings, excluded_ids=excluded
         ),

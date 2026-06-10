@@ -58,6 +58,19 @@ def test_summary_page_renders(client: TestClient) -> None:
     r = client.get("/summary")
     assert r.status_code == 200
     assert "Дашборд руководителя ТСО" in r.text or "Сводка" in r.text
+    assert "Биотерминалы" in r.text
+
+
+def test_kind_section_pages(client: TestClient) -> None:
+    for path, label in (("/skud", "СКУД"), ("/bio", "Биотерминалы")):
+        r = client.get(path)
+        assert r.status_code == 200
+        assert label in r.text
+
+
+def test_removed_detail_routes_return_404(client: TestClient) -> None:
+    assert client.get("/channels").status_code == 404
+    assert client.get("/history").status_code == 404
 
 
 def test_placeholder_sections(client: TestClient) -> None:

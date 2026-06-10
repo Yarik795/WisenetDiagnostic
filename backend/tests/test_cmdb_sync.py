@@ -424,3 +424,36 @@ def test_sync_preserves_exclusions(tmp_path: Path) -> None:
     assert result.ok
     config = store.load()
     assert "nvr-keep" in config.exclusions.recorder_ids
+
+
+def test_sync_skips_write_when_no_changes(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from app.cmdb_sync import sync_from_cmdb
+    from app.config_store import ConfigStore
+    from app.models import AppConfig
+    from cmdb_reader import CmdbParseResult
+
+    config_path = tmp_path / "config.json"
+    store = ConfigStore(path=config_path)
+    recorder = Recorder(id="nvr-keep", object_name="Obj", host="10.1.1.1", name="NVR")
+    store.save(AppConfig(recorders=[recorder]))
+    mtime_before = config_path.stat().st_mtime
+
+    xlsx = tmp_path / "cmdb.xlsx"
+    xlsx.write_bytes(b"")
+    parsed = CmdbParseResult(
+        rows=[_cmdb_row("10.1.1.1", "Obj", name="NVR", source_row=5)],
+        skipped_empty_ip=0,
+        skipped_unclassified=0,
+        total_data_rows=1,
+        counts_by_kind={"tsv": 1, "skud": 0, "bio": 0},
+    )
+
+    with patch("app.cmdb_sync.read_cmdb_xlsx", return_value=parsed):
+        result = sync_from_cmdb(store, cmdb_path=xlsx)
+
+    assert result.ok
+    assert "Изменений нет" in result.message
+    assert config_path.stat().st_mtime == mtime_before
+    assert list(tmp_path.glob("config.json.bak.*")) == []

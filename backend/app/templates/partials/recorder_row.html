@@ -44,7 +44,6 @@
           <summary class="btn btn-ghost" style="min-width:40px;padding:0;" aria-label="Действия">⋯</summary>
           <div class="menu-panel">
             {% if recorder.device_kind == 'tsv' %}
-            <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="text-decoration:none;">Каналы</a>
             <button
               type="button"
               hx-post="/recorders/{{ recorder.id }}/inventory"

@@ -112,3 +112,12 @@ templates.env.globals["device_kinds"] = ALL_DEVICE_KINDS
 templates.env.globals["kind_labels"] = SYSTEM_KIND_LABELS
 templates.env.globals["kind_label"] = kind_label
 templates.env.globals["source_label"] = source_label
+
+
+def list_channels_for_recorder(recorder_id: str):
+    from ..ui.dependencies import get_state_store
+
+    return get_state_store().list_channels(recorder_id=recorder_id)
+
+
+templates.env.globals["list_channels_for_recorder"] = list_channels_for_recorder

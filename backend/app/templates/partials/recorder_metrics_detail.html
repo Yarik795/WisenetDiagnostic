@@ -68,7 +68,6 @@
         <dt>Неисправно</dt><dd>{{ metrics.channels_error }}</dd>
         <dt>Неизвестно</dt><dd>{{ metrics.channels_unknown }}</dd>
       </dl>
-      <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="margin-top:8px;">Открыть каналы</a>
     </section>
     <section class="metrics-block">
       <h4>Нагрузка / потоки</h4>
@@ -134,6 +133,8 @@
     {% else %}
     <p class="metrics-detail-empty">Детали по слотам не получены (проверьте доступ к storageinfo).</p>
     {% endif %}
+    <h4 style="margin-top:16px;">Каналы</h4>
+    {% include "partials/recorder_channels_table.html" %}
   </section>
   {% endif %}
 </div>

@@ -399,3 +399,29 @@ async def test_manual_poll_empty_recorders(tmp_path: Path) -> None:
 
     assert job.status == PollJobStatus.COMPLETED
     assert "Нет включённых" in (job.message or "")
+
+
+@pytest.mark.asyncio
+async def test_poll_job_tracker_counts_ping_devices() -> None:
+    job = PollJob(
+        job_id="ping",
+        kind=PollJobKind.SHORT,
+        status=PollJobStatus.RUNNING,
+        include_inventory=False,
+        started_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+    )
+    tracker = PollJobTracker(job)
+    skud = Recorder(
+        id="skud-a",
+        object_name="Obj",
+        host="10.0.0.2",
+        device_kind="skud",
+    )
+
+    await tracker.set_total(2, ping_total=1)
+    await tracker.recorder_final_finished(skud, success=True, is_ping_device=True)
+
+    assert job.ping_total == 1
+    assert job.ping_done == 1
+    assert job.ping_success == 1
+    assert job.ping_failed == 0

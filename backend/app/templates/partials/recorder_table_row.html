@@ -41,9 +41,6 @@
         hx-target="#recorder-row-{{ recorder.id }}"
         hx-swap="outerHTML"
       >Проверить</button>
-      {% if recorder.device_kind == 'tsv' %}
-      <a href="/channels?recorder_id={{ recorder.id }}" class="btn btn-ghost" style="min-height:36px;text-decoration:none;">Каналы</a>
-      {% endif %}
       {% if is_excluded %}
       <button type="button" class="btn btn-ghost" style="min-height:36px;"
         hx-post="/recorders/{{ recorder.id }}/unexclude"

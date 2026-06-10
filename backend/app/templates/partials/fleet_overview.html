@@ -7,7 +7,7 @@
     </div>
     <div class="fleet-kpi">
       <span class="fleet-kpi-value">{{ fleet_nvr_count }}</span>
-      <span class="fleet-kpi-label">NVR всего</span>
+      <span class="fleet-kpi-label">{{ fleet_count_label|default('NVR всего') }}</span>
     </div>
     <div class="fleet-kpi">
       <span class="fleet-kpi-value">{{ fleet_enabled_count }}</span>

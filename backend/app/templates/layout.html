@@ -6,7 +6,9 @@
     <nav class="sidebar-nav" aria-label="Основная навигация">
       <div class="sidebar-nav-group">
         <a href="/summary" class="{% if active_nav == 'summary' %}active{% endif %}">Сводка</a>
-        <a href="/monitoring" class="{% if active_nav == 'monitoring' %}active{% endif %}">Мониторинг</a>
+        <a href="/monitoring" class="{% if active_nav == 'monitoring' %}active{% endif %}">ТСВ</a>
+        <a href="/skud" class="{% if active_nav == 'skud' %}active{% endif %}">СКУД</a>
+        <a href="/bio" class="{% if active_nav == 'bio' %}active{% endif %}">Биотерминалы</a>
       </div>
       <div class="sidebar-nav-group">
         <span class="sidebar-nav-label">Аналитика</span>
@@ -17,11 +19,6 @@
       <div class="sidebar-nav-group">
         <span class="sidebar-nav-label">Данные</span>
         <a href="/sources" class="{% if active_nav == 'sources' %}active{% endif %}">Исходные данные</a>
-      </div>
-      <div class="sidebar-nav-group sidebar-nav-group--monitoring {% if active_nav in ('channels', 'history') %}is-open{% endif %}">
-        <span class="sidebar-nav-label">Детализация</span>
-        <a href="/channels" class="{% if active_nav == 'channels' %}active{% endif %}">Каналы ТСВ</a>
-        <a href="/history" class="{% if active_nav == 'history' %}active{% endif %}">История</a>
       </div>
       <div class="sidebar-nav-group sidebar-nav-group--bottom">
         <a href="/settings" class="{% if active_nav == 'settings' %}active{% endif %}">Настройки</a>

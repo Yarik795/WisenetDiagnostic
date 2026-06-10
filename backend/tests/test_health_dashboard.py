@@ -142,3 +142,39 @@ def test_object_matrix_temperature_ok_when_one_nvr_has_no_hdd() -> None:
     temp_cell = next(c for c in rows[0].cells if c.column == "temperature")
     assert temp_cell.status == "ok"
     assert temp_cell.problem_count == 0
+
+
+def test_object_matrix_includes_kind_columns() -> None:
+    settings = MonitoringSettings()
+    tsv = _rec("tsv-1")
+    skud = SimpleNamespace(
+        id="skud-1",
+        object_name="MixedObj",
+        host="10.0.0.2",
+        name="SKUD",
+        device_kind="skud",
+        last_status=None,
+        last_check_at=None,
+        last_error=None,
+    )
+    tsv.object_name = "MixedObj"
+    metrics_map = {
+        "tsv-1": _metrics(),
+        "skud-1": SimpleNamespace(
+            last_polled_at=None,
+            health_status="error",
+            device_online=False,
+        ),
+    }
+    rows = build_object_health_matrix(
+        [tsv, skud],
+        metrics_map,
+        settings,
+        include_kind_columns=True,
+    )
+    assert len(rows) == 1
+    assert len(rows[0].cells) == 9
+    skud_cell = next(c for c in rows[0].cells if c.column == "skud")
+    assert skud_cell.problem_count >= 1
+    bio_cell = next(c for c in rows[0].cells if c.column == "bio")
+    assert bio_cell.status == "na"
