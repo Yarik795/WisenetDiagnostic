@@ -7,6 +7,7 @@ from app.state_store import RecorderMetricsRow
 from app.ui.helpers import device_web_interface_url, device_web_link_title
 from app.ui.error_report import (
     PING_CATEGORY_LABEL,
+    PING_OFFLINE_REASON,
     build_error_report_context,
     build_ping_problem_rows,
     format_problem_age_display,
@@ -168,14 +169,20 @@ def test_build_error_report_hrx_no_hdd() -> None:
 def test_build_error_report_includes_ping_devices() -> None:
     polled = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
     since = polled - timedelta(days=2)
-    skud = _rec(id="skud-1", device_kind="skud", name="СКУД-1", host="10.0.0.50")
+    skud = _rec(
+        id="skud-1",
+        device_kind="skud",
+        name="СКУД-1",
+        host="10.0.0.50",
+        mac="AA:BB:CC:DD:EE:FF",
+    )
     metrics = RecorderMetricsRow(
         recorder_id="skud-1",
         model=None,
         firmware_version=None,
         device_online=False,
         health_status="error",
-        health_reason="нет ответа ping",
+        health_reason="(100% потерь)",
         ntp_status=None,
         time_skew_seconds=None,
         storage_used_percent=None,
@@ -202,6 +209,7 @@ def test_build_error_report_includes_ping_devices() -> None:
     assert row.system_kind == "skud"
     assert row.system_label == "СКУД"
     assert row.category_label == PING_CATEGORY_LABEL
+    assert row.reason == PING_OFFLINE_REASON
     assert row.problem_age_days_display == "2 сут."
     assert len(ctx.sections) == 1
     assert ctx.sections[0].is_ping_system is True

@@ -206,7 +206,7 @@
             <td>
               {% if section.is_ping_system %}
               {{ row.recorder_display_name }}
-              <span class="host-hint">{{ row.recorder.host }}{% if row.recorder.port not in [80, 443] %}:{{ row.recorder.port }}{% endif %}</span>
+              <span class="host-hint">{{ row.recorder.host }}{% if row.recorder.mac %} · {{ row.recorder.mac }}{% endif %}</span>
               {% else %}
               <a
                 class="device-link"

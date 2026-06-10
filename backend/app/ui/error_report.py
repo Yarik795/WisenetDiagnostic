@@ -22,6 +22,7 @@ from .time_dashboard import TimeProblemRow
 DeviceAuthMode = Literal["", "userinfo"]
 
 PING_CATEGORY_LABEL = "Доступность (ping)"
+PING_OFFLINE_REASON = "отсутствует Ping"
 PING_DEVICE_KINDS: frozenset[DeviceKind] = frozenset({"skud", "bio"})
 NVR_DEVICE_KINDS: frozenset[DeviceKind] = frozenset({"tsv", "sots"})
 
@@ -344,7 +345,7 @@ def build_ping_problem_rows(
             continue
         if metrics.health_status != "error":
             continue
-        reason = metrics.health_reason or "нет ответа ping"
+        reason = PING_OFFLINE_REASON
         polled_at_display = format_for_display(metrics.last_polled_at, "%Y-%m-%d %H:%M")
         days_display, since_display, age_title = _recorder_problem_age_fields(
             rec.id, since_map, now=report_at
