@@ -150,6 +150,7 @@ def sync_from_cmdb(
             credentials=old_config.credentials,
             monitoring=old_config.monitoring,
             exclusions=old_config.exclusions,
+            email_report=old_config.email_report,
             recorders=merged,
         )
     )

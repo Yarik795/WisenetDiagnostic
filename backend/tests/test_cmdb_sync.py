@@ -426,6 +426,56 @@ def test_sync_preserves_exclusions(tmp_path: Path) -> None:
     assert "nvr-keep" in config.exclusions.recorder_ids
 
 
+def test_sync_preserves_email_report(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from app.cmdb_sync import sync_from_cmdb
+    from app.config_store import ConfigStore
+    from app.models import AppConfig, EmailReportSettings
+    from cmdb_reader import CmdbParseResult
+
+    store = ConfigStore(path=tmp_path / "config.json")
+    email_settings = EmailReportSettings(
+        enabled=True,
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        from_email="sender@example.com",
+        to_emails=["a@example.com", "b@example.com"],
+        subject="Custom subject",
+        send_time="14:45",
+    )
+    store.save(
+        AppConfig(
+            recorders=[
+                Recorder(
+                    id="nvr-keep",
+                    object_name="Old",
+                    host="10.1.1.1",
+                    port=80,
+                )
+            ],
+            email_report=email_settings,
+        )
+    )
+
+    xlsx = tmp_path / "cmdb.xlsx"
+    xlsx.write_bytes(b"")
+    parsed = CmdbParseResult(
+        rows=[_cmdb_row("10.1.1.1", "New name", name="NVR", source_row=5)],
+        skipped_empty_ip=0,
+        skipped_unclassified=0,
+        total_data_rows=1,
+        counts_by_kind={"tsv": 1, "skud": 0, "bio": 0},
+    )
+
+    with patch("app.cmdb_sync.read_cmdb_xlsx", return_value=parsed):
+        result = sync_from_cmdb(store, cmdb_path=xlsx)
+
+    assert result.ok
+    config = store.load()
+    assert config.email_report == email_settings
+
+
 def test_sync_skips_write_when_no_changes(tmp_path: Path) -> None:
     from unittest.mock import patch
 
