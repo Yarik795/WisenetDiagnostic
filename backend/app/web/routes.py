@@ -577,7 +577,7 @@ def payments_job_status(
 
 
 @router.post("/payments/upload", response_class=HTMLResponse)
-def payments_upload(
+async def payments_upload(
     request: Request,
     state: StateStore = Depends(get_state_store),
     report_jobs: ReportJobManager = Depends(get_report_job_manager),
@@ -589,7 +589,7 @@ def payments_upload(
 
 
 @router.post("/sources/load-requests", response_class=HTMLResponse)
-def sources_load_requests(
+async def sources_load_requests(
     request: Request,
     state: StateStore = Depends(get_state_store),
     report_jobs: ReportJobManager = Depends(get_report_job_manager),
@@ -601,7 +601,7 @@ def sources_load_requests(
 
 
 @router.post("/payments/refresh", response_class=HTMLResponse)
-def payments_refresh(
+async def payments_refresh(
     request: Request,
     state: StateStore = Depends(get_state_store),
     report_jobs: ReportJobManager = Depends(get_report_job_manager),
