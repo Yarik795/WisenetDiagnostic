@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .config_store import ConfigStore
 from .logging_config import get_log_file_path, get_logger, setup_logging
 from .poll_jobs import PollJobManager
+from .report_jobs import ReportJobManager
 from .scheduler import MonitoringScheduler
 from .state_store import StateStore
 from .ui.dependencies import get_state_store
@@ -24,7 +25,9 @@ async def lifespan(app: FastAPI):
     log_path = get_log_file_path()
     state_store = get_state_store()
     poll_jobs = PollJobManager()
+    report_jobs = ReportJobManager()
     app.state.poll_job_manager = poll_jobs
+    app.state.report_job_manager = report_jobs
     scheduler = MonitoringScheduler(ConfigStore(), state_store, poll_jobs=poll_jobs)
     app.state.scheduler = scheduler
     scheduler.start()

@@ -1,0 +1,39 @@
+<div
+  id="payments-job-panel"
+  class="poll-job-panel card{% if job.is_active %} poll-job-panel--running{% endif %}"
+  {% if job.is_active %}
+  hx-get="/payments/jobs/{{ job.job_id }}"
+  hx-trigger="every 1s"
+  hx-swap="outerHTML"
+  {% elif job.status.value == 'completed' and refresh_url %}
+  hx-get="{{ refresh_url }}"
+  hx-target="{{ refresh_target }}"
+  {% if refresh_select %}hx-select="{{ refresh_select }}"{% endif %}
+  hx-swap="outerHTML"
+  hx-trigger="load"
+  {% endif %}
+>
+  <div class="poll-job-body">
+    <div class="poll-job-status-row">
+      <span class="poll-job-status poll-job-status--{{ job.status.value }}">
+        {% if job.status.value == 'pending' %}Запуск…
+        {% elif job.status.value == 'running' %}Формирование отчёта
+        {% elif job.status.value == 'completed' %}Завершён
+        {% elif job.status.value == 'failed' %}Ошибка
+        {% else %}{{ job.status.value }}{% endif %}
+      </span>
+      {% if job.is_active or job.status.value == 'completed' %}
+      <span class="poll-job-percent">{{ job.percent }}%</span>
+      {% endif %}
+    </div>
+
+    <div class="poll-job-progress" role="progressbar" aria-valuenow="{{ job.percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="poll-job-progress-bar" style="width: {{ job.percent }}%;"></div>
+    </div>
+
+    <p class="poll-job-line{% if job.status.value == 'failed' %} poll-job-line--error{% endif %}">
+      {% if job.phase %}{{ job.phase }}{% endif %}
+      {% if job.message and job.status.value in ('completed', 'failed') %} — {{ job.message }}{% endif %}
+    </p>
+  </div>
+</div>

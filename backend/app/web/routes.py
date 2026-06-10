@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from datetime import datetime, timezone
 from typing import Literal, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from ..cmdb_sync import sync_from_cmdb
@@ -17,13 +20,16 @@ from ..display_time import format_for_display
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..monitoring import poll_single_recorder, run_ntp_fix_all
+from ..cashflow_report import ensure_storage_dirs, requests_file_path
 from ..poll_jobs import PollJob, PollJobManager
+from ..report_jobs import ReportJob, ReportJobManager
 from ..scheduler import MonitoringScheduler
 from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
 from ..ui.dependencies import (
     get_monitoring_scheduler,
     get_poll_job_manager,
+    get_report_job_manager,
     get_state_store,
     get_store,
 )
@@ -43,6 +49,7 @@ from ..ui.health_dashboard import health_dashboard_context
 from ..device_kinds import filter_recorders_by_kind
 from ..ui.kind_dashboard import kind_section_page_context
 from ..ui.summary_dashboard import summary_page_context
+from ..ui.payments import payments_page_context
 from ..ui.source_imports import sources_page_context
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
@@ -467,6 +474,182 @@ def sources_page(
             **sources_page_context(state),
         },
     )
+
+
+CHUNK_SIZE = 1024 * 1024
+
+
+def _payments_job_panel_response(
+    request: Request,
+    job: ReportJob,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/payments_job_panel.html",
+        {
+            "job": job,
+            "refresh_url": "/payments/partials/report",
+            "refresh_target": "#payments-report-root",
+            "refresh_select": "#payments-report-root",
+        },
+    )
+
+
+def _save_uploaded_xlsx(upload: UploadFile, dest: Path) -> int:
+    ensure_storage_dirs()
+    tmp = dest.with_suffix(".xlsx.tmp")
+    size = 0
+    try:
+        with tmp.open("wb") as out:
+            while True:
+                chunk = upload.file.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                out.write(chunk)
+                size += len(chunk)
+        tmp.replace(dest)
+    except Exception:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+        raise
+    finally:
+        upload.file.close()
+    return size
+
+
+@router.get("/payments", response_class=HTMLResponse)
+def payments_page(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "payments.html",
+        {
+            "active_nav": "payments",
+            "toast": _toast_from_query(request),
+            **payments_page_context(state, report_jobs),
+        },
+    )
+
+
+@router.get("/payments/partials/report", response_class=HTMLResponse)
+def payments_report_partial(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> HTMLResponse:
+    ctx = payments_page_context(state, report_jobs)
+    return templates.TemplateResponse(
+        request,
+        "partials/payments_report.html",
+        ctx,
+    )
+
+
+@router.get("/payments/jobs/{job_id}", response_class=HTMLResponse)
+def payments_job_status(
+    request: Request,
+    job_id: str,
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> HTMLResponse:
+    job = report_jobs.get_job(job_id)
+    if job is None:
+        return HTMLResponse("Задача не найдена", status_code=404)
+    return _payments_job_panel_response(request, job)
+
+
+@router.post("/payments/upload")
+async def payments_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> Response:
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".xlsx"):
+        return JSONResponse(
+            {"ok": False, "message": "Допустим только формат .xlsx"},
+            status_code=400,
+        )
+
+    dest = requests_file_path()
+    try:
+        size = await asyncio.to_thread(_save_uploaded_xlsx, file, dest)
+    except Exception as exc:
+        state.record_source_import(
+            "requests",
+            filename=filename,
+            record_count=0,
+            status="error",
+            message=str(exc),
+        )
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка сохранения файла: {exc}"},
+            status_code=500,
+        )
+
+    state.record_source_import(
+        "requests",
+        filename=filename,
+        record_count=0,
+        status="ok",
+        message=f"Файл загружен ({size // 1024} КБ), запущена генерация отчёта",
+    )
+    job = report_jobs.start(dest, refresh_url="/payments/partials/report")
+
+    wants_json = "application/json" in request.headers.get("accept", "")
+    if wants_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": "Файл загружен, формируется отчёт",
+                "job_id": job.job_id,
+                "size": size,
+            }
+        )
+
+    return _redirect(
+        "/payments",
+        "success",
+        "Файл загружен, формируется отчёт",
+        request=request,
+    )
+
+
+@router.post("/payments/refresh", response_class=HTMLResponse)
+def payments_refresh(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> Response:
+    dest = requests_file_path()
+    if not dest.is_file():
+        if request.headers.get("HX-Request") == "true":
+            response = HTMLResponse(
+                '<p class="banner-error">Сначала загрузите файл с заявками (.xlsx)</p>',
+                status_code=400,
+            )
+            response.headers["HX-Trigger"] = json.dumps(
+                {
+                    "showToast": {
+                        "type": "error",
+                        "message": "Сначала загрузите файл с заявками",
+                    }
+                },
+                ensure_ascii=False,
+            )
+            return response
+        return _redirect(
+            "/payments",
+            "error",
+            "Сначала загрузите файл с заявками",
+            request=request,
+        )
+
+    job = report_jobs.start(dest, refresh_url="/payments/partials/report")
+    return _payments_job_panel_response(request, job)
 
 
 @router.post("/sources/sync-cmdb", response_class=HTMLResponse)

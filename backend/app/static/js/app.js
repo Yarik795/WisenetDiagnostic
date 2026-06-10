@@ -348,8 +348,201 @@ function initServerToasts() {
   });
 }
 
+function initPaymentsUpload() {
+  const dropzone = document.getElementById("payments-dropzone");
+  const fileInput = document.getElementById("payments-file-input");
+  const pickBtn = document.getElementById("payments-pick-file-btn");
+  if (!dropzone || !fileInput) return;
+
+  const uploadUrl = dropzone.dataset.uploadUrl || "/payments/upload";
+  const progressRoot = document.getElementById("payments-upload-progress");
+  const progressBar = document.getElementById("payments-upload-progress-bar");
+  const progressText = document.getElementById("payments-upload-progress-text");
+  const progressPercent = document.getElementById("payments-upload-progress-percent");
+
+  function setUploadProgress(percent, text) {
+    if (!progressRoot) return;
+    progressRoot.hidden = false;
+    const p = Math.max(0, Math.min(100, percent));
+    if (progressBar) progressBar.style.width = `${p}%`;
+    if (progressPercent) progressPercent.textContent = `${p}%`;
+    if (progressText && text) progressText.textContent = text;
+  }
+
+  function uploadFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      showToast("error", "Допустим только формат .xlsx");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadUrl);
+    xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) {
+        setUploadProgress(0, "Загрузка…");
+        return;
+      }
+      const pct = Math.round((e.loaded / e.total) * 100);
+      setUploadProgress(pct, `Загрузка: ${(e.loaded / (1024 * 1024)).toFixed(1)} МБ`);
+    };
+    xhr.onload = () => {
+      let data = null;
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && data && data.ok) {
+        setUploadProgress(100, "Загрузка завершена");
+        showToast("success", data.message || "Файл загружен");
+        if (data.job_id) {
+          fetch(`/payments/jobs/${data.job_id}`)
+            .then((r) => r.text())
+            .then((html) => {
+              const root = document.getElementById("payments-job-root");
+              if (root) root.innerHTML = html;
+              if (typeof htmx !== "undefined") htmx.process(root);
+            })
+            .catch(() => {
+              showToast("error", "Не удалось запустить панель формирования отчёта");
+            });
+        }
+      } else {
+        const msg = (data && data.message) || "Не удалось загрузить файл";
+        showToast("error", msg);
+        setUploadProgress(0, "Ошибка загрузки");
+      }
+    };
+    xhr.onerror = () => {
+      showToast("error", "Нет связи с сервером при загрузке файла");
+      setUploadProgress(0, "Ошибка сети");
+    };
+    setUploadProgress(0, "Подготовка…");
+    xhr.send(formData);
+  }
+
+  pickBtn?.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files && fileInput.files[0];
+    uploadFile(file);
+    fileInput.value = "";
+  });
+
+  ["dragenter", "dragover"].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("is-dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("is-dragover");
+    });
+  });
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    uploadFile(file);
+  });
+}
+
+function initPaymentsTabs(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-payments-tabs]").forEach((tabsNav) => {
+    if (tabsNav.dataset.paymentsTabsBound === "1") return;
+    tabsNav.dataset.paymentsTabsBound = "1";
+    const container = tabsNav.parentElement;
+    if (!container) return;
+    tabsNav.querySelectorAll("[data-payments-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.dataset.paymentsTab;
+        tabsNav.querySelectorAll("[data-payments-tab]").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+        });
+        container.querySelectorAll("[data-payments-panel]").forEach((panel) => {
+          panel.classList.toggle("hidden", panel.dataset.paymentsPanel !== kind);
+        });
+      });
+    });
+  });
+}
+
+function initPaymentsCollapsibles(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-payments-collapsible]").forEach((block) => {
+    const trigger = block.querySelector("[data-payments-collapse-trigger]");
+    if (!trigger || trigger.dataset.paymentsCollapseBound === "1") return;
+    trigger.dataset.paymentsCollapseBound = "1";
+    trigger.addEventListener("click", () => {
+      block.classList.toggle("is-open");
+      const indicator = block.querySelector(".payments-collapsible-indicator");
+      if (indicator) {
+        indicator.textContent = block.classList.contains("is-open") ? "−" : "+";
+      }
+    });
+  });
+}
+
+function parsePaymentsNumber(txt) {
+  if (!txt) return null;
+  const cleaned = txt.replace(/\s/g, "").replace(",", ".").trim();
+  const num = parseFloat(cleaned);
+  return Number.isNaN(num) ? null : num;
+}
+
+function initPaymentsTables(root) {
+  const scope = root || document;
+  scope.querySelectorAll(".payments-data-table").forEach((table) => {
+    if (table.dataset.paymentsTableBound === "1") return;
+    table.dataset.paymentsTableBound = "1";
+    const tableId = table.dataset.paymentsTable;
+    const search = scope.querySelector(`[data-payments-search="${tableId}"]`);
+    if (search) {
+      search.addEventListener("input", () => {
+        const q = search.value.trim().toLowerCase();
+        table.querySelectorAll("tbody tr").forEach((row) => {
+          row.style.display = row.textContent.toLowerCase().includes(q) ? "" : "none";
+        });
+      });
+    }
+    table.querySelectorAll("thead th").forEach((th, colIdx) => {
+      th.style.cursor = "pointer";
+      th.addEventListener("click", () => {
+        const tbody = table.querySelector("tbody");
+        if (!tbody) return;
+        const asc = th.dataset.sortDir !== "desc";
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        rows.sort((a, b) => {
+          const cellA = a.cells[colIdx]?.textContent.trim() || "";
+          const cellB = b.cells[colIdx]?.textContent.trim() || "";
+          const numA = parsePaymentsNumber(cellA);
+          const numB = parsePaymentsNumber(cellB);
+          let valA = numA !== null ? numA : cellA.toLowerCase();
+          let valB = numB !== null ? numB : cellB.toLowerCase();
+          if (valA < valB) return asc ? -1 : 1;
+          if (valA > valB) return asc ? 1 : -1;
+          return 0;
+        });
+        th.dataset.sortDir = asc ? "asc" : "desc";
+        rows.forEach((row) => tbody.appendChild(row));
+      });
+    });
+  });
+}
+
+function initPaymentsPage(root) {
+  initPaymentsUpload();
+  initPaymentsTabs(root);
+  initPaymentsCollapsibles(root);
+  initPaymentsTables(root);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initServerToasts();
+  initPaymentsPage();
   if (typeof htmx === "undefined") {
     showToast(
       "error",
@@ -375,6 +568,9 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   applyTimeDashboardState();
   applyCategoryDashboardState();
   initKindTabs(e.detail?.target);
+  initPaymentsTabs(e.detail?.target);
+  initPaymentsCollapsibles(e.detail?.target);
+  initPaymentsTables(e.detail?.target);
   scrollToHighlightedCategory();
 });
 

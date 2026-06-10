@@ -4,6 +4,7 @@ from fastapi import Request
 
 from ..config_store import ConfigStore
 from ..poll_jobs import PollJobManager
+from ..report_jobs import ReportJobManager
 from ..scheduler import MonitoringScheduler
 from ..state_store import StateStore
 
@@ -24,6 +25,14 @@ def get_poll_job_manager(request: Request) -> PollJobManager:
     if mgr is None:
         mgr = PollJobManager()
         request.app.state.poll_job_manager = mgr
+    return mgr
+
+
+def get_report_job_manager(request: Request) -> ReportJobManager:
+    mgr = getattr(request.app.state, "report_job_manager", None)
+    if mgr is None:
+        mgr = ReportJobManager()
+        request.app.state.report_job_manager = mgr
     return mgr
 
 

@@ -1,0 +1,21 @@
+<section class="card source-requests-panel" style="margin-top:24px;">
+  <h2 class="card-section-title">Заявки (статус оплаты)</h2>
+  <p class="source-cmdb-path">
+    Файл: <code class="mono">{{ requests_path }}</code>
+    {% if requests_exists %}
+    <span class="source-cmdb-status source-cmdb-status--ok">загружен</span>
+    {% else %}
+    <span class="source-cmdb-status source-cmdb-status--error">не загружен</span>
+    {% endif %}
+  </p>
+  {% if latest_requests_import %}
+  <p class="source-cmdb-last">
+    Последняя загрузка: {{ format_datetime(latest_requests_import.imported_at) }}
+    {% if requests_file_size %} — {{ requests_file_size }}{% endif %}
+    {% if latest_requests_import.message %}<span class="text-secondary">({{ latest_requests_import.message }})</span>{% endif %}
+  </p>
+  {% else %}
+  <p class="source-cmdb-last text-secondary">Загрузок заявок ещё не было.</p>
+  {% endif %}
+  <a href="/payments" class="btn btn-primary">Открыть «Статус оплаты»</a>
+</section>

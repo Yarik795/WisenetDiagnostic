@@ -1,0 +1,128 @@
+<div id="payments-report-root">
+<section class="card payments-report-card" id="payments-report-card">
+  <div class="payments-report-header">
+    <div>
+      <h2 class="card-section-title" style="margin:0;">Отчёт</h2>
+      {% if report and report.generated_at %}
+      <p class="payments-report-updated text-secondary">
+        Отчёт обновлён: {{ format_datetime(report.generated_at) }}
+        {% if report.row_count %} · {{ report.row_count }} строк в исходном файле{% endif %}
+      </p>
+      {% elif not report %}
+      <p class="payments-report-updated text-secondary">Отчёт ещё не сформирован. Загрузите файл с заявками.</p>
+      {% endif %}
+    </div>
+    <form
+      hx-post="/payments/refresh"
+      hx-target="#payments-job-root"
+      hx-swap="innerHTML"
+      {% if not requests_file %}class="payments-refresh-disabled"{% endif %}
+    >
+      <button
+        type="submit"
+        class="btn btn-primary"
+        {% if not requests_file or (report_job and report_job.is_active) %}disabled{% endif %}
+        title="{% if not requests_file %}Сначала загрузите файл{% else %}Пересчитать отчёт по сохранённому файлу{% endif %}"
+      >Обновить отчёт</button>
+    </form>
+  </div>
+
+  {% if report %}
+  <div class="payments-tabs" data-payments-tabs>
+    <button type="button" class="payments-tab active" data-payments-tab="modern">Модернизация</button>
+    <button type="button" class="payments-tab" data-payments-tab="rvr">РВР</button>
+  </div>
+
+  {% for kind, panel_id in [('modern', 'payments-panel-modern'), ('rvr', 'payments-panel-rvr')] %}
+  {% set kind_report = report.reports[kind] %}
+  <div
+    id="{{ panel_id }}"
+    class="payments-tab-panel{% if kind != 'modern' %} hidden{% endif %}"
+    data-payments-panel="{{ kind }}"
+  >
+    <h3 class="payments-report-kind-title">{{ kind_report.title }}</h3>
+    <nav class="payments-section-nav">
+      {% for section in kind_report.sections %}
+      <a href="#{{ kind }}-{{ section.key }}">{{ section.title }}</a>
+      {% endfor %}
+    </nav>
+
+    {% for section in kind_report.sections %}
+    <section class="payments-section card" id="{{ kind }}-{{ section.key }}">
+      <h4 class="payments-section-title">{{ section.title }}: статус согласования</h4>
+
+      <div class="payments-kpi-grid">
+        <div class="payments-kpi-card">
+          <div class="payments-kpi-value">{{ section.kpi.total_count }}</div>
+          <div class="payments-kpi-label">Заявок в работе</div>
+        </div>
+        <div class="payments-kpi-card">
+          <div class="payments-kpi-value">{{ section.kpi.total_sum }}</div>
+          <div class="payments-kpi-label">Общая сумма</div>
+        </div>
+        <div class="payments-kpi-card">
+          <div class="payments-kpi-value">{{ section.kpi.oldest_date }}</div>
+          <div class="payments-kpi-label">Самая «старая» заявка</div>
+        </div>
+      </div>
+
+      <div class="payments-chart-box">
+        <img src="data:image/png;base64,{{ section.chart_b64 }}" alt="График {{ section.title }}" class="payments-chart-img">
+      </div>
+
+      <div class="payments-collapsible" data-payments-collapsible>
+        <button type="button" class="payments-collapsible-trigger" data-payments-collapse-trigger>
+          <span>Заявки {{ section.title }} (без «Согласовано»)</span>
+          <span class="payments-collapsible-indicator">+</span>
+        </button>
+        <div class="payments-collapsible-content">
+          <div class="payments-table-tools">
+            <input
+              type="search"
+              class="payments-table-search"
+              placeholder="Поиск по таблице…"
+              data-payments-search="{{ kind }}-{{ section.key }}"
+            >
+            <span class="text-secondary" style="font-size:12px;">Клик по заголовку — сортировка</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table payments-data-table" data-payments-table="{{ kind }}-{{ section.key }}">
+              <thead>
+                <tr>
+                  <th>Месяц выполнения</th>
+                  <th>Статус согласования</th>
+                  <th>Заявка №</th>
+                  <th class="num">Сумма с НДС</th>
+                  <th>Статус</th>
+                  <th>Статус акта</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in section.rows %}
+                <tr>
+                  <td>{{ row.month }}</td>
+                  <td><span class="status-badge {{ row.status.class }}">{{ row.status.text }}</span></td>
+                  <td>
+                    {% if row.request_url %}
+                    <a href="{{ row.request_url }}" target="_blank" rel="noopener noreferrer">{{ row.request_number }}</a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td class="num">{{ row.amount }}</td>
+                  <td>{{ row.status_raw }}</td>
+                  <td>{{ row.act_status }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-secondary">Нет заявок в работе</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</section>
+</div>
