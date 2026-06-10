@@ -348,107 +348,6 @@ function initServerToasts() {
   });
 }
 
-function initPaymentsUpload() {
-  const dropzone = document.getElementById("payments-dropzone");
-  const fileInput = document.getElementById("payments-file-input");
-  const pickBtn = document.getElementById("payments-pick-file-btn");
-  if (!dropzone || !fileInput) return;
-
-  const uploadUrl = dropzone.dataset.uploadUrl || "/payments/upload";
-  const progressRoot = document.getElementById("payments-upload-progress");
-  const progressBar = document.getElementById("payments-upload-progress-bar");
-  const progressText = document.getElementById("payments-upload-progress-text");
-  const progressPercent = document.getElementById("payments-upload-progress-percent");
-
-  function setUploadProgress(percent, text) {
-    if (!progressRoot) return;
-    progressRoot.hidden = false;
-    const p = Math.max(0, Math.min(100, percent));
-    if (progressBar) progressBar.style.width = `${p}%`;
-    if (progressPercent) progressPercent.textContent = `${p}%`;
-    if (progressText && text) progressText.textContent = text;
-  }
-
-  function uploadFile(file) {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      showToast("error", "Допустим только формат .xlsx");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", uploadUrl);
-    xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-    xhr.upload.onprogress = (e) => {
-      if (!e.lengthComputable) {
-        setUploadProgress(0, "Загрузка…");
-        return;
-      }
-      const pct = Math.round((e.loaded / e.total) * 100);
-      setUploadProgress(pct, `Загрузка: ${(e.loaded / (1024 * 1024)).toFixed(1)} МБ`);
-    };
-    xhr.onload = () => {
-      let data = null;
-      try {
-        data = JSON.parse(xhr.responseText || "{}");
-      } catch {
-        data = null;
-      }
-      if (xhr.status >= 200 && xhr.status < 300 && data && data.ok) {
-        setUploadProgress(100, "Загрузка завершена");
-        showToast("success", data.message || "Файл загружен");
-        if (data.job_id) {
-          fetch(`/payments/jobs/${data.job_id}`)
-            .then((r) => r.text())
-            .then((html) => {
-              const root = document.getElementById("payments-job-root");
-              if (root) root.innerHTML = html;
-              if (typeof htmx !== "undefined") htmx.process(root);
-            })
-            .catch(() => {
-              showToast("error", "Не удалось запустить панель формирования отчёта");
-            });
-        }
-      } else {
-        const msg = (data && data.message) || "Не удалось загрузить файл";
-        showToast("error", msg);
-        setUploadProgress(0, "Ошибка загрузки");
-      }
-    };
-    xhr.onerror = () => {
-      showToast("error", "Нет связи с сервером при загрузке файла");
-      setUploadProgress(0, "Ошибка сети");
-    };
-    setUploadProgress(0, "Подготовка…");
-    xhr.send(formData);
-  }
-
-  pickBtn?.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", () => {
-    const file = fileInput.files && fileInput.files[0];
-    uploadFile(file);
-    fileInput.value = "";
-  });
-
-  ["dragenter", "dragover"].forEach((evt) => {
-    dropzone.addEventListener(evt, (e) => {
-      e.preventDefault();
-      dropzone.classList.add("is-dragover");
-    });
-  });
-  ["dragleave", "drop"].forEach((evt) => {
-    dropzone.addEventListener(evt, (e) => {
-      e.preventDefault();
-      dropzone.classList.remove("is-dragover");
-    });
-  });
-  dropzone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer?.files?.[0];
-    uploadFile(file);
-  });
-}
-
 function initPaymentsTabs(root) {
   const scope = root || document;
   scope.querySelectorAll("[data-payments-tabs]").forEach((tabsNav) => {
@@ -534,7 +433,6 @@ function initPaymentsTables(root) {
 }
 
 function initPaymentsPage(root) {
-  initPaymentsUpload();
   initPaymentsTabs(root);
   initPaymentsCollapsibles(root);
   initPaymentsTables(root);
@@ -609,12 +507,18 @@ document.body.addEventListener("htmx:sendError", (e) => {
   if (cmdbPath === "/sources/sync-cmdb" || cmdbPath === "/objects/sync-cmdb") {
     showToast("error", "Нет связи с сервером при обновлении из CMDB.");
   }
+  if (cmdbPath === "/sources/load-requests" || cmdbPath === "/payments/upload") {
+    showToast("error", "Нет связи с сервером при загрузке заявок.");
+  }
 });
 document.body.addEventListener("htmx:responseError", (e) => {
   logHtmxClient("htmx_response_error", e.detail);
   const cmdbPath = e.detail?.requestConfig?.path;
   if (cmdbPath === "/sources/sync-cmdb" || cmdbPath === "/objects/sync-cmdb") {
     showToast("error", "Не удалось обновить список из CMDB. Проверьте cmdb.xlsx и логи.");
+  }
+  if (cmdbPath === "/sources/load-requests" || cmdbPath === "/payments/upload") {
+    showToast("error", "Не удалось загрузить заявки. Проверьте папку inputData и логи.");
   }
 });
 document.body.addEventListener("htmx:swapError", (e) => logHtmxClient("htmx_swap_error", e.detail));

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import shutil
 from datetime import date, datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -18,7 +19,9 @@ import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+INPUT_DATA_DIR = PROJECT_ROOT / "inputData"
 UPLOADS_DIR = PROJECT_ROOT / "data" / "uploads"
+REQUESTS_NAME_MARKER = "заявки"
 REPORTS_DIR = PROJECT_ROOT / "data" / "reports"
 REQUESTS_FILENAME = "requests.xlsx"
 REPORT_ARTIFACT = REPORTS_DIR / "cashflow_report.json"
@@ -111,6 +114,56 @@ ProgressCallback = Callable[[str, int], None]
 
 def requests_file_path() -> Path:
     return UPLOADS_DIR / REQUESTS_FILENAME
+
+
+def input_data_dir() -> Path:
+    return INPUT_DATA_DIR
+
+
+def find_latest_requests_source_file(
+    directory: Path | None = None,
+) -> Path:
+    """Ищет .xlsx с «Заявки» в имени и возвращает файл с самой поздней датой изменения."""
+    root = directory or INPUT_DATA_DIR
+    if not root.is_dir():
+        raise FileNotFoundError(f"Папка inputData не найдена: {root}")
+
+    candidates = [
+        path
+        for path in root.iterdir()
+        if path.is_file()
+        and path.suffix.lower() == ".xlsx"
+        and REQUESTS_NAME_MARKER in path.name.lower()
+    ]
+    if not candidates:
+        raise FileNotFoundError(
+            f"В папке {root} нет файлов .xlsx с «Заявки» в названии"
+        )
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def requests_source_file_info(
+    directory: Path | None = None,
+) -> Optional[dict[str, Any]]:
+    try:
+        path = find_latest_requests_source_file(directory)
+    except FileNotFoundError:
+        return None
+    stat = path.stat()
+    return {
+        "path": path,
+        "filename": path.name,
+        "size": stat.st_size,
+        "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+    }
+
+
+def import_requests_from_source(source: Path, dest: Path | None = None) -> tuple[Path, int]:
+    """Копирует найденный исходный файл в централизованное хранилище."""
+    target = dest or requests_file_path()
+    ensure_storage_dirs()
+    shutil.copy2(source, target)
+    return target, target.stat().st_size
 
 
 def ensure_storage_dirs() -> None:

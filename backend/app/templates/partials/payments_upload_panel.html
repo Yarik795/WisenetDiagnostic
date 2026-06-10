@@ -1,6 +1,26 @@
 <section class="card payments-upload-panel">
   <h2 class="card-section-title">Файл с заявками</h2>
   <p class="payments-file-path">
+    Источник: <code class="mono">{{ input_data_path }}</code>
+    {% if requests_source_file %}
+    <span class="payments-file-status payments-file-status--ok">файл найден</span>
+    {% else %}
+    <span class="payments-file-status payments-file-status--warn">файл не найден</span>
+    {% endif %}
+  </p>
+  {% if requests_source_file %}
+  <p class="payments-file-meta text-secondary">
+    Будет загружен: <strong>{{ requests_source_file.filename }}</strong>
+    ({{ requests_source_file_size }}, изменён {{ format_datetime(requests_source_file.modified_at) }})
+  </p>
+  {% else %}
+  <p class="payments-file-meta text-secondary">
+    Положите в папку <code class="mono">inputData</code> файл .xlsx с «Заявки» в названии.
+    При загрузке будет выбран файл с самой поздней датой изменения.
+  </p>
+  {% endif %}
+
+  <p class="payments-file-path" style="margin-top:12px;">
     Хранилище: <code class="mono">{{ requests_path }}</code>
     {% if requests_file %}
     <span class="payments-file-status payments-file-status--ok">загружен</span>
@@ -13,33 +33,20 @@
     {{ requests_file.filename }} — {{ requests_file_size }},
     изменён {{ format_datetime(requests_file.modified_at) }}
     {% if latest_requests_import %}
-    · последняя загрузка через интерфейс: {{ format_datetime(latest_requests_import.imported_at) }}
+    · последняя загрузка: {{ format_datetime(latest_requests_import.imported_at) }}
     {% endif %}
-  </p>
-  {% else %}
-  <p class="payments-file-meta text-secondary">
-    Загрузите Excel-выгрузку (.xlsx) с заявками. Файл сохраняется централизованно и доступен другим разделам.
   </p>
   {% endif %}
 
-  <div
-    id="payments-dropzone"
-    class="payments-dropzone{% if not requests_file %} payments-dropzone--empty{% endif %}"
-    data-upload-url="/payments/upload"
-  >
-    <input type="file" id="payments-file-input" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-    <p class="payments-dropzone-title">Перетащите файл сюда или выберите на диске</p>
-    <p class="payments-dropzone-hint text-secondary">Формат: .xlsx. Поддерживаются большие файлы (3+ МБ).</p>
-    <button type="button" class="btn btn-outline btn-sm" id="payments-pick-file-btn">Выбрать файл</button>
-  </div>
-
-  <div id="payments-upload-progress" class="payments-upload-progress" hidden>
-    <div class="payments-upload-progress-label">
-      <span id="payments-upload-progress-text">Загрузка…</span>
-      <span id="payments-upload-progress-percent">0%</span>
-    </div>
-    <div class="poll-job-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
-      <div id="payments-upload-progress-bar" class="poll-job-progress-bar" style="width:0%;"></div>
-    </div>
-  </div>
+  <button
+    type="button"
+    class="btn btn-primary"
+    id="payments-load-btn"
+    hx-post="/payments/upload"
+    hx-target="body"
+    hx-swap="none"
+    hx-disabled-elt="#payments-load-btn"
+    hx-indicator="#payments-load-indicator"
+    {% if not requests_source_file %}disabled title="В inputData нет подходящего файла"{% endif %}
+  ><span id="payments-load-indicator" class="htmx-indicator spinner" aria-hidden="true"></span>Загрузить</button>
 </section>

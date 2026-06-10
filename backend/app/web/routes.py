@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from datetime import datetime, timezone
 from typing import Literal, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from pathlib import Path
-
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from ..cmdb_sync import sync_from_cmdb
@@ -20,7 +17,11 @@ from ..display_time import format_for_display
 from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..monitoring import poll_single_recorder, run_ntp_fix_all
-from ..cashflow_report import ensure_storage_dirs, requests_file_path
+from ..cashflow_report import (
+    find_latest_requests_source_file,
+    import_requests_from_source,
+    requests_file_path,
+)
 from ..poll_jobs import PollJob, PollJobManager
 from ..report_jobs import ReportJob, ReportJobManager
 from ..scheduler import MonitoringScheduler
@@ -476,9 +477,6 @@ def sources_page(
     )
 
 
-CHUNK_SIZE = 1024 * 1024
-
-
 def _payments_job_panel_response(
     request: Request,
     job: ReportJob,
@@ -495,26 +493,44 @@ def _payments_job_panel_response(
     )
 
 
-def _save_uploaded_xlsx(upload: UploadFile, dest: Path) -> int:
-    ensure_storage_dirs()
-    tmp = dest.with_suffix(".xlsx.tmp")
-    size = 0
+def _load_requests_from_input_data(
+    state: StateStore,
+    report_jobs: ReportJobManager,
+) -> tuple[bool, str, ReportJob | None]:
     try:
-        with tmp.open("wb") as out:
-            while True:
-                chunk = upload.file.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                out.write(chunk)
-                size += len(chunk)
-        tmp.replace(dest)
-    except Exception:
-        if tmp.exists():
-            tmp.unlink(missing_ok=True)
-        raise
-    finally:
-        upload.file.close()
-    return size
+        source = find_latest_requests_source_file()
+        dest, size = import_requests_from_source(source)
+    except FileNotFoundError as exc:
+        state.record_source_import(
+            "requests",
+            filename=None,
+            record_count=0,
+            status="error",
+            message=str(exc),
+        )
+        return False, str(exc), None
+    except Exception as exc:
+        state.record_source_import(
+            "requests",
+            filename=None,
+            record_count=0,
+            status="error",
+            message=str(exc),
+        )
+        return False, f"Ошибка загрузки файла: {exc}", None
+
+    state.record_source_import(
+        "requests",
+        filename=source.name,
+        record_count=0,
+        status="ok",
+        message=(
+            f"Загружен {source.name} ({size // 1024} КБ), "
+            "запущена генерация отчёта"
+        ),
+    )
+    job = report_jobs.start(dest, refresh_url="/payments/partials/report")
+    return True, f"Загружен {source.name}, формируется отчёт", job
 
 
 @router.get("/payments", response_class=HTMLResponse)
@@ -560,62 +576,28 @@ def payments_job_status(
     return _payments_job_panel_response(request, job)
 
 
-@router.post("/payments/upload")
-async def payments_upload(
+@router.post("/payments/upload", response_class=HTMLResponse)
+def payments_upload(
     request: Request,
-    file: UploadFile = File(...),
     state: StateStore = Depends(get_state_store),
     report_jobs: ReportJobManager = Depends(get_report_job_manager),
 ) -> Response:
-    filename = (file.filename or "").strip()
-    if not filename.lower().endswith(".xlsx"):
-        return JSONResponse(
-            {"ok": False, "message": "Допустим только формат .xlsx"},
-            status_code=400,
-        )
+    ok, message, _job = _load_requests_from_input_data(state, report_jobs)
+    if not ok:
+        return _redirect("/payments", "error", message, request=request)
+    return _redirect("/payments", "success", message, request=request)
 
-    dest = requests_file_path()
-    try:
-        size = await asyncio.to_thread(_save_uploaded_xlsx, file, dest)
-    except Exception as exc:
-        state.record_source_import(
-            "requests",
-            filename=filename,
-            record_count=0,
-            status="error",
-            message=str(exc),
-        )
-        return JSONResponse(
-            {"ok": False, "message": f"Ошибка сохранения файла: {exc}"},
-            status_code=500,
-        )
 
-    state.record_source_import(
-        "requests",
-        filename=filename,
-        record_count=0,
-        status="ok",
-        message=f"Файл загружен ({size // 1024} КБ), запущена генерация отчёта",
-    )
-    job = report_jobs.start(dest, refresh_url="/payments/partials/report")
-
-    wants_json = "application/json" in request.headers.get("accept", "")
-    if wants_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JSONResponse(
-            {
-                "ok": True,
-                "message": "Файл загружен, формируется отчёт",
-                "job_id": job.job_id,
-                "size": size,
-            }
-        )
-
-    return _redirect(
-        "/payments",
-        "success",
-        "Файл загружен, формируется отчёт",
-        request=request,
-    )
+@router.post("/sources/load-requests", response_class=HTMLResponse)
+def sources_load_requests(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> Response:
+    ok, message, _job = _load_requests_from_input_data(state, report_jobs)
+    if ok:
+        return _redirect("/sources", "success", message, request=request)
+    return _redirect("/sources", "error", message, request=request)
 
 
 @router.post("/payments/refresh", response_class=HTMLResponse)
@@ -628,14 +610,14 @@ def payments_refresh(
     if not dest.is_file():
         if request.headers.get("HX-Request") == "true":
             response = HTMLResponse(
-                '<p class="banner-error">Сначала загрузите файл с заявками (.xlsx)</p>',
+                '<p class="banner-error">Сначала загрузите заявки с ПП (кнопка «Загрузить»)</p>',
                 status_code=400,
             )
             response.headers["HX-Trigger"] = json.dumps(
                 {
                     "showToast": {
                         "type": "error",
-                        "message": "Сначала загрузите файл с заявками",
+                        "message": "Сначала загрузите заявки с ПП",
                     }
                 },
                 ensure_ascii=False,
@@ -644,7 +626,7 @@ def payments_refresh(
         return _redirect(
             "/payments",
             "error",
-            "Сначала загрузите файл с заявками",
+            "Сначала загрузите заявки с ПП",
             request=request,
         )
 

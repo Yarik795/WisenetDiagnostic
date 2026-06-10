@@ -9,6 +9,8 @@ import pytest
 from app.cashflow_report import (
     REPORT_ARTIFACT,
     build_cashflow_report,
+    find_latest_requests_source_file,
+    import_requests_from_source,
     load_report_artifact,
     read_excel,
     requests_file_path,
@@ -86,3 +88,33 @@ def test_requests_file_path_points_to_uploads():
     path = requests_file_path()
     assert path.name == "requests.xlsx"
     assert "uploads" in path.as_posix()
+
+
+def test_find_latest_requests_source_file(tmp_path: Path):
+    older = tmp_path / "Заявки_старые.xlsx"
+    newer = tmp_path / "выгрузка_Заявки_2026.xlsx"
+    other = tmp_path / "отчет.xlsx"
+    pd.DataFrame({"a": [1]}).to_excel(older, index=False, engine="openpyxl")
+    pd.DataFrame({"a": [2]}).to_excel(newer, index=False, engine="openpyxl")
+    pd.DataFrame({"a": [3]}).to_excel(other, index=False, engine="openpyxl")
+    newer.touch()
+    import os
+    import time
+
+    os.utime(older, (time.time() - 3600, time.time() - 3600))
+
+    found = find_latest_requests_source_file(tmp_path)
+    assert found == newer
+
+
+def test_find_latest_requests_source_file_missing_dir(tmp_path: Path):
+    with pytest.raises(FileNotFoundError, match="не найдена"):
+        find_latest_requests_source_file(tmp_path / "missing")
+
+
+def test_import_requests_from_source(sample_xlsx: Path, tmp_path: Path):
+    dest = tmp_path / "requests.xlsx"
+    copied, size = import_requests_from_source(sample_xlsx, dest)
+    assert copied == dest
+    assert size > 0
+    assert dest.is_file()

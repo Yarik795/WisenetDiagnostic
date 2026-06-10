@@ -4,9 +4,11 @@ from datetime import datetime
 from typing import Any, Optional
 
 from ..cashflow_report import (
+    input_data_dir,
     load_report_artifact,
     requests_file_info,
     requests_file_path,
+    requests_source_file_info,
 )
 from ..report_jobs import ReportJob, ReportJobManager
 from ..state_store import SourceImportRow, StateStore
@@ -25,6 +27,7 @@ def payments_page_context(
     report_jobs: ReportJobManager,
 ) -> dict[str, Any]:
     file_info = requests_file_info()
+    source_info = requests_source_file_info()
     latest_import = state.get_latest_source_import("requests")
     report = load_report_artifact()
     if report:
@@ -33,8 +36,13 @@ def payments_page_context(
             report = {**report, "generated_at": generated}
     active_job = report_jobs.get_active_job()
     return {
+        "input_data_path": input_data_dir(),
         "requests_path": requests_file_path(),
         "requests_file": file_info,
+        "requests_source_file": source_info,
+        "requests_source_file_size": format_file_size(source_info["size"])
+        if source_info
+        else None,
         "requests_file_size": format_file_size(file_info["size"]) if file_info else None,
         "latest_requests_import": latest_import,
         "report": report,

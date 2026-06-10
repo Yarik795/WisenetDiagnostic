@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..cashflow_report import requests_file_info, requests_file_path
+from ..cashflow_report import (
+    input_data_dir,
+    requests_file_info,
+    requests_file_path,
+    requests_source_file_info,
+)
 from ..cmdb_sync import DEFAULT_CMDB_PATH
 from ..device_kinds import source_label
 from ..state_store import SourceImportRow, StateStore
@@ -15,7 +20,13 @@ def sources_page_context(state: StateStore) -> dict:
     latest_requests = state.get_latest_source_import("requests")
     cmdb_path = DEFAULT_CMDB_PATH
     requests_info = requests_file_info()
+    source_info = requests_source_file_info()
     return {
+        "input_data_path": input_data_dir(),
+        "requests_source_file": source_info,
+        "requests_source_file_size": format_file_size(source_info["size"])
+        if source_info
+        else None,
         "source_imports": imports,
         "latest_cmdb_import": latest_cmdb,
         "latest_requests_import": latest_requests,
