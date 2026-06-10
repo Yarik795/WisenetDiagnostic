@@ -6,7 +6,9 @@ from app.models import Credentials, MonitoringSettings
 from app.state_store import RecorderMetricsRow
 from app.ui.helpers import device_web_interface_url, device_web_link_title
 from app.ui.error_report import (
+    PING_CATEGORY_LABEL,
     build_error_report_context,
+    build_ping_problem_rows,
     format_problem_age_display,
     _problem_age_fields,
 )
@@ -161,6 +163,76 @@ def test_build_error_report_hrx_no_hdd() -> None:
     archive_rows = [r for r in ctx.rows if r.category_label == "Глубина архива"]
     assert len(archive_rows) == 1
     assert archive_rows[0].status == "error"
+
+
+def test_build_error_report_includes_ping_devices() -> None:
+    polled = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    since = polled - timedelta(days=2)
+    skud = _rec(id="skud-1", device_kind="skud", name="СКУД-1", host="10.0.0.50")
+    metrics = RecorderMetricsRow(
+        recorder_id="skud-1",
+        model=None,
+        firmware_version=None,
+        device_online=False,
+        health_status="error",
+        health_reason="нет ответа ping",
+        ntp_status=None,
+        time_skew_seconds=None,
+        storage_used_percent=None,
+        storage_status=None,
+        archive_start=None,
+        archive_end=None,
+        archive_days=None,
+        channel_count=0,
+        channels_ok=0,
+        channels_warn=0,
+        channels_error=0,
+        channels_unknown=0,
+        last_polled_at=polled,
+    )
+    ctx = build_error_report_context(
+        [skud],
+        {"skud-1": metrics},
+        MonitoringSettings(),
+        recorder_problem_since_map={"skud-1": since},
+        report_at=polled,
+    )
+    assert ctx.problem_count == 1
+    row = ctx.rows[0]
+    assert row.system_kind == "skud"
+    assert row.system_label == "СКУД"
+    assert row.category_label == PING_CATEGORY_LABEL
+    assert row.problem_age_days_display == "2 сут."
+    assert len(ctx.sections) == 1
+    assert ctx.sections[0].is_ping_system is True
+
+
+def test_build_ping_problem_rows_skips_ok_devices() -> None:
+    polled = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    bio = _rec(id="bio-1", device_kind="bio", name="Bio-1", host="10.0.0.60")
+    metrics = RecorderMetricsRow(
+        recorder_id="bio-1",
+        model=None,
+        firmware_version=None,
+        device_online=True,
+        health_status="ok",
+        health_reason=None,
+        ntp_status=None,
+        time_skew_seconds=None,
+        storage_used_percent=None,
+        storage_status=None,
+        archive_start=None,
+        archive_end=None,
+        archive_days=None,
+        channel_count=0,
+        channels_ok=0,
+        channels_warn=0,
+        channels_error=0,
+        channels_unknown=0,
+        last_polled_at=polled,
+    )
+    rows = build_ping_problem_rows([bio], {"bio-1": metrics})
+    assert rows == []
 
 
 def test_error_report_skips_excluded() -> None:

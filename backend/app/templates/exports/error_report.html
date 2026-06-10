@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Отчёт по ошибкам дашбордов — Wisenet Диагностика</title>
+  <title>Отчёт о неисправностях ТСО — Wisenet Диагностика</title>
   <style>
     :root {
       --bg: #f5f6f8;
@@ -33,12 +33,53 @@
       padding: 24px 28px;
     }
     h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 1.1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
     .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
     .meta p { margin: 4px 0; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 16px 0 8px;
+    }
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .summary-card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .summary-card .label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .systems-list {
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.9rem;
+    }
+    .systems-list li {
+      padding: 4px 0;
+      border-bottom: 1px dashed var(--border);
+    }
+    .systems-list li:last-child { border-bottom: none; }
+    .systems-list .ok-note { color: var(--muted); font-style: italic; }
     table {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.875rem;
+      margin-bottom: 8px;
     }
     th, td {
       border: 1px solid var(--border);
@@ -49,6 +90,7 @@
     th { background: #eef0f4; font-weight: 600; }
     tr.row--warn { background: #fffdf5; }
     tr.row--error { background: #fff5f5; }
+    tr.row--offline { background: #fff5f5; }
     a.device-link {
       color: var(--ok-link);
       font-weight: 500;
@@ -61,6 +103,11 @@
       font-size: 0.8rem;
       font-family: ui-monospace, monospace;
       margin-top: 2px;
+    }
+    .section-meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin: -4px 0 10px;
     }
     .empty {
       padding: 24px;
@@ -76,6 +123,7 @@
     }
     .badge--warn { background: #fef3cd; color: var(--warn); }
     .badge--error { background: #fde8e8; color: var(--error); }
+    .badge--offline { background: #fde8e8; color: var(--error); }
     .badge--unknown { background: #eee; color: var(--muted); }
     footer {
       margin-top: 20px;
@@ -86,32 +134,80 @@
 </head>
 <body>
   <article class="report">
-    <h1>Отчёт по ошибкам дашбордов</h1>
+    <h1>Отчёт о неисправностях ТСО</h1>
     <div class="meta">
       <p><strong>Сформирован:</strong> {{ report.generated_at }}</p>
-      <p><strong>Записей с проблемами:</strong> {{ report.problem_count }}</p>
     </div>
 
-    {% if report.rows %}
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="value">{{ report.problem_count }}</div>
+        <div class="label">всего проблем</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ report.error_count }}</div>
+        <div class="label">критичных</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ report.warn_count }}</div>
+        <div class="label">предупреждений</div>
+      </div>
+    </div>
+
+    <p><strong>По системам:</strong></p>
+    <ul class="systems-list">
+      {% for kind, label in [
+        ('tsv', 'ТСВ'),
+        ('skud', 'СКУД'),
+        ('bio', 'Биотерминалы'),
+        ('sots', 'СОТС')
+      ] %}
+      {% set count = report.system_counts.get(kind, 0) %}
+      <li>
+        <strong>{{ label }}:</strong>
+        {% if count > 0 %}
+        {{ count }} {{ 'проблема' if count == 1 else ('проблемы' if count < 5 else 'проблем') }}
+        {% else %}
+        <span class="ok-note">без замечаний</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% if report.sections %}
+    {% for section in report.sections %}
+    <h2 id="section-{{ section.system_kind }}">{{ section.system_label }}</h2>
+    <p class="section-meta">
+      Критичных: {{ section.error_count }},
+      предупреждений: {{ section.warn_count }}
+    </p>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Объект</th>
-            <th>NVR</th>
+            <th>Устройство</th>
+            {% if not section.is_ping_system %}
             <th>Категория</th>
+            {% endif %}
             <th>Статус</th>
+            {% if not section.is_ping_system %}
             <th>Значение</th>
+            {% endif %}
             <th>Причина</th>
             <th>В проблеме</th>
             <th>Последний опрос</th>
           </tr>
         </thead>
         <tbody>
-          {% for row in report.rows %}
+          {% for row in section.rows %}
           <tr class="row--{{ row.status }}">
             <td>{{ row.object_name }}</td>
             <td>
+              {% if section.is_ping_system %}
+              {{ row.recorder_display_name }}
+              <span class="host-hint">{{ row.recorder.host }}{% if row.recorder.port not in [80, 443] %}:{{ row.recorder.port }}{% endif %}</span>
+              {% else %}
               <a
                 class="device-link"
                 href="{{ row.web_url }}"
@@ -120,12 +216,17 @@
                 title="{{ row.web_link_title }}"
               >{{ row.recorder_display_name }}</a>
               <span class="host-hint">{{ row.recorder.host }}{% if row.recorder.port not in [80, 443] %}:{{ row.recorder.port }}{% endif %}</span>
+              {% endif %}
             </td>
+            {% if not section.is_ping_system %}
             <td>{{ row.category_label }}</td>
+            {% endif %}
             <td>
               <span class="badge badge--{{ row.status }}">{{ row.status_label }}</span>
             </td>
+            {% if not section.is_ping_system %}
             <td>{{ row.value_display }}</td>
+            {% endif %}
             <td>{{ row.reason }}</td>
             <td title="{{ row.problem_age_title }}">
               {% if row.problem_age_days_display != "—" %}
@@ -141,12 +242,13 @@
         </tbody>
       </table>
     </div>
+    {% endfor %}
     {% else %}
     <p class="empty">Ошибки и предупреждения не обнаружены.</p>
     {% endif %}
 
     <footer>
-      Wisenet Диагностика · экспорт HTML-отчёта по состоянию дашбордов на вкладке «Объекты».
+      Wisenet Диагностика · сводный HTML-отчёт по всем системам ТСО (вкладка «Сводка»).
     </footer>
   </article>
 </body>

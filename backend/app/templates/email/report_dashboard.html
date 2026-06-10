@@ -56,14 +56,14 @@
       </td>
       <td width="50%">
         <div class="kpi-value">{{ recorders_with_errors }}</div>
-        <div class="kpi-label">NVR с ошибками</div>
+        <div class="kpi-label">устройств с ошибками</div>
       </td>
     </tr>
   </table>
   <p class="kpi-delta">
     К предыдущему дню с данными:
     проблемы <span class="{{ kpi_delta_problems.css }}">{{ kpi_delta_problems.text }}</span>,
-    NVR <span class="{{ kpi_delta_nvr.css }}">{{ kpi_delta_nvr.text }}</span>
+    устройств <span class="{{ kpi_delta_nvr.css }}">{{ kpi_delta_nvr.text }}</span>
   </p>
 
   <h2>Динамика за {{ trend_days_total }} дней</h2>
@@ -75,7 +75,7 @@
       <tr>
         <th>Дата</th>
         <th>Проблем</th>
-        <th>NVR</th>
+        <th>Устройств</th>
       </tr>
     </thead>
     <tbody>

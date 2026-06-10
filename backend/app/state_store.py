@@ -124,6 +124,7 @@ class SourceImportRow:
 
 
 _CATEGORY_PROBLEM_STATUSES = frozenset({"warn", "error"})
+_RECORDER_PROBLEM_STATUSES = frozenset({"warn", "error", "offline"})
 # unknown между warn/error не завершает эпизод (пропуск опроса, нет метрик).
 _TRANSPARENT_GAP_STATUSES = frozenset({"unknown"})
 
@@ -778,6 +779,45 @@ class StateStore:
                 result[(rid, cat)] = since
         return result
 
+    def list_recorder_status_history(
+        self,
+        recorder_id: str,
+        *,
+        limit: int = 500,
+    ) -> list[HistoryRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM status_history
+                WHERE entity_type = 'recorder' AND entity_id = ?
+                ORDER BY recorded_at ASC
+                LIMIT ?
+                """,
+                (recorder_id, limit),
+            ).fetchall()
+        return [_history_from_row(r) for r in rows]
+
+    def get_recorder_problem_since(self, recorder_id: str) -> Optional[datetime]:
+        rows = self.list_recorder_status_history(recorder_id)
+        return _recorder_problem_episode_start(rows)
+
+    def recorder_problem_since_map(self) -> dict[str, datetime]:
+        with self._connect() as conn:
+            ids = conn.execute(
+                """
+                SELECT DISTINCT entity_id
+                FROM status_history
+                WHERE entity_type = 'recorder'
+                """
+            ).fetchall()
+        result: dict[str, datetime] = {}
+        for row in ids:
+            rid = row["entity_id"]
+            since = self.get_recorder_problem_since(rid)
+            if since is not None:
+                result[rid] = since
+        return result
+
     def insert_poll_attempt(
         self,
         *,
@@ -1073,6 +1113,23 @@ def _problem_episode_start(
     start = latest.recorded_at
     for row in reversed(rows[:-1]):
         if row.status in _CATEGORY_PROBLEM_STATUSES:
+            start = row.recorded_at
+        elif row.status in _TRANSPARENT_GAP_STATUSES:
+            continue
+        else:
+            break
+    return start
+
+
+def _recorder_problem_episode_start(rows: list[HistoryRow]) -> Optional[datetime]:
+    if not rows:
+        return None
+    latest = rows[-1]
+    if latest.status not in _RECORDER_PROBLEM_STATUSES:
+        return None
+    start = latest.recorded_at
+    for row in reversed(rows[:-1]):
+        if row.status in _RECORDER_PROBLEM_STATUSES:
             start = row.recorded_at
         elif row.status in _TRANSPARENT_GAP_STATUSES:
             continue

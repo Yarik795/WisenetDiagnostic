@@ -499,11 +499,12 @@ def test_objects_export_errors_html(client: TestClient) -> None:
         last_polled_at=datetime.now(timezone.utc),
     )
 
-    r = client.get("/monitoring/export/errors.html")
+    r = client.get("/summary/export/errors.html")
     assert r.status_code == 200
     assert "text/html" in r.headers.get("content-type", "")
     assert "attachment" in r.headers.get("content-disposition", "").lower()
-    assert "Отчёт по ошибкам дашбордов" in r.text
+    assert "wisenet-tso-errors-" in r.headers.get("content-disposition", "")
+    assert "Отчёт о неисправностях ТСО" in r.text
     assert "NVR-main" in r.text
     assert 'href="http://admin:s3cret@10.1.2.3"' in r.text
     assert "Открыть web-интерфейс NVR" in r.text
@@ -512,13 +513,20 @@ def test_objects_export_errors_html(client: TestClient) -> None:
     assert "Не пересылайте файл" not in r.text
     assert "Режим ссылок на NVR" not in r.text
 
-    page = client.get("/monitoring")
+    legacy = client.get("/monitoring/export/errors.html", follow_redirects=False)
+    assert legacy.status_code == 302
+    assert legacy.headers["location"] == "/summary/export/errors.html"
+
+    page = client.get("/summary")
     assert "Экспорт отчета" in page.text
-    assert "/monitoring/export/errors.html" in page.text
-    assert "/monitoring/report/email" in page.text
+    assert "/summary/export/errors.html" in page.text
+    assert "/summary/report/email" in page.text
     assert "Отправить отчёт на почту" in page.text
     assert "Экспорт отчёта по ошибкам" not in page.text
     assert "Экспорт с авто-входом" not in page.text
+
+    monitoring_page = client.get("/monitoring")
+    assert "Экспорт отчета" not in monitoring_page.text
 
 
 def test_objects_report_email_post(client: TestClient) -> None:

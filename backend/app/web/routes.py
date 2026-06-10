@@ -655,19 +655,42 @@ def objects_report_email(
     return monitoring_report_email(request, store, state)
 
 
-@router.post("/monitoring/report/email", response_class=HTMLResponse)
-def monitoring_report_email(
+def _send_report_email_response(
     request: Request,
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    redirect_path: str,
 ) -> Response:
     from ..report_delivery import ReportDeliveryService
 
     service = ReportDeliveryService(config_store=store, state_store=state)
     result = service.send_report_now(trigger="manual")
     if result.ok:
-        return _redirect("/monitoring", "success", result.message, request=request)
-    return _redirect("/monitoring", "error", result.message, request=request)
+        return _redirect(redirect_path, "success", result.message, request=request)
+    return _redirect(redirect_path, "error", result.message, request=request)
+
+
+@router.post("/summary/report/email", response_class=HTMLResponse)
+def summary_report_email(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _send_report_email_response(
+        request, store, state, redirect_path="/summary"
+    )
+
+
+@router.post("/monitoring/report/email", response_class=HTMLResponse)
+def monitoring_report_email(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _send_report_email_response(
+        request, store, state, redirect_path="/monitoring"
+    )
 
 
 @router.get("/objects/partials/health-dashboard", include_in_schema=False)
@@ -910,16 +933,9 @@ def bio_groups_partial(
     )
 
 
-@router.get("/objects/export/errors.html", include_in_schema=False)
-def objects_export_errors_redirect() -> RedirectResponse:
-    return RedirectResponse(url="/monitoring/export/errors.html", status_code=302)
-
-
-@router.get("/monitoring/export/errors.html", response_class=HTMLResponse)
-def monitoring_export_errors_html(
-    request: Request,
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
+def _export_errors_html_response(
+    store: ConfigStore,
+    state: StateStore,
 ) -> HTMLResponse:
     config = store.load()
     recorders = store.list_recorders()
@@ -932,10 +948,11 @@ def monitoring_export_errors_html(
         ntp_server=config.monitoring.ntp_server or "",
         device_auth="userinfo",
         problem_since_map=state.category_problem_since_map(),
+        recorder_problem_since_map=state.recorder_problem_since_map(),
         excluded_ids=excluded_ids_set(config),
     )
     filename = (
-        "wisenet-dashboard-errors-"
+        "wisenet-tso-errors-"
         f"{format_for_display(datetime.now(timezone.utc), '%Y%m%d-%H%M')}.html"
     )
     html = render_error_report_html(report)
@@ -944,6 +961,24 @@ def monitoring_export_errors_html(
         f'attachment; filename="{filename}"'
     )
     return response
+
+
+@router.get("/objects/export/errors.html", include_in_schema=False)
+def objects_export_errors_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/summary/export/errors.html", status_code=302)
+
+
+@router.get("/monitoring/export/errors.html", include_in_schema=False)
+def monitoring_export_errors_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/summary/export/errors.html", status_code=302)
+
+
+@router.get("/summary/export/errors.html", response_class=HTMLResponse)
+def summary_export_errors_html(
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _export_errors_html_response(store, state)
 
 
 @router.get("/recorders", include_in_schema=False)

@@ -156,5 +156,5 @@ def build_email_subject(
         delta_part = " (без изм.)"
     return (
         f"{settings.subject}: {problem_count} проблем{delta_part}, "
-        f"{recorders_with_errors} NVR — {date_part}"
+        f"{recorders_with_errors} устройств — {date_part}"
     )

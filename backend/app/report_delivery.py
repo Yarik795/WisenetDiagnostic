@@ -255,6 +255,7 @@ class ReportDeliveryService:
             ntp_server=config.monitoring.ntp_server or "",
             device_auth="userinfo",
             problem_since_map=self.state_store.category_problem_since_map(),
+            recorder_problem_since_map=self.state_store.recorder_problem_since_map(),
             excluded_ids=excluded_ids_set(config),
         )
         problem_count, recorders_with_errors, category_counts = report_metrics_from_context(
@@ -263,7 +264,7 @@ class ReportDeliveryService:
 
         attachment_html = render_error_report_html(report)
         attachment_name = (
-            "wisenet-dashboard-errors-"
+            "wisenet-tso-errors-"
             f"{format_for_delivery_filename(now)}.html"
         )
         dashboard_ctx = build_email_dashboard_context(
