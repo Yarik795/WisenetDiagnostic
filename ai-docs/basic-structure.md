@@ -1,6 +1,8 @@
 # Базовая структура проекта Wisenet Диагностика
 
-Платформа мониторинга исправности видеонаблюдения Hanwha Wisenet (NVR). Backend на Python (FastAPI), веб-интерфейс — серверный рендеринг (Jinja2 + HTMX), опрос устройств по протоколу SUNAPI (HTTP CGI).
+> Актуально на версию 0.4.0 («Дашборд руководителя ТСО»), июнь 2026.
+
+Платформа мониторинга исправности видеонаблюдения Hanwha Wisenet (NVR) и смежных систем (СКУД, биотерминалы, СОТС). Backend на Python (FastAPI), веб-интерфейс — серверный рендеринг (Jinja2 + HTMX), опрос NVR по протоколу SUNAPI (HTTP CGI), прочие устройства — ICMP ping. Email-сводки и отчёт «Статус оплаты» из Excel-выгрузок.
 
 ---
 
@@ -9,17 +11,22 @@
 | Файл / каталог | Назначение |
 |----------------|------------|
 | `README.md` | Краткое описание проекта, ссылки на документацию |
+| `AGENTS.md` | Карта проекта для ИИ-агента: маршрутизация задач, инварианты |
 | `config.example.json` | Шаблон конфигурации: учётные данные, параметры мониторинга, список регистраторов |
 | `config.json` | Рабочий конфиг (создаётся вручную; не коммитится при наличии секретов) |
 | `backend/` | Приложение: API, логика опроса, UI |
-| `scripts/` | Утилиты обслуживания (импорт из CMDB) |
+| `scripts/` | Утилиты обслуживания и диагностики (CMDB, дампы SUNAPI, тест SMTP) |
 | `docs/` | Требования, инструкция запуска, справочники SUNAPI/Open Platform |
 | `ai-docs/` | Документация для разработки и ИИ-ассистентов |
+| `.cursor/rules/` | Правила для ИИ-агента (поддержание документации) |
 | `create-project-archive.ps1` | Создание ZIP-архива проекта (Windows) |
 
 **Runtime-артефакты** (создаются при работе, в `.gitignore`):
 
 - `data/monitoring.db` — SQLite с метриками каналов, историей опросов
+- `data/report_delivery_history.json` — журнал отправок email-сводки
+- `data/uploads/`, `data/reports/` — загруженные Excel-файлы и собранные отчёты
+- `inputData/` — исходные данные (cmdb.xlsx, выгрузки заявок)
 - `logs/wisenet.log` — структурированный JSON-лог
 
 Переменные окружения: `CONFIG_PATH` — путь к `config.json`; путь к БД задаётся в `StateStore` (по умолчанию `data/monitoring.db` от корня проекта).
@@ -41,11 +48,14 @@
 
 | Модуль | Назначение |
 |--------|------------|
-| `main.py` | FastAPI-приложение: lifespan (планировщик, менеджер задач опроса), HTTP-middleware логирования, монтирование `/static`, подключение веб-роутера |
-| `models.py` | Pydantic-модели: `Recorder`, `AppConfig`, `MonitoringSettings`, статусы проверки |
+| `main.py` | FastAPI-приложение: lifespan (планировщик, менеджеры задач опроса и отчётов), HTTP-middleware логирования, монтирование `/static`, подключение веб-роутера |
+| `models.py` | Pydantic-модели: `Recorder`, `AppConfig`, `MonitoringSettings`, `EmailReportSettings`, статусы проверки |
 | `config_store.py` | Чтение/запись `config.json` с блокировкой и атомарной заменой файла; CRUD регистраторов и учётных данных |
-| `state_store.py` | SQLite: каналы, агрегированные метрики регистраторов, история опросов |
+| `state_store.py` | SQLite: каналы, агрегированные метрики регистраторов, история опросов, журнал попыток, импорты источников |
 | `logging_config.py` | JSON-логи в `logs/wisenet.log`, фабрика `get_logger` |
+| `display_time.py` | Отображаемый часовой пояс (по умолчанию Europe/Moscow), конвертация UTC → локальное для UI и писем |
+| `device_kinds.py` | Виды систем устройств (`tsv`/`skud`/`bio`/`sots`), метки и определение вида по записи `Recorder` |
+| `exclusions.py` | Исключения регистраторов из опроса и статистики (`config.exclusions`), фильтр `pollable_recorders` |
 
 #### Опрос и мониторинг
 
@@ -54,20 +64,39 @@
 | `sunapi.py` | Базовая проверка доступности: `deviceinfo` через HTTP, разбор ответа, `check_recorder` |
 | `sunapi_extended.py` | Полный опрос NVR: каналы, диски, архив, NTP, события; `poll_recorder`, включение NTP |
 | `sunapi_parsing.py` | Парсинг тел SUNAPI (key=value, индексированные поля, JSON, даты) |
+| `ping_check.py` | ICMP ping для устройств СКУД и биотерминалов (без SUNAPI) |
 | `monitoring.py` | Оценка здоровья каналов и регистраторов, сохранение результатов в БД, циклы `run_poll_cycle` / `run_inventory_cycle`, NTP fix |
 | `health.py` | Перечисление `HealthStatus`, агрегация «худшего» статуса |
-| `scheduler.py` | Фоновый asyncio-цикл: периодический короткий/полный опрос по интервалам из конфига, суточный inventory |
+| `scheduler.py` | Фоновый asyncio-цикл: периодический короткий/полный опрос по интервалам из конфига, суточный inventory, тик плановой email-рассылки |
 | `poll_jobs.py` | Менеджер фоновых задач опроса (ручной и по расписанию), статус для UI |
+| `serial_manufacture_date.py` | Дата производства устройства по серийному номеру Samsung/Hanwha |
+
+#### Отчёты и рассылка
+
+| Модуль | Назначение |
+|--------|------------|
+| `report_delivery.py` | Плановая отправка email-сводки: расписание `email_report.send_time`, catchup, сборка письма |
+| `report_delivery_history.py` | Журнал отправок (`data/report_delivery_history.json`): триггеры scheduled/catchup/manual |
+| `email_sender.py` | SMTP-отправка письма (HTML-тело + вложение), настройки из `EmailReportSettings` |
+| `cashflow_report.py` | Отчёт «Статус оплаты» из Excel-выгрузки заявок: разбор, артефакты в `data/reports/` |
+| `report_jobs.py` | Менеджер фоновых задач построения отчётов и импорта источников (прогресс для UI) |
+
+#### Источники данных и CMDB
+
+| Модуль | Назначение |
+|--------|------------|
+| `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки): спецификации, загрузка, импорт |
+| `cmdb_sync.py` | Синхронизация устройств в `config.json` из `cmdb.xlsx` (с резервной копией конфига) |
 
 #### Веб-слой (`backend/app/web/`)
 
 | Модуль | Назначение |
 |--------|------------|
-| `routes.py` | HTML-страницы и HTMX-partials: объекты, регистраторы, каналы, время, статус, настройки, опрос, NTP |
+| `routes.py` | HTML-страницы и HTMX-partials: сводка, мониторинг ТСВ, СКУД/био, источники, оплата, настройки, опрос, NTP, email-отчёты |
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/objects` (группы или `?view=table`), `/status` (сводка дашбордов), `/channels`, `/history`, `/settings`; редиректы `/recorders` → `/objects?view=table`, `/time` → `/status?category=time`; действия — `POST /monitoring/poll-all`, `inventory-all`, `ntp-fix-all`, проверка и NTP по одному регистратору.
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/payments` — отчёт «Статус оплаты»; `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -75,13 +104,20 @@
 
 | Модуль | Назначение |
 |--------|------------|
-| `dependencies.py` | FastAPI Depends: синглтоны `ConfigStore`, `StateStore`, `PollJobManager` |
+| `dependencies.py` | FastAPI Depends: синглтоны `ConfigStore`, `StateStore`, `PollJobManager`, `ReportJobManager` |
 | `grouping.py` | Группировка регистраторов по `object_name`, сортировка, подсчёт проблем |
 | `health_classifiers.py` | Категории здоровья (температура, диски, каналы, архив, время) |
 | `health_dashboard.py` | Контекст дашборда исправности по категориям |
+| `summary_dashboard.py` | Контекст сводной страницы `/summary`: агрегаты по видам систем |
+| `kind_dashboard.py` | Дашборд по виду системы (ТСВ / СКУД / биотерминалы / СОТС) |
 | `time_dashboard.py` | Контекст дашборда синхронизации времени / NTP |
 | `metrics_helpers.py` | Форматирование метрик (диски, архив, skew, события) |
-| `error_report.py` | Сводный отчёт об ошибках для экспорта HTML |
+| `error_report.py` | Сводный отчёт об ошибках (данные) |
+| `error_report_render.py` | Рендер HTML-отчёта об ошибках (экспорт и вложение письма) |
+| `email_history_series.py` | Ряды данных по дням для трендов email-сводки |
+| `email_charts.py` | SVG-графики/спарклайны для тела письма |
+| `payments.py` | Контекст страницы отчёта «Статус оплаты» |
+| `source_imports.py` | Контекст страницы источников данных (импорты `inputData/`) |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
 #### Шаблоны и статика
@@ -89,9 +125,9 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `channels.html`, `time.html`, `status.html`, `settings.html`, `history.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `payments.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
-- `exports/error_report.html` — печатный/экспортный отчёт
+- `exports/` — печатные/экспортные отчёты (отчёт об ошибках)
 
 `backend/app/static/`:
 
@@ -106,6 +142,13 @@
 |------|------------|
 | `cmdb_reader.py` | Чтение `cmdb.xlsx`: фильтр по типу «Видеорегистраторы», слияние с существующими записями в конфиге |
 | `sync_config_from_cmdb.py` | CLI: обновление списка `recorders` в `config.json` из CMDB с резервной копией |
+| `cashflow.py` | CLI-сборка отчёта «Статус оплаты» из Excel-выгрузки |
+| `send_test_email.py` | Проверка SMTP-настроек без UI |
+| `dump_nvr_api_samples.py` | Дамп сырых ответов SUNAPI с реального NVR (для `docs/nvr-samples/`) |
+| `dump_authfail_comparison.py` | Диагностика ошибок аутентификации на устройствах |
+| `diagnose_problem_duration.py` | Диагностика длительности проблем по истории БД |
+| `export_recorders_serial.py` | Выгрузка серийных номеров регистраторов |
+| `probe_nvr_manufacture_date.py` | Проверка определения даты производства по серийнику |
 
 Запуск из корня проекта; скрипты добавляют `backend` и `scripts` в `sys.path` и используют `app.config_store` / `app.models`.
 
@@ -148,6 +191,10 @@ monitoring.py
   └── ui.metrics_helpers (пороги событий, температура дисков)
 
 scheduler.py → poll_jobs → monitoring
+scheduler.py → report_delivery → email_sender + report_delivery_history
+                                  + ui.error_report_render, ui.email_charts (содержимое письма)
+
+web/routes.py → report_jobs → data_sources → cashflow_report / cmdb_sync
 ```
 
-Версия API в `main.py`: 0.3.0; описание этапа — мониторинг регистраторов и каналов по SUNAPI.
+Версия API в `main.py`: 0.4.0; заголовок — «Дашборд руководителя ТСО».

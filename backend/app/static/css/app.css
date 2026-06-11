@@ -911,6 +911,16 @@ tr.recorder-row--excluded {
   animation: pulse 1s ease-in-out infinite;
 }
 
+.status-badge-label--ok,
+.status-badge-label--online { color: var(--status-ok); font-weight: 500; }
+.status-badge-label--error,
+.status-badge-label--offline { color: var(--status-error); font-weight: 500; }
+.status-badge-label--warn { color: var(--status-warn); font-weight: 500; }
+.status-badge-label--unknown,
+.status-badge-label--excluded,
+.status-badge-label--disabled { color: var(--text-muted); }
+.status-badge-label--checking { color: var(--accent); }
+
 @keyframes pulse {
   50% { opacity: 0.4; }
 }
@@ -1281,7 +1291,78 @@ tr.recorder-row--excluded {
 
 .poll-auto-controls,
 .poll-auto-form {
+  display: inline-flex;
+  align-items: center;
+}
+
+.page-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-switch-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.toggle-switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.toggle-switch-slider {
+  position: relative;
   display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  background: var(--border);
+  border-radius: 11px;
+  transition: background 0.2s ease;
+}
+
+.toggle-switch-slider::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch-input:checked + .toggle-switch-slider {
+  background: var(--accent);
+}
+
+.toggle-switch-input:checked + .toggle-switch-slider::after {
+  transform: translateX(18px);
+}
+
+.toggle-switch-input:focus-visible + .toggle-switch-slider {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @keyframes spin {

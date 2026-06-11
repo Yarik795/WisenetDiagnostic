@@ -415,6 +415,8 @@ def summary_page(
     request: Request,
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -423,6 +425,14 @@ def summary_page(
             "active_nav": "summary",
             "toast": _toast_from_query(request),
             **summary_page_context(store, state),
+            **_poll_ui_ctx(
+                poll_jobs,
+                store,
+                scheduler,
+                refresh_url="/summary",
+                refresh_target=".page-content",
+                refresh_select=".page-content",
+            ),
         },
     )
 
@@ -1902,7 +1912,7 @@ def _poll_ui_ctx(
         ctx.update(
             {
                 "poll_post_url": "/monitoring/poll-all",
-                "poll_button_label": "Опросить все NVR",
+                "poll_button_label": "Опросить все устройства",
                 "poll_button_title": (
                     "Обновляет статус NVR, диски, время и состояние каналов; "
                     "инвентаризация — детальный архив по каждому каналу"
@@ -1960,6 +1970,7 @@ def _poll_job_panel_response(
             "refresh_select": refresh_select,
             "auto_poll_paused": auto_paused,
             "auto_poll_active": not auto_paused,
+            "poll_button_label": "Опросить все устройства",
         },
     )
 

@@ -51,6 +51,10 @@ async def test_scheduler_skips_scheduled_poll_when_paused(
         return_value=True,
     ) as mock_scheduled:
         await scheduler._tick()
+        assert mock_scheduled.await_count == 0
+
+        scheduler.resume_auto()
+        await scheduler._tick()
         assert mock_scheduled.await_count == 1
 
         scheduler.pause_auto()
@@ -107,9 +111,10 @@ def client(tmp_path: Path) -> TestClient:
 def test_objects_page_has_auto_poll_controls(client: TestClient) -> None:
     r = client.get("/monitoring")
     assert r.status_code == 200
-    assert "Остановить обновление" in r.text
-    assert 'hx-post="/monitoring/auto-poll/stop"' in r.text
+    assert "Автообновление" in r.text
+    assert 'hx-post="/monitoring/auto-poll/resume"' in r.text
     assert 'id="poll-page-actions"' in r.text
+    assert "Экспорт отчета" in r.text
 
 
 def _scheduler_from_client(client: TestClient) -> MonitoringScheduler:
@@ -128,7 +133,8 @@ def test_auto_poll_stop_and_resume(client: TestClient) -> None:
         },
     )
     assert r_stop.status_code == 200
-    assert "Возобновить обновление" in r_stop.text
+    assert "Автообновление" in r_stop.text
+    assert 'hx-post="/monitoring/auto-poll/resume"' in r_stop.text
     assert "приостановлен" in r_stop.text.lower()
     assert scheduler.is_auto_paused()
 
@@ -140,7 +146,7 @@ def test_auto_poll_stop_and_resume(client: TestClient) -> None:
         },
     )
     assert r_resume.status_code == 200
-    assert "Остановить обновление" in r_resume.text
+    assert 'hx-post="/monitoring/auto-poll/stop"' in r_resume.text
     assert not scheduler.is_auto_paused()
 
 

@@ -526,7 +526,9 @@ def test_objects_export_errors_html(client: TestClient) -> None:
     assert "Экспорт с авто-входом" not in page.text
 
     monitoring_page = client.get("/monitoring")
-    assert "Экспорт отчета" not in monitoring_page.text
+    assert "Экспорт отчета" in monitoring_page.text
+    assert "Автообновление" in monitoring_page.text
+    assert "Опросить все устройства" in monitoring_page.text
 
 
 def test_objects_report_email_post(client: TestClient) -> None:

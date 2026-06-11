@@ -2,7 +2,10 @@
 {% block title %}{{ section_kind_label }} — Дашборд руководителя ТСО{% endblock %}
 {% block page_title %}{{ section_kind_label }}{% endblock %}
 {% block page_actions %}
-{% include "partials/poll_page_actions.html" %}
+<div class="page-actions-bar">
+  {% include "partials/report_actions.html" %}
+  {% include "partials/poll_page_actions.html" %}
+</div>
 {% endblock %}
 {% block content %}
 {% include "partials/fleet_overview.html" %}

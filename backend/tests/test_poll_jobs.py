@@ -336,7 +336,7 @@ def test_poll_cancel_endpoint(poll_web_client: tuple) -> None:
             data=_POLL_REFRESH,
         )
     assert r.status_code == 200
-    assert "poll-job-panel--idle" in r.text or "Опросить все NVR" in r.text
+    assert "poll-job-panel--idle" in r.text or "Опросить все устройства" in r.text
     assert "Остановить опрос" not in r.text
 
 
@@ -378,7 +378,7 @@ def test_poll_all_endpoint_returns_progress_panel(poll_web_client: tuple) -> Non
     assert "poll-job-panel" in r.text
     assert "poll-job-panel--compact" in r.text
     assert "poll-job-line" in r.text
-    assert "Опросить все NVR" in r.text
+    assert "Опросить все устройства" in r.text
     assert "poll-job-results" not in r.text
     assert "Сейчас:" not in r.text
     assert "Автоматический опрос" not in r.text

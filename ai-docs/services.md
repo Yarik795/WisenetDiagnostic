@@ -166,10 +166,14 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 **Назначение:** фоновый asyncio-цикл с интервалом `monitoring.poll_interval_minutes`.
 
-На каждом тике:
+По умолчанию `_auto_paused=True`: плановый опрос не запускается, пока пользователь не включит **Автообновление** (`POST /monitoring/auto-poll/resume`). Пауза — `POST /monitoring/auto-poll/stop`. Состояние только в памяти процесса.
+
+На каждом тике (если автообновление включено):
 
 1. Раз в 24 ч — inventory (`include_inventory=True`).
 2. Иначе — короткий опрос; полный inventory по каналам/архиву — если прошло `full_poll_interval_minutes` с последнего полного.
+
+Рассылка email (`ReportDeliveryService.tick_sync`) выполняется и при паузе автоопроса.
 
 Создаётся в `main.py` lifespan вместе с `PollJobManager`; останавливается при shutdown.
 

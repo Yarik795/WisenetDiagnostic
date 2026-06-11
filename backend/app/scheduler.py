@@ -27,7 +27,7 @@ class MonitoringScheduler:
         self._stop = asyncio.Event()
         self._last_full: datetime | None = None
         self._last_inventory: datetime | None = None
-        self._auto_paused = False
+        self._auto_paused = True
 
     def is_auto_paused(self) -> bool:
         return self._auto_paused

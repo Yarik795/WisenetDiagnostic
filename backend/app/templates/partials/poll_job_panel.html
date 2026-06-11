@@ -106,7 +106,7 @@
         class="btn btn-outline btn-sm poll-job-btn"
         {% if job.is_active %}disabled{% endif %}
         title="{{ button_title }}"
-      >Опросить все NVR</button>
+      >{{ poll_button_label | default('Опросить все устройства') }}</button>
     </form>
     {% else %}
     <form
