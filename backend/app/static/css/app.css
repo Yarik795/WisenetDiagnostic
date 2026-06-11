@@ -647,6 +647,14 @@ a:hover {
   overflow: hidden;
 }
 
+.card--padded {
+  padding: 20px 24px;
+}
+
+.mt-24 {
+  margin-top: 24px;
+}
+
 .object-group {
   margin-bottom: 16px;
 }
@@ -1817,6 +1825,65 @@ tr.recorder-row--excluded {
 
 .source-cmdb-last {
   margin: 0 0 16px;
+}
+
+.source-data-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 20px 24px;
+}
+
+.source-row + .source-row {
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.source-row-main {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.source-row-btn {
+  width: 100%;
+}
+
+.source-row-updated {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.source-row-updated--empty {
+  font-style: italic;
+  color: var(--status-warn);
+}
+
+.source-row-updated-date {
+  color: var(--text-primary);
+}
+
+.source-job-slot:not(:empty) {
+  margin-top: 12px;
+}
+
+.source-job-panel {
+  margin-top: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+}
+
+@media (max-width: 600px) {
+  .source-row-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.poll-job-line--success {
+  color: var(--status-ok, #34d399);
 }
 
 .mono {

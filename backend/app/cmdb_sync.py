@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .state_store import StateStore
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CMDB_PATH = PROJECT_ROOT / "cmdb.xlsx"
+DEFAULT_CMDB_PATH = PROJECT_ROOT / "data" / "uploads" / "cmdb.xlsx"
 
 _SCRIPTS = PROJECT_ROOT / "scripts"
 if str(_SCRIPTS) not in sys.path:
@@ -92,6 +92,7 @@ def sync_from_cmdb(
     state: Optional["StateStore"] = None,
     backup: bool = True,
     dry_run: bool = False,
+    record_import: bool = True,
 ) -> CmdbSyncResult:
     path = (cmdb_path or DEFAULT_CMDB_PATH).resolve()
 
@@ -164,7 +165,7 @@ def sync_from_cmdb(
 
     if _configs_equivalent(old_config, new_config):
         message = _no_change_message(len(merged), parsed.counts_by_kind)
-        if state is not None:
+        if state is not None and record_import:
             state.record_source_import(
                 "cmdb",
                 filename=path.name,
@@ -199,13 +200,14 @@ def sync_from_cmdb(
     if state is not None:
         for recorder_id in removed_ids:
             state.delete_recorder_data(recorder_id)
-        state.record_source_import(
-            "cmdb",
-            filename=path.name,
-            record_count=len(merged),
-            status="ok",
-            message=_success_message(stats, len(merged), parsed.counts_by_kind),
-        )
+        if record_import:
+            state.record_source_import(
+                "cmdb",
+                filename=path.name,
+                record_count=len(merged),
+                status="ok",
+                message=_success_message(stats, len(merged), parsed.counts_by_kind),
+            )
 
     return CmdbSyncResult(
         ok=True,

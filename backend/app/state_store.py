@@ -372,7 +372,7 @@ class StateStore:
             row = conn.execute(
                 """
                 SELECT * FROM source_imports
-                WHERE source_key = ?
+                WHERE source_key = ? AND status = 'ok'
                 ORDER BY imported_at DESC
                 LIMIT 1
                 """,

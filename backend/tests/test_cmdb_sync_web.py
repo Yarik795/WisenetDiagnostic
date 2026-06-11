@@ -85,18 +85,30 @@ def client(tmp_path: Path) -> TestClient:
     app.dependency_overrides.clear()
 
 
-def test_sources_page_has_cmdb_sync_button(client: TestClient) -> None:
+def _setup_input_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    input_dir = tmp_path / "inputData"
+    input_dir.mkdir()
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    monkeypatch.setattr("app.data_sources.INPUT_DATA_DIR", input_dir)
+    monkeypatch.setattr("app.data_sources.UPLOADS_DIR", uploads)
+    return input_dir
+
+
+def test_sources_page_has_load_buttons(client: TestClient) -> None:
     r = client.get("/sources")
     assert r.status_code == 200
-    assert "Обновить из CMDB" in r.text
-    assert 'hx-post="/sources/sync-cmdb"' in r.text
-    assert 'hx-target="body"' in r.text
-    assert 'hx-swap="none"' in r.text
+    assert "Обновить CMDB" in r.text
+    assert "Обновить заявки с ПП" in r.text
+    assert 'hx-post="/sources/cmdb/load"' in r.text
+    assert 'hx-post="/sources/requests/load"' in r.text
+    assert "Данные не загружены" in r.text
 
 
-def test_sync_cmdb_missing_file(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    missing = Path("/nonexistent/cmdb-missing-test.xlsx")
-    monkeypatch.setattr("app.cmdb_sync.DEFAULT_CMDB_PATH", missing)
+def test_sync_cmdb_missing_file(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_input_data(tmp_path, monkeypatch)
     r = client.post(
         "/objects/sync-cmdb",
         follow_redirects=False,
@@ -108,10 +120,9 @@ def test_sync_cmdb_missing_file(client: TestClient, monkeypatch: pytest.MonkeyPa
 
 
 def test_sync_cmdb_missing_file_without_htmx(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    missing = Path("/nonexistent/cmdb-missing-test.xlsx")
-    monkeypatch.setattr("app.cmdb_sync.DEFAULT_CMDB_PATH", missing)
+    _setup_input_data(tmp_path, monkeypatch)
     r = client.post("/objects/sync-cmdb", follow_redirects=False)
     assert r.status_code == 303
     loc = r.headers["location"]
@@ -124,6 +135,7 @@ def test_sync_cmdb_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    input_dir = _setup_input_data(tmp_path, monkeypatch)
     grid = _grid_with_data(
         [
             "538000001",
@@ -152,9 +164,8 @@ def test_sync_cmdb_success(
             FUNCTIONAL_TYPE_VIDEO,
         ],
     )
-    cmdb_path = tmp_path / "cmdb.xlsx"
+    cmdb_path = input_dir / "cmdb-export.xlsx"
     _write_cmdb_xlsx(cmdb_path, grid)
-    monkeypatch.setattr("app.cmdb_sync.DEFAULT_CMDB_PATH", cmdb_path)
 
     r = client.post(
         "/objects/sync-cmdb",
@@ -170,8 +181,50 @@ def test_sync_cmdb_success(
     assert "Объект А" in page.text
 
     sources = client.get("/sources")
-    assert "CMDB" in sources.text
-    assert "cmdb.xlsx" in sources.text
+    assert "Обновлено:" in sources.text
+    assert "cmdb-export.xlsx" in sources.text
+
+
+def test_sources_load_cmdb_returns_job_panel(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_dir = _setup_input_data(tmp_path, monkeypatch)
+    grid = _grid_with_data(
+        [
+            "538000001",
+            "Оборудование ТСО",
+            "10.88.1.2",
+            "",
+            "",
+            "Объект B",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Hanwha",
+            "HRX-1620",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            FUNCTIONAL_TYPE_VIDEO,
+        ],
+    )
+    _write_cmdb_xlsx(input_dir / "cmdb.xlsx", grid)
+
+    r = client.post("/sources/cmdb/load")
+    assert r.status_code == 200
+    assert "poll-job-panel" in r.text
+    assert "progressbar" in r.text.lower() or "progress" in r.text.lower()
 
 
 def test_sync_from_cmdb_replaces_recorders(

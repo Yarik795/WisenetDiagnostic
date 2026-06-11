@@ -1,43 +1,41 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Any
 
-from ..cashflow_report import (
-    input_data_dir,
-    requests_file_info,
-    requests_file_path,
-    requests_source_file_info,
-)
-from ..cmdb_sync import DEFAULT_CMDB_PATH
-from ..device_kinds import source_label
+from ..data_sources import SOURCES, SourceSpec, input_data_dir
+from ..report_jobs import ReportJobManager
 from ..state_store import SourceImportRow, StateStore
-from .payments import format_file_size
 
 
-def sources_page_context(state: StateStore) -> dict:
+def sources_page_context(
+    state: StateStore,
+    report_jobs: ReportJobManager,
+) -> dict[str, Any]:
+    source_items = [
+        _source_item_context(spec, state, report_jobs) for spec in SOURCES.values()
+    ]
     imports = state.list_source_imports(limit=50)
-    latest_cmdb = state.get_latest_source_import("cmdb")
-    latest_requests = state.get_latest_source_import("requests")
-    cmdb_path = DEFAULT_CMDB_PATH
-    requests_info = requests_file_info()
-    source_info = requests_source_file_info()
     return {
         "input_data_path": input_data_dir(),
-        "requests_source_file": source_info,
-        "requests_source_file_size": format_file_size(source_info["size"])
-        if source_info
-        else None,
+        "source_items": source_items,
         "source_imports": imports,
-        "latest_cmdb_import": latest_cmdb,
-        "latest_requests_import": latest_requests,
-        "cmdb_path": cmdb_path,
-        "cmdb_exists": cmdb_path.is_file(),
-        "requests_path": requests_file_path(),
-        "requests_exists": requests_info is not None,
-        "requests_file_size": format_file_size(requests_info["size"])
-        if requests_info
-        else None,
-        "source_label": source_label,
+    }
+
+
+def _source_item_context(
+    spec: SourceSpec,
+    state: StateStore,
+    report_jobs: ReportJobManager,
+) -> dict[str, Any]:
+    latest = state.get_latest_source_import(spec.key)
+    active_job = report_jobs.get_active_job(spec.key)
+    return {
+        "key": spec.key,
+        "label": spec.label,
+        "button_label": spec.button_label,
+        "button_title": spec.button_title,
+        "last_import": latest,
+        "active_job": active_job,
     }
 
 

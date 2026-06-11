@@ -1,0 +1,26 @@
+<div class="source-row" id="source-row-{{ key }}">
+  <div class="source-row-main">
+    <button
+      type="button"
+      class="btn btn-primary source-row-btn"
+      hx-post="/sources/{{ key }}/load"
+      hx-target="#source-job-{{ key }}"
+      hx-swap="innerHTML"
+      hx-disabled-elt="this"
+      {% if button_title %}title="{{ button_title }}"{% endif %}
+    >{{ button_label }}</button>
+    <span class="source-row-updated{% if not last_import %} source-row-updated--empty{% endif %}">
+      {% if last_import %}
+      Обновлено: <span class="source-row-updated-date">{{ format_datetime(last_import.imported_at) }}</span>
+      {% else %}
+      Данные не загружены
+      {% endif %}
+    </span>
+  </div>
+  <div id="source-job-{{ key }}" class="source-job-slot">
+    {% if active_job %}
+    {% set job = active_job %}
+    {% include "partials/source_job_panel.html" %}
+    {% endif %}
+  </div>
+</div>

@@ -34,7 +34,7 @@ def payments_page_context(
         generated = parse_report_generated_at(report)
         if generated is not None:
             report = {**report, "generated_at": generated}
-    active_job = report_jobs.get_active_job()
+    active_job = report_jobs.get_active_job("report")
     return {
         "input_data_path": input_data_dir(),
         "requests_path": requests_file_path(),

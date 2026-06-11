@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
-from ..cmdb_sync import sync_from_cmdb
 from ..config_store import ConfigStore
+from ..data_sources import RunnerDeps, get_source_spec, load_source
 from ..exclusions import excluded_ids_set, is_excluded
 from ..display_time import format_for_display
 from ..logging_config import get_log_file_path, get_logger
@@ -465,6 +465,7 @@ def smartview_page(request: Request) -> HTMLResponse:
 def sources_page(
     request: Request,
     state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -472,9 +473,94 @@ def sources_page(
         {
             "active_nav": "sources",
             "toast": _toast_from_query(request),
-            **sources_page_context(state),
+            **sources_page_context(state, report_jobs),
         },
     )
+
+
+def _source_job_panel_response(
+    request: Request,
+    job: ReportJob,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/source_job_panel.html",
+        {
+            "job": job,
+            "refresh_url": f"/sources/partials/{job.source_key}",
+            "refresh_target": f"#source-row-{job.source_key}",
+        },
+    )
+
+
+def _start_source_load_job(
+    key: str,
+    store: ConfigStore,
+    state: StateStore,
+    report_jobs: ReportJobManager,
+) -> ReportJob:
+    get_source_spec(key)
+    deps = RunnerDeps(store=store, state=state)
+
+    def runner(on_progress):
+        result = load_source(key, deps, on_progress=on_progress)
+        if not result.ok:
+            raise RuntimeError(result.message)
+        return result.message
+
+    return report_jobs.start(
+        runner,
+        source_key=key,
+        refresh_url=f"/sources/partials/{key}",
+        refresh_target=f"#source-row-{key}",
+    )
+
+
+@router.get("/sources/partials/{key}", response_class=HTMLResponse)
+def sources_row_partial(
+    request: Request,
+    key: str,
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> HTMLResponse:
+    spec = get_source_spec(key)
+    ctx = {
+        "key": spec.key,
+        "label": spec.label,
+        "button_label": spec.button_label,
+        "button_title": spec.button_title,
+        "last_import": state.get_latest_source_import(spec.key),
+        "active_job": report_jobs.get_active_job(spec.key),
+    }
+    return templates.TemplateResponse(
+        request,
+        "partials/source_row.html",
+        ctx,
+    )
+
+
+@router.post("/sources/{key}/load", response_class=HTMLResponse)
+async def sources_load(
+    request: Request,
+    key: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> HTMLResponse:
+    job = _start_source_load_job(key, store, state, report_jobs)
+    return _source_job_panel_response(request, job)
+
+
+@router.get("/sources/jobs/{job_id}", response_class=HTMLResponse)
+def sources_job_status(
+    request: Request,
+    job_id: str,
+    report_jobs: ReportJobManager = Depends(get_report_job_manager),
+) -> HTMLResponse:
+    job = report_jobs.get_job(job_id)
+    if job is None:
+        return HTMLResponse("Задача не найдена", status_code=404)
+    return _source_job_panel_response(request, job)
 
 
 def _payments_job_panel_response(
@@ -529,7 +615,12 @@ def _load_requests_from_input_data(
             "запущена генерация отчёта"
         ),
     )
-    job = report_jobs.start(dest, refresh_url="/payments/partials/report")
+    job = report_jobs.start_report(
+        dest,
+        refresh_url="/payments/partials/report",
+        refresh_target="#payments-report-root",
+        refresh_select="#payments-report-root",
+    )
     return True, f"Загружен {source.name}, формируется отчёт", job
 
 
@@ -588,18 +679,6 @@ async def payments_upload(
     return _redirect("/payments", "success", message, request=request)
 
 
-@router.post("/sources/load-requests", response_class=HTMLResponse)
-async def sources_load_requests(
-    request: Request,
-    state: StateStore = Depends(get_state_store),
-    report_jobs: ReportJobManager = Depends(get_report_job_manager),
-) -> Response:
-    ok, message, _job = _load_requests_from_input_data(state, report_jobs)
-    if ok:
-        return _redirect("/sources", "success", message, request=request)
-    return _redirect("/sources", "error", message, request=request)
-
-
 @router.post("/payments/refresh", response_class=HTMLResponse)
 async def payments_refresh(
     request: Request,
@@ -630,27 +709,13 @@ async def payments_refresh(
             request=request,
         )
 
-    job = report_jobs.start(dest, refresh_url="/payments/partials/report")
-    return _payments_job_panel_response(request, job)
-
-
-@router.post("/sources/sync-cmdb", response_class=HTMLResponse)
-def sources_sync_cmdb(
-    request: Request,
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
-) -> Response:
-    result = sync_from_cmdb(store, state=state)
-    if result.ok:
-        return _redirect("/sources", "success", result.message, request=request)
-    state.record_source_import(
-        "cmdb",
-        filename="cmdb.xlsx",
-        record_count=result.total_recorders,
-        status="error",
-        message=result.message,
+    job = report_jobs.start_report(
+        dest,
+        refresh_url="/payments/partials/report",
+        refresh_target="#payments-report-root",
+        refresh_select="#payments-report-root",
     )
-    return _redirect("/sources", "error", result.message, request=request)
+    return _payments_job_panel_response(request, job)
 
 
 @router.get("/health", include_in_schema=False)
@@ -808,7 +873,11 @@ def objects_sync_cmdb(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> Response:
-    return sources_sync_cmdb(request, store, state)
+    deps = RunnerDeps(store=store, state=state)
+    result = load_source("cmdb", deps)
+    if result.ok:
+        return _redirect("/objects", "success", result.message, request=request)
+    return _redirect("/objects", "error", result.message, request=request)
 
 
 @router.post("/objects/report/email", response_class=HTMLResponse)

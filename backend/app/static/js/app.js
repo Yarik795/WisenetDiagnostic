@@ -504,20 +504,20 @@ function logHtmxClient(eventName, detail) {
 document.body.addEventListener("htmx:sendError", (e) => {
   logHtmxClient("htmx_send_error", e.detail);
   const cmdbPath = e.detail?.requestConfig?.path;
-  if (cmdbPath === "/sources/sync-cmdb" || cmdbPath === "/objects/sync-cmdb") {
+  if (cmdbPath === "/objects/sync-cmdb" || (cmdbPath && cmdbPath.startsWith("/sources/cmdb"))) {
     showToast("error", "Нет связи с сервером при обновлении из CMDB.");
   }
-  if (cmdbPath === "/sources/load-requests" || cmdbPath === "/payments/upload") {
+  if (cmdbPath === "/payments/upload" || (cmdbPath && cmdbPath.startsWith("/sources/requests"))) {
     showToast("error", "Нет связи с сервером при загрузке заявок.");
   }
 });
 document.body.addEventListener("htmx:responseError", (e) => {
   logHtmxClient("htmx_response_error", e.detail);
   const cmdbPath = e.detail?.requestConfig?.path;
-  if (cmdbPath === "/sources/sync-cmdb" || cmdbPath === "/objects/sync-cmdb") {
-    showToast("error", "Не удалось обновить список из CMDB. Проверьте cmdb.xlsx и логи.");
+  if (cmdbPath === "/objects/sync-cmdb" || (cmdbPath && cmdbPath.startsWith("/sources/cmdb"))) {
+    showToast("error", "Не удалось обновить список из CMDB. Проверьте папку inputData и логи.");
   }
-  if (cmdbPath === "/sources/load-requests" || cmdbPath === "/payments/upload") {
+  if (cmdbPath === "/payments/upload" || (cmdbPath && cmdbPath.startsWith("/sources/requests"))) {
     showToast("error", "Не удалось загрузить заявки. Проверьте папку inputData и логи.");
   }
 });

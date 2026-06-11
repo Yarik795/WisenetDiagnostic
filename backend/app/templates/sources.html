@@ -2,12 +2,17 @@
 {% block title %}Исходные данные — Дашборд руководителя ТСО{% endblock %}
 {% block page_title %}Исходные данные{% endblock %}
 {% block content %}
-<p class="page-lead">Загруженные выгрузки из внешних АС для анализа в разделах дашборда.</p>
+<p class="page-lead">Загрузка выгрузок из внешних АС. Исходные файлы — в папке <code class="mono">{{ input_data_path }}</code>.</p>
 
-{% include "partials/source_cmdb_panel.html" %}
-{% include "partials/source_requests_panel.html" %}
+<section class="card source-data-card">
+  {% for item in source_items %}
+  {% with key=item.key, button_label=item.button_label, button_title=item.button_title, last_import=item.last_import, active_job=item.active_job %}
+  {% include "partials/source_row.html" %}
+  {% endwith %}
+  {% endfor %}
+</section>
 
-<section class="card" style="margin-top:24px;">
+<section class="card card--padded mt-24">
   <h2 class="card-section-title">Реестр загрузок</h2>
   {% include "partials/source_imports_table.html" %}
 </section>

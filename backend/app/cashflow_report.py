@@ -124,22 +124,9 @@ def find_latest_requests_source_file(
     directory: Path | None = None,
 ) -> Path:
     """Ищет .xlsx с «Заявки» в имени и возвращает файл с самой поздней датой изменения."""
-    root = directory or INPUT_DATA_DIR
-    if not root.is_dir():
-        raise FileNotFoundError(f"Папка inputData не найдена: {root}")
+    from .data_sources import REQUESTS_SOURCE, find_latest_source_file
 
-    candidates = [
-        path
-        for path in root.iterdir()
-        if path.is_file()
-        and path.suffix.lower() == ".xlsx"
-        and REQUESTS_NAME_MARKER in path.name.lower()
-    ]
-    if not candidates:
-        raise FileNotFoundError(
-            f"В папке {root} нет файлов .xlsx с «Заявки» в названии"
-        )
-    return max(candidates, key=lambda path: path.stat().st_mtime)
+    return find_latest_source_file(REQUESTS_SOURCE, directory)
 
 
 def requests_source_file_info(
