@@ -6,6 +6,7 @@
 
 <section class="card source-data-card">
   {% for item in source_items %}
+  {% if not loop.first %}<div class="source-row-sep" aria-hidden="true"></div>{% endif %}
   {% with key=item.key, button_label=item.button_label, button_title=item.button_title, last_import=item.last_import, active_job=item.active_job %}
   {% include "partials/source_row.html" %}
   {% endwith %}
