@@ -65,6 +65,18 @@ def _format_metric_value(value: float, metric: PaymentsMetric) -> str:
     return format_amount_rub(value)
 
 
+def _format_axis_value(value: float, metric: PaymentsMetric) -> str:
+    """Сокращённые подписи оси Y для экспортного столбчатого графика."""
+    if metric == "count":
+        return str(int(round(value)))
+    abs_val = abs(value)
+    if abs_val >= 1_000_000:
+        return f"{value / 1_000_000:.1f}".replace(".", ",") + " млн"
+    if abs_val >= 1_000:
+        return f"{value / 1_000:.0f}".replace(".", ",") + " тыс"
+    return str(int(round(value)))
+
+
 def _party_color(colors: dict[str, str], party: str) -> str:
     return colors.get(party) or _DEFAULT_PARTY_COLOR
 
@@ -74,7 +86,7 @@ def render_payments_bar_svg(
     metric: PaymentsMetric,
     *,
     width: int = 640,
-    height: int = 260,
+    height: int = 520,
 ) -> str:
     view = _select_metric_view(series, metric)
     months = view["months"]
@@ -92,7 +104,7 @@ def render_payments_bar_svg(
             f'font-size="14" fill="#5c6370">Нет данных</text></svg>'
         )
 
-    pad_left = 48
+    pad_left = 60
     pad_right = 16
     pad_top = 24
     pad_bottom = 56
@@ -127,7 +139,7 @@ def render_payments_bar_svg(
         val = max_total * (1 - i / grid_lines)
         parts.append(
             f'<text x="{pad_left - 6}" y="{y + 4:.1f}" text-anchor="end" '
-            f'font-size="10" fill="#5c6370">{_format_metric_value(val, metric)}</text>'
+            f'font-size="10" fill="#5c6370">{_format_axis_value(val, metric)}</text>'
         )
 
     for idx, month in enumerate(months):
@@ -212,7 +224,7 @@ def render_payments_donut_svg(
     metric: PaymentsMetric,
     *,
     width: int = 320,
-    height: int = 260,
+    height: int = 520,
 ) -> str:
     view = _select_metric_view(series, metric)
     parties = view["parties"]
@@ -259,17 +271,6 @@ def render_payments_donut_svg(
         f"{_format_metric_value(total, metric)}</text>"
     )
 
-    legend_y = 24
-    for party, val in entries:
-        pct = 100.0 * val / total if total else 0
-        parts.append(
-            f'<rect x="{width * 0.62:.0f}" y="{legend_y - 9}" width="10" height="10" '
-            f'fill="{_party_color(colors, party)}"/>'
-            f'<text x="{width * 0.62 + 14:.0f}" y="{legend_y}" font-size="10" fill="#1a1d21">'
-            f"{party}: {_format_metric_value(val, metric)} ({pct:.1f}%)</text>"
-        )
-        legend_y += 16
-
     parts.append("</svg>")
     return "".join(parts)
 
@@ -307,14 +308,19 @@ def build_payments_export_context(
             continue
         metric = _metric_for_section(metrics, key)
         series = section.get("series") or {}
-        party_totals = _select_metric_view(series, metric)["party_totals"]
+        view = _select_metric_view(series, metric)
+        party_totals = view["party_totals"]
+        colors = view["colors"]
+        total_val = sum(float(party_totals.get(p) or 0) for p in (series.get("parties") or []))
         party_totals_fmt = [
             {
                 "party": party,
-                "value": _format_metric_value(float(party_totals.get(party) or 0), metric),
+                "value": _format_metric_value(v, metric),
+                "pct": f"{(100.0 * v / total_val):.1f}%" if total_val else "0%",
+                "color": colors.get(party) or _DEFAULT_PARTY_COLOR,
             }
             for party in (series.get("parties") or [])
-            if float(party_totals.get(party) or 0) > 0
+            if (v := float(party_totals.get(party) or 0)) > 0
         ]
         sections_out.append(
             {

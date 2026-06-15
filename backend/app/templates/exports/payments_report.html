@@ -91,6 +91,15 @@
       border-bottom: 1px dashed var(--border);
     }
     .party-totals li:last-child { border-bottom: none; }
+    .party-totals .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .party-totals .muted { color: var(--muted); }
     .metric-note {
       font-size: 0.8rem;
       color: var(--muted);
@@ -183,7 +192,11 @@
         {% if section.party_totals_fmt %}
         <ul class="party-totals">
           {% for item in section.party_totals_fmt %}
-          <li><strong>{{ item.party }}:</strong> {{ item.value }}</li>
+          <li>
+            <span class="dot" style="background:{{ item.color }}"></span>
+            <strong>{{ item.party }}:</strong> {{ item.value }}
+            <span class="muted">({{ item.pct }})</span>
+          </li>
           {% endfor %}
         </ul>
         {% endif %}

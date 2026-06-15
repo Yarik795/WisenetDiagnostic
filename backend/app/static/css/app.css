@@ -2214,11 +2214,11 @@ tr.recorder-row--excluded {
 
 .payments-chart-canvas {
   width: 100%;
-  height: 320px;
+  height: 640px;
 }
 
 .payments-chart-box--pie .payments-chart-canvas {
-  height: 280px;
+  height: 560px;
 }
 
 .payments-filters {

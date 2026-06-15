@@ -97,7 +97,37 @@ def test_render_payments_donut_svg_non_empty() -> None:
     series = _sample_report()["reports"]["modern"]["sections"][0]["series"]
     svg = render_payments_donut_svg(series, "count")
     assert svg.startswith("<svg")
-    assert "Войнов" in svg
+    assert "#38bdf8" in svg
+    assert "Итого" in svg
+    assert "Войнов" not in svg
+
+
+def test_render_payments_bar_svg_axis_abbreviated() -> None:
+    series = {
+        "months": ["2026-01"],
+        "parties": ["Войнов"],
+        "matrix": {"Войнов": [37_383_213.99]},
+        "party_totals": {"Войнов": 37_383_213.99},
+        "count_matrix": {"Войнов": [1]},
+        "count_totals": {"Войнов": 1},
+        "approved": {"amount": [0.0], "count": [0]},
+        "colors": {"Войнов": "#38bdf8"},
+    }
+    svg = render_payments_bar_svg(series, "amount")
+    assert "37,4 млн" in svg
+    assert "37 383 213,99 руб." not in svg
+
+
+def test_build_payments_export_context_party_totals_fmt() -> None:
+    report = _sample_report()
+    context = build_payments_export_context(report, "modern", {"az_mb": "amount"})
+    az = next(s for s in context["sections"] if s["key"] == "az_mb")
+    assert len(az["party_totals_fmt"]) == 2
+    first = az["party_totals_fmt"][0]
+    assert first["party"] == "Войнов"
+    assert "pct" in first
+    assert "color" in first
+    assert first["color"] == "#38bdf8"
 
 
 def test_build_payments_export_context_metric_amount_vs_count() -> None:
