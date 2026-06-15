@@ -12,19 +12,35 @@
       <p class="payments-report-updated text-secondary">Отчёт ещё не сформирован. Загрузите файл с заявками.</p>
       {% endif %}
     </div>
-    <form
-      hx-post="/payments/refresh"
-      hx-target="#payments-job-root"
-      hx-swap="innerHTML"
-      {% if not requests_file %}class="payments-refresh-disabled"{% endif %}
-    >
+    <div class="payments-report-actions">
+      {% if report %}
       <button
-        type="submit"
-        class="btn btn-primary"
-        {% if not requests_file or (report_job and report_job.is_active) %}disabled{% endif %}
-        title="{% if not requests_file %}Сначала загрузите файл{% else %}Пересчитать отчёт по сохранённому файлу{% endif %}"
-      >Обновить отчёт</button>
-    </form>
+        type="button"
+        class="btn btn-ghost"
+        data-payments-export
+        title="Скачать HTML текущего вида (активная вкладка и метрики графиков)"
+      >Экспорт в HTML</button>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        data-payments-email
+        title="Отправить HTML-отчёт на адреса из config.email_report"
+      >Отправить на почту</button>
+      {% endif %}
+      <form
+        hx-post="/payments/refresh"
+        hx-target="#payments-job-root"
+        hx-swap="innerHTML"
+        {% if not requests_file %}class="payments-refresh-disabled"{% endif %}
+      >
+        <button
+          type="submit"
+          class="btn btn-primary"
+          {% if not requests_file or (report_job and report_job.is_active) %}disabled{% endif %}
+          title="{% if not requests_file %}Сначала загрузите файл{% else %}Пересчитать отчёт по сохранённому файлу{% endif %}"
+        >Обновить отчёт</button>
+      </form>
+    </div>
   </div>
 
   {% if report %}

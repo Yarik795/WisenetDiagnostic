@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from ..config_store import ConfigStore
@@ -18,8 +18,10 @@ from ..logging_config import get_log_file_path, get_logger
 from ..models import RecorderCreate, RecorderUpdate
 from ..monitoring import poll_single_recorder, run_ntp_fix_all
 from ..cashflow_report import (
+    SECTION_SPECS,
     find_latest_requests_source_file,
     import_requests_from_source,
+    load_report_artifact,
     requests_file_path,
 )
 from ..poll_jobs import PollJob, PollJobManager
@@ -51,6 +53,13 @@ from ..device_kinds import filter_recorders_by_kind
 from ..ui.kind_dashboard import kind_section_page_context
 from ..ui.summary_dashboard import summary_page_context
 from ..ui.payments import payments_page_context
+from ..ui.payments_export import (
+    build_payments_export_context,
+    payments_email_subject,
+    payments_export_filename,
+    render_payments_email_body,
+    render_payments_export_html,
+)
 from ..ui.source_imports import sources_page_context
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
@@ -728,6 +737,99 @@ async def payments_refresh(
         naumen_cost_map=state.naumen_cost_by_sberdrug(),
     )
     return _payments_job_panel_response(request, job)
+
+
+def _parse_payments_view_params(request: Request) -> tuple[str, dict[str, str]]:
+    kind = request.query_params.get("kind", "modern")
+    if kind not in ("modern", "rvr"):
+        kind = "modern"
+    metrics: dict[str, str] = {}
+    for key, _title in SECTION_SPECS:
+        raw = request.query_params.get(f"m_{key}")
+        if raw in ("amount", "count"):
+            metrics[key] = raw
+    return kind, metrics
+
+
+def _payments_export_html_response(
+    request: Request,
+    *,
+    kind: str,
+    metrics: dict[str, str],
+) -> Response:
+    report = load_report_artifact()
+    if not report:
+        if request.headers.get("HX-Request") == "true":
+            return HTMLResponse("Отчёт не сформирован", status_code=404)
+        return _redirect("/payments", "error", "Сначала сформируйте отчёт", request=request)
+    try:
+        context = build_payments_export_context(report, kind, metrics)
+    except ValueError as exc:
+        return _redirect("/payments", "error", str(exc), request=request)
+    filename = payments_export_filename(kind)
+    html = render_payments_export_html(context)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/payments/export.html", include_in_schema=False)
+def payments_export_html(request: Request) -> Response:
+    kind, metrics = _parse_payments_view_params(request)
+    return _payments_export_html_response(request, kind=kind, metrics=metrics)
+
+
+@router.post("/payments/report/email", include_in_schema=False)
+def payments_report_email(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    kind, metrics = _parse_payments_view_params(request)
+    report = load_report_artifact()
+    if not report:
+        return JSONResponse(
+            {"ok": False, "message": "Сначала сформируйте отчёт"},
+            status_code=400,
+        )
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: " + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+    try:
+        context = build_payments_export_context(report, kind, metrics)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+
+    attachment_html = render_payments_export_html(context)
+    attachment_name = payments_export_filename(kind)
+    body_html = render_payments_email_body(context)
+    subject = payments_email_subject(kind)
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            attachment_html=attachment_html,
+            attachment_filename=attachment_name,
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
 
 
 @router.get("/health", include_in_schema=False)

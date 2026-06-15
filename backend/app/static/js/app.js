@@ -795,11 +795,59 @@ if (!window.__paymentsChartsResizeBound) {
   window.addEventListener("resize", resizePaymentsCharts);
 }
 
+const PAYMENTS_SECTION_KEYS = ["az_mb", "az_ca", "vsp_mb", "vsp_ca"];
+
+function collectPaymentsViewParams() {
+  const tabsNav = document.querySelector("[data-payments-tabs]");
+  const kindBtn = tabsNav?.querySelector("[data-payments-tab].active");
+  const kind = kindBtn?.dataset.paymentsTab || "modern";
+  const params = new URLSearchParams({ kind });
+  PAYMENTS_SECTION_KEYS.forEach((key) => {
+    const sectionId = `${kind}-${key}`;
+    const store = paymentsChartStore.get(sectionId);
+    const metric = store?.metric === "count" ? "count" : "amount";
+    params.set(`m_${key}`, metric);
+  });
+  return params.toString();
+}
+
+function initPaymentsExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-payments-export]").forEach((btn) => {
+    if (btn.dataset.paymentsExportBound === "1") return;
+    btn.dataset.paymentsExportBound = "1";
+    btn.addEventListener("click", () => {
+      window.location.href = `/payments/export.html?${collectPaymentsViewParams()}`;
+    });
+  });
+  scope.querySelectorAll("[data-payments-email]").forEach((btn) => {
+    if (btn.dataset.paymentsEmailBound === "1") return;
+    btn.dataset.paymentsEmailBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/payments/report/email?${collectPaymentsViewParams()}`, {
+          method: "POST",
+        });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить отчёт на почту");
+        console.error("[wisenet] payments email error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function initPaymentsPage(root) {
   initPaymentsTabs(root);
   initPaymentsCollapsibles(root);
   initPaymentsTables(root);
   initPaymentsCharts(root);
+  initPaymentsExportActions(root);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -834,6 +882,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsCollapsibles(e.detail?.target);
   initPaymentsTables(e.detail?.target);
   initPaymentsCharts(e.detail?.target);
+  initPaymentsExportActions(e.detail?.target);
   scrollToHighlightedCategory();
 });
 

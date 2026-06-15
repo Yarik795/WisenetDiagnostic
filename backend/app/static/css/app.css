@@ -2075,6 +2075,18 @@ tr.recorder-row--excluded {
   margin-bottom: 16px;
 }
 
+.payments-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.payments-report-actions form {
+  margin: 0;
+}
+
 .payments-report-updated {
   margin: 4px 0 0;
   font-size: 13px;
