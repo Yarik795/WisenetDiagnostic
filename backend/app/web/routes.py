@@ -55,9 +55,9 @@ from ..ui.summary_dashboard import summary_page_context
 from ..ui.payments import payments_page_context
 from ..ui.payments_export import (
     build_payments_export_context,
-    payments_email_subject,
+    payments_email_subject_combined,
     payments_export_filename,
-    render_payments_email_body,
+    render_payments_email_body_combined,
     render_payments_export_html,
 )
 from ..ui.source_imports import sources_page_context
@@ -787,7 +787,7 @@ def payments_report_email(
     from ..email_sender import send_report_email
     from ..report_delivery import validate_email_config
 
-    kind, metrics = _parse_payments_view_params(request)
+    _kind, metrics = _parse_payments_view_params(request)
     report = load_report_artifact()
     if not report:
         return JSONResponse(
@@ -805,21 +805,24 @@ def payments_report_email(
             },
             status_code=400,
         )
+    metrics_rvr = {key: "count" for key, _ in SECTION_SPECS}
     try:
-        context = build_payments_export_context(report, kind, metrics)
+        modern_context = build_payments_export_context(report, "modern", metrics)
+        rvr_context = build_payments_export_context(report, "rvr", metrics_rvr)
     except ValueError as exc:
         return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
 
-    attachment_html = render_payments_export_html(context)
-    attachment_name = payments_export_filename(kind)
-    body_html = render_payments_email_body(context)
-    subject = payments_email_subject(kind)
+    attachments = [
+        (payments_export_filename("modern"), render_payments_export_html(modern_context)),
+        (payments_export_filename("rvr"), render_payments_export_html(rvr_context)),
+    ]
+    body_html = render_payments_email_body_combined(modern_context, rvr_context)
+    subject = payments_email_subject_combined()
     try:
         send_report_email(
             email_cfg,
             body_html=body_html,
-            attachment_html=attachment_html,
-            attachment_filename=attachment_name,
+            attachments=attachments,
             subject=subject,
         )
     except Exception as exc:

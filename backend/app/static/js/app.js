@@ -453,9 +453,34 @@ function parsePaymentsSeriesScript(el) {
   }
 }
 
-function getMultiSelectValues(select) {
-  if (!select) return [];
-  return Array.from(select.selectedOptions).map((opt) => opt.value);
+function getChipFilterValues(container, chipSelector) {
+  if (!container) return [];
+  const chips = container.querySelectorAll(chipSelector);
+  if (!chips.length) return [];
+  const allValues = Array.from(chips).map((chip) => chip.value);
+  const activeChips = Array.from(chips).filter((chip) => chip.classList.contains("is-active"));
+  if (activeChips.length === chips.length) return allValues;
+  if (!activeChips.length) return [];
+  return activeChips.map((chip) => chip.value);
+}
+
+function setPaymentsChipActive(chip, active) {
+  chip.classList.toggle("is-active", active);
+  chip.setAttribute("aria-pressed", active ? "true" : "false");
+}
+
+function setOnlyPaymentsChipActive(container, chipSelector, value) {
+  if (!container) return;
+  container.querySelectorAll(chipSelector).forEach((chip) => {
+    setPaymentsChipActive(chip, chip.value === value);
+  });
+}
+
+function resetPaymentsChips(container, chipSelector) {
+  if (!container) return;
+  container.querySelectorAll(chipSelector).forEach((chip) => {
+    setPaymentsChipActive(chip, true);
+  });
 }
 
 function filterPaymentsSeries(series, months, parties, metric) {
@@ -558,7 +583,7 @@ function paymentsBarOption(data) {
           total += item.value;
           return `${item.marker}${item.seriesName}: ${formatPaymentsMetricValue(item.value, metric)}`;
         });
-        const pct = (val) => (total > 0 ? ` (${((val / total) * 100).toFixed(1)}%)` : "");
+        const pct = (val) => (total > 0 ? ` (${Math.round((val / total) * 100)}%)` : "");
         return [
           `<strong>${month}</strong>`,
           ...positive.map(
@@ -624,7 +649,8 @@ function paymentsPieOption(data) {
       trigger: "item",
       formatter: (params) => {
         const val = params.value || 0;
-        return `${params.marker}${params.name}: ${formatPaymentsMetricValue(val, metric)} (${params.percent}%)`;
+        const pct = Math.round(params.percent || 0);
+        return `${params.marker}${params.name}: ${formatPaymentsMetricValue(val, metric)} (${pct}%)`;
       },
     },
     legend: {
@@ -645,7 +671,10 @@ function paymentsPieOption(data) {
           borderColor: "#1a1d24",
           borderWidth: 2,
         },
-        label: { color: textColor, formatter: "{b}\n{d}%" },
+        label: {
+          color: textColor,
+          formatter: (params) => `${params.name}\n${Math.round(params.percent)}%`,
+        },
         data: entries.map((item) => ({
           name: item.name,
           value: item.value,
@@ -680,8 +709,8 @@ function updatePaymentsChartsForSection(sectionId) {
   if (!store) return;
   const { series, barChart, pieChart, filterEl } = store;
   const metric = store.metric || "amount";
-  const months = getMultiSelectValues(filterEl.querySelector("[data-filter-month]"));
-  const parties = getMultiSelectValues(filterEl.querySelector("[data-filter-party]"));
+  const months = getChipFilterValues(filterEl.querySelector("[data-filter-month]"), "[data-month-chip]");
+  const parties = getChipFilterValues(filterEl.querySelector("[data-filter-party]"), "[data-party-chip]");
   const minRaw = filterEl.querySelector("[data-filter-min]")?.value;
   const minAmount = minRaw ? parseFloat(minRaw) : 0;
   const filtered = filterPaymentsSeries(series, months, parties, metric);
@@ -712,13 +741,24 @@ function bindPaymentsChartFilters(sectionId, filterEl) {
   if (filterEl.dataset.paymentsFilterBound === "1") return;
   filterEl.dataset.paymentsFilterBound = "1";
   const onChange = () => updatePaymentsChartsForSection(sectionId);
-  filterEl.querySelector("[data-filter-month]")?.addEventListener("change", onChange);
-  filterEl.querySelector("[data-filter-party]")?.addEventListener("change", onChange);
+  const monthContainer = filterEl.querySelector("[data-filter-month]");
+  const partyContainer = filterEl.querySelector("[data-filter-party]");
+  monthContainer?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-month-chip]");
+    if (!chip || !monthContainer.contains(chip)) return;
+    setPaymentsChipActive(chip, !chip.classList.contains("is-active"));
+    onChange();
+  });
+  partyContainer?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-party-chip]");
+    if (!chip || !partyContainer.contains(chip)) return;
+    setPaymentsChipActive(chip, !chip.classList.contains("is-active"));
+    onChange();
+  });
   filterEl.querySelector("[data-filter-min]")?.addEventListener("input", onChange);
   filterEl.querySelector("[data-filter-reset]")?.addEventListener("click", () => {
-    filterEl.querySelectorAll("[data-filter-month] option, [data-filter-party] option").forEach((opt) => {
-      opt.selected = true;
-    });
+    resetPaymentsChips(monthContainer, "[data-month-chip]");
+    resetPaymentsChips(partyContainer, "[data-party-chip]");
     const minInput = filterEl.querySelector("[data-filter-min]");
     if (minInput) minInput.value = "";
     onChange();
@@ -771,20 +811,16 @@ function initPaymentsCharts(root) {
     updatePaymentsChartsForSection(sectionId);
     barChart.on("click", (params) => {
       if (!params?.name) return;
-      const monthSelect = filterEl.querySelector("[data-filter-month]");
-      if (!monthSelect) return;
-      Array.from(monthSelect.options).forEach((opt) => {
-        opt.selected = opt.value === params.name;
-      });
+      const monthContainer = filterEl.querySelector("[data-filter-month]");
+      if (!monthContainer) return;
+      setOnlyPaymentsChipActive(monthContainer, "[data-month-chip]", params.name);
       updatePaymentsChartsForSection(sectionId);
     });
     pieChart.on("click", (params) => {
       if (!params?.name) return;
-      const partySelect = filterEl.querySelector("[data-filter-party]");
-      if (!partySelect) return;
-      Array.from(partySelect.options).forEach((opt) => {
-        opt.selected = opt.value === params.name;
-      });
+      const partyContainer = filterEl.querySelector("[data-filter-party]");
+      if (!partyContainer) return;
+      setOnlyPaymentsChipActive(partyContainer, "[data-party-chip]", params.name);
       updatePaymentsChartsForSection(sectionId);
     });
   });
@@ -796,6 +832,17 @@ if (!window.__paymentsChartsResizeBound) {
 }
 
 const PAYMENTS_SECTION_KEYS = ["az_mb", "az_ca", "vsp_mb", "vsp_ca"];
+
+function collectPaymentsEmailParams() {
+  const params = new URLSearchParams();
+  PAYMENTS_SECTION_KEYS.forEach((key) => {
+    const sectionId = `modern-${key}`;
+    const store = paymentsChartStore.get(sectionId);
+    const metric = store?.metric === "count" ? "count" : "amount";
+    params.set(`m_${key}`, metric);
+  });
+  return params.toString();
+}
 
 function collectPaymentsViewParams() {
   const tabsNav = document.querySelector("[data-payments-tabs]");
@@ -827,7 +874,7 @@ function initPaymentsExportActions(root) {
       if (btn.disabled) return;
       btn.disabled = true;
       try {
-        const res = await fetch(`/payments/report/email?${collectPaymentsViewParams()}`, {
+        const res = await fetch(`/payments/report/email?${collectPaymentsEmailParams()}`, {
           method: "POST",
         });
         const data = await res.json();

@@ -2119,7 +2119,8 @@ tr.recorder-row--excluded {
 
 .payments-report-kind-title {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: 17px;
+  font-weight: 600;
 }
 
 .payments-section-nav {
@@ -2149,7 +2150,8 @@ tr.recorder-row--excluded {
 
 .payments-section-title {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .payments-kpi-grid {
@@ -2258,8 +2260,37 @@ tr.recorder-row--excluded {
   min-width: 140px;
 }
 
-.payments-filter-select[multiple] {
-  min-height: 72px;
+.payments-filter-group--chips {
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.payments-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.payments-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary, #1a1d24);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.payments-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.payments-chip.is-active {
+  background: var(--accent, #3b82f6);
+  border-color: var(--accent, #3b82f6);
+  color: #fff;
 }
 
 .payments-filter-reset {

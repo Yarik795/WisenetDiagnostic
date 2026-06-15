@@ -203,7 +203,7 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 Ручная отправка: кнопка с иконкой почты на странице **Объекты** → `POST /objects/report/email`, `trigger=manual`. Успешная ручная отправка **не блокирует** плановую в тот же день (учитываются только `scheduled` / `catchup`).
 
-Отчёт **«Статус оплаты»** (`/payments`): кнопки «Экспорт в HTML» и «Отправить на почту» передают активную вкладку (Модернизация/РВР) и метрику графиков по разделам (`kind`, `m_<section>`). `GET /payments/export.html` — standalone HTML со встроенным CSS и inline-SVG; `POST /payments/report/email` — то же вложение через `send_report_email` на `email_report.to_emails` (в `report_delivery_history` не пишется).
+Отчёт **«Статус оплаты»** (`/payments`): «Экспорт в HTML» передаёт активную вкладку (Модернизация/РВР) и метрику графиков по разделам (`kind`, `m_<section>`). `GET /payments/export.html` — standalone HTML со встроенным CSS и inline-SVG. «Отправить на почту» (`POST /payments/report/email`) — одно письмо с **двумя** HTML-вложениями (Модернизация и РВР); метрики Модернизации берутся из UI (`m_<section>`), для РВР всегда **Количество**. Отправка через `send_report_email` на `email_report.to_emails` (в `report_delivery_history` не пишется).
 
 Тест SMTP без UI: `python scripts/send_test_email.py`.
 

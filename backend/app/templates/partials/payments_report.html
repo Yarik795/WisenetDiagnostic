@@ -24,7 +24,7 @@
         type="button"
         class="btn btn-ghost"
         data-payments-email
-        title="Отправить HTML-отчёт на адреса из config.email_report"
+        title="Отправить HTML-отчёты Модернизация и РВР на адреса из config.email_report"
       >Отправить на почту</button>
       {% endif %}
       <form
@@ -91,25 +91,45 @@
       <script type="application/json" data-payments-series="{{ section_id }}">{{ series | tojson }}</script>
 
       <div class="payments-filters" data-payments-filter="{{ section_id }}">
-        <div class="payments-filter-group">
-          <label class="payments-filter-label" for="filter-month-{{ section_id }}">Месяц</label>
-          {% set month_select_size = series.months | default([]) | length %}
-          {% if month_select_size > 4 %}{% set month_select_size = 4 %}{% elif month_select_size < 1 %}{% set month_select_size = 1 %}{% endif %}
-          <select id="filter-month-{{ section_id }}" class="payments-filter-select" data-filter-month multiple size="{{ month_select_size }}">
-            {% for month in series.months | default([]) %}
-            <option value="{{ month }}" selected>{{ month }}</option>
+        <div class="payments-filter-group payments-filter-group--chips">
+          <label class="payments-filter-label" id="filter-month-label-{{ section_id }}">Месяц</label>
+          <div
+            class="payments-chips"
+            id="filter-month-{{ section_id }}"
+            data-filter-month
+            role="group"
+            aria-labelledby="filter-month-label-{{ section_id }}"
+          >
+            {% for month in series.months | default([]) | sort %}
+            <button
+              type="button"
+              class="payments-chip is-active"
+              data-month-chip="{{ month }}"
+              value="{{ month }}"
+              aria-pressed="true"
+            >{{ month }}</button>
             {% endfor %}
-          </select>
+          </div>
         </div>
-        <div class="payments-filter-group">
-          <label class="payments-filter-label" for="filter-party-{{ section_id }}">Ответственный</label>
-          {% set party_select_size = series.parties | default([]) | length %}
-          {% if party_select_size > 4 %}{% set party_select_size = 4 %}{% elif party_select_size < 1 %}{% set party_select_size = 1 %}{% endif %}
-          <select id="filter-party-{{ section_id }}" class="payments-filter-select" data-filter-party multiple size="{{ party_select_size }}">
+        <div class="payments-filter-group payments-filter-group--chips">
+          <label class="payments-filter-label" id="filter-party-label-{{ section_id }}">Ответственный</label>
+          <div
+            class="payments-chips"
+            id="filter-party-{{ section_id }}"
+            data-filter-party
+            role="group"
+            aria-labelledby="filter-party-label-{{ section_id }}"
+          >
             {% for party in series.parties | default([]) %}
-            <option value="{{ party }}" selected>{{ party }}</option>
+            <button
+              type="button"
+              class="payments-chip is-active"
+              data-party-chip="{{ party }}"
+              value="{{ party }}"
+              aria-pressed="true"
+            >{{ party }}</button>
             {% endfor %}
-          </select>
+          </div>
         </div>
         <div class="payments-filter-group">
           <label class="payments-filter-label" for="filter-min-{{ section_id }}">Мин. сумма, ₽</label>

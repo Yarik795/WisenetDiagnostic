@@ -12,6 +12,7 @@ from app.ui.payments_export import (
     build_payments_export_context,
     render_payments_bar_svg,
     render_payments_donut_svg,
+    render_payments_email_body_combined,
     render_payments_export_html,
 )
 
@@ -126,6 +127,8 @@ def test_build_payments_export_context_party_totals_fmt() -> None:
     first = az["party_totals_fmt"][0]
     assert first["party"] == "Войнов"
     assert "pct" in first
+    assert first["pct"].endswith("%")
+    assert "." not in first["pct"].replace("0%", "")
     assert "color" in first
     assert first["color"] == "#38bdf8"
 
@@ -140,6 +143,16 @@ def test_build_payments_export_context_metric_amount_vs_count() -> None:
     assert az_count["metric"] == "count"
     assert "1 000,00" in az_amount["party_totals_fmt"][0]["value"]
     assert "заяв" in az_count["party_totals_fmt"][0]["value"]
+
+
+def test_render_payments_email_body_combined_lists_both_kinds() -> None:
+    report = _sample_report()
+    modern_ctx = build_payments_export_context(report, "modern")
+    rvr_ctx = build_payments_export_context(report, "rvr", {key: "count" for key, _ in SECTION_SPECS})
+    body = render_payments_email_body_combined(modern_ctx, rvr_ctx)
+    assert "Модернизация" in body
+    assert "РВР" in body
+    assert "два HTML" in body
 
 
 def test_render_payments_export_html_contains_sections() -> None:
@@ -201,8 +214,18 @@ def test_payments_email_route_sends_when_configured(client: TestClient) -> None:
     store.save(config)
 
     with patch("app.email_sender.send_report_email") as send_mock:
-        response = client.post("/payments/report/email?kind=modern&m_az_mb=count")
+        response = client.post("/payments/report/email?m_az_mb=count")
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
     send_mock.assert_called_once()
+    call_kwargs = send_mock.call_args.kwargs
+    attachments = call_kwargs.get("attachments") or []
+    assert len(attachments) == 2
+    filenames = [name for name, _html in attachments]
+    assert any("modern" in name for name in filenames)
+    assert any("rvr" in name for name in filenames)
+    assert "Модернизация + РВР" in call_kwargs.get("subject", "")
+    body_html = call_kwargs.get("body_html", "")
+    assert "Модернизация" in body_html
+    assert "РВР" in body_html

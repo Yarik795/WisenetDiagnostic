@@ -316,7 +316,7 @@ def build_payments_export_context(
             {
                 "party": party,
                 "value": _format_metric_value(v, metric),
-                "pct": f"{(100.0 * v / total_val):.1f}%" if total_val else "0%",
+                "pct": f"{round(100.0 * v / total_val)}%" if total_val else "0%",
                 "color": colors.get(party) or _DEFAULT_PARTY_COLOR,
             }
             for party in (series.get("parties") or [])
@@ -364,6 +364,35 @@ def payments_email_subject(kind: str) -> str:
     stamp = format_for_display(datetime.now(timezone.utc), "%d.%m.%Y %H:%M") or ""
     label = _KIND_LABELS.get(kind, kind)
     return f"Статус оплаты ({label}) — {stamp}"
+
+
+def payments_email_subject_combined() -> str:
+    from datetime import datetime, timezone
+
+    stamp = format_for_display(datetime.now(timezone.utc), "%d.%m.%Y %H:%M") or ""
+    return f"Статус оплаты (Модернизация + РВР) — {stamp}"
+
+
+def render_payments_email_body_combined(
+    modern_ctx: dict[str, Any],
+    rvr_ctx: dict[str, Any],
+) -> str:
+    def total_requests(ctx: dict[str, Any]) -> int:
+        return sum(int((section.get("kpi") or {}).get("total_count") or 0) for section in ctx["sections"])
+
+    modern_total = total_requests(modern_ctx)
+    rvr_total = total_requests(rvr_ctx)
+    return (
+        "<html><body style=\"font-family:system-ui,sans-serif;color:#1a1d21;\">"
+        "<p>Отчёт «Статус оплаты» — <strong>Модернизация</strong> и <strong>РВР</strong>.</p>"
+        f"<p>Сформирован: {modern_ctx['generated_at']}<br>"
+        f"Исходный файл: {modern_ctx['source_file']}</p>"
+        f"<p>Заявок в работе: <strong>{modern_total}</strong> (Модернизация), "
+        f"<strong>{rvr_total}</strong> (РВР).</p>"
+        "<p>Метрика графиков РВР: <strong>Количество</strong>.</p>"
+        "<p>Полные отчёты во вложениях (два HTML-файла).</p>"
+        "</body></html>"
+    )
 
 
 def render_payments_email_body(context: dict[str, Any]) -> str:
