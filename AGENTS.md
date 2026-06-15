@@ -21,6 +21,7 @@
 | Конфиг, реестр устройств, credentials, исключения | `backend/app/config_store.py`, `models.py`, `exclusions.py` | — |
 | Email-сводка, SMTP, расписание рассылки | `backend/app/report_delivery.py`, `email_sender.py`, `report_delivery_history.py`, `ui/email_charts.py`, `ui/email_history_series.py` | `ai-docs/services.md` §Email |
 | Отчёт «Статус оплаты», импорт Excel | `backend/app/cashflow_report.py`, `data_sources.py`, `report_jobs.py`, `ui/payments.py`, `ui/source_imports.py` | — |
+| Импорт Naumen (`naumen_all.xlsx`) | `backend/app/naumen_import.py`, `data_sources.py`, `state_store.py` | `ai-docs/monitoring-db.md` §naumen_records |
 | Планировщик, фоновые задачи опроса | `backend/app/scheduler.py`, `poll_jobs.py` | — |
 | Импорт из CMDB | `backend/app/cmdb_sync.py`, `scripts/sync_config_from_cmdb.py`, `scripts/cmdb_reader.py` | — |
 | Отчёт об ошибках (HTML-экспорт) | `backend/app/ui/error_report.py`, `error_report_render.py` | — |
@@ -45,7 +46,7 @@
 - `data/monitoring.db` — SQLite (метрики, каналы, история)
 - `data/report_delivery_history.json` — журнал email-отправок
 - `data/uploads/`, `data/reports/` — загрузки и собранные отчёты
-- `inputData/` — исходные Excel-файлы (CMDB, заявки)
+- `inputData/` — исходные Excel-файлы (CMDB, заявки, `naumen_all.xlsx`)
 - `logs/wisenet.log` — JSON-лог
 
 ## После изменений

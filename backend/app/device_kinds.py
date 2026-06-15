@@ -16,6 +16,7 @@ SYSTEM_KIND_LABELS: dict[DeviceKind, str] = {
 SOURCE_KEY_LABELS: dict[str, str] = {
     "cmdb": "CMDB",
     "requests": "Заявки (статус оплаты)",
+    "naumen": "Данные из Naumen",
     "arsenal": "Арсенал",
     "smartview": "Smartview",
     "budget": "Бюджет",

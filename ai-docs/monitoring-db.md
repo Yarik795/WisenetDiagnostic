@@ -24,6 +24,8 @@
 - История смены агрегированного статуса канала/регистратора (`status_history`).
 - История смены статуса по категориям здоровья (`category_status_history`).
 - Журнал попыток опроса в рамках массового job (`recorder_poll_attempts`).
+- Журнал импортов исходных файлов (`source_imports`).
+- Выгрузка заявок Naumen (`naumen_records`).
 
 **Не в БД (смежные хранилища):**
 
@@ -510,6 +512,38 @@ Append-only журнал **каждой попытки** опроса регис
 
 **Повторные волны:** если NVR не ответил (`online=0`), метрики **не обновляются** до успешной попытки или до исчерпания `poll_retry_max`; затем вызывается `apply_poll_result` с offline.
 
+### 6.5. Таблица `source_imports`
+
+Журнал загрузок исходных файлов со страницы `/sources` (CMDB, заявки, Naumen).
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Автоинкремент |
+| `source_key` | TEXT | Ключ источника (`cmdb`, `requests`, `naumen`) |
+| `filename` | TEXT | Имя исходного файла из `inputData/` |
+| `imported_at` | TEXT | UTC ISO |
+| `record_count` | INTEGER | Число обработанных записей |
+| `status` | TEXT | `ok` / `error` |
+| `message` | TEXT | Текст результата |
+
+Запись: `StateStore.record_source_import()` из `data_sources.load_source()`.
+
+### 6.6. Таблица `naumen_records`
+
+Полная замена при каждом импорте выгрузки Naumen (`naumen_all.xlsx` → `data/uploads/naumen.xlsx`).
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `external_id` | TEXT PK | `ID внешней системы` |
+| `number` | TEXT | `Номер` |
+| `cost` | REAL | `Стоимость` (пусто → 0) |
+| `sberdrug_number` | TEXT | `Номер Сбердруг` |
+| `description` | TEXT | `Описание` |
+| `source_row` | INTEGER | Номер строки в xlsx |
+| `imported_at` | TEXT | UTC ISO момента импорта |
+
+Импорт: `naumen_import.import_naumen_xlsx()` → `StateStore.replace_naumen_records()` (DELETE + batch INSERT в одной транзакции). Парсинг — openpyxl `read_only=True` для больших файлов.
+
 ---
 
 ## 7. Жизненный цикл данных
@@ -584,6 +618,8 @@ sequenceDiagram
 | `insert_poll_attempt` | `recorder_poll_attempts` | Одна попытка в job |
 | `list_poll_attempts` | `recorder_poll_attempts` | Выборка по `job_id` / `recorder_id` |
 | `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
+| `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
+| `replace_naumen_records` / `count_naumen_records` | `naumen_records` | Импорт выгрузки Naumen |
 
 ---
 

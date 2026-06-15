@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "monitoring.db"
 
@@ -123,6 +124,50 @@ class SourceImportRow:
     message: Optional[str]
 
 
+@dataclass(frozen=True)
+class NaumenRecordRow:
+    external_id: str
+    number: str
+    cost: float
+    sberdrug_number: str
+    description: str
+    source_row: int
+
+
+class NaumenReplaceSession:
+    def __init__(self, conn: sqlite3.Connection, imported_at: str) -> None:
+        self._conn = conn
+        self._imported_at = imported_at
+        self.count = 0
+
+    def write_batch(self, rows: list[Any]) -> None:
+        if not rows:
+            return
+        conn = self._conn
+        imported_at = self._imported_at
+        conn.executemany(
+            """
+            INSERT INTO naumen_records (
+                external_id, number, cost, sberdrug_number,
+                description, source_row, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row.external_id,
+                    row.number,
+                    row.cost,
+                    row.sberdrug_number,
+                    row.description,
+                    row.source_row,
+                    imported_at,
+                )
+                for row in rows
+            ],
+        )
+        self.count += len(rows)
+
+
 _CATEGORY_PROBLEM_STATUSES = frozenset({"warn", "error"})
 _RECORDER_PROBLEM_STATUSES = frozenset({"warn", "error", "offline"})
 # unknown между warn/error не завершает эпизод (пропуск опроса, нет метрик).
@@ -235,6 +280,16 @@ class StateStore:
 
                 CREATE INDEX IF NOT EXISTS idx_source_imports_key
                     ON source_imports(source_key, imported_at DESC);
+
+                CREATE TABLE IF NOT EXISTS naumen_records (
+                    external_id TEXT PRIMARY KEY,
+                    number TEXT NOT NULL,
+                    cost REAL NOT NULL DEFAULT 0,
+                    sberdrug_number TEXT,
+                    description TEXT,
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                );
                 """
             )
             self._migrate_schema(conn)
@@ -316,6 +371,36 @@ class StateStore:
                     ON source_imports(source_key, imported_at DESC)
                 """
             )
+
+        if "naumen_records" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE naumen_records (
+                    external_id TEXT PRIMARY KEY,
+                    number TEXT NOT NULL,
+                    cost REAL NOT NULL DEFAULT 0,
+                    sberdrug_number TEXT,
+                    description TEXT,
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                )
+                """
+            )
+
+    @contextmanager
+    def replace_naumen_records(
+        self, imported_at: Optional[datetime] = None
+    ) -> Iterator[NaumenReplaceSession]:
+        when = _iso(imported_at or datetime.now(timezone.utc))
+        with self._connect() as conn:
+            conn.execute("DELETE FROM naumen_records")
+            session = NaumenReplaceSession(conn, when)
+            yield session
+
+    def count_naumen_records(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS cnt FROM naumen_records").fetchone()
+        return int(row["cnt"]) if row else 0
 
     def record_source_import(
         self,

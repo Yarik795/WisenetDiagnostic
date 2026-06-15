@@ -186,9 +186,43 @@ def _run_requests(
     )
 
 
+def _run_naumen(
+    dest: Path,
+    source: Path,
+    deps: RunnerDeps,
+    on_progress: ProgressCallback,
+    *,
+    file_unchanged: bool,
+) -> SourceLoadResult:
+    if file_unchanged and deps.state.count_naumen_records() > 0:
+        on_progress("Проверка", 50)
+        return SourceLoadResult(
+            ok=True,
+            message="Новых данных нет",
+            record_count=deps.state.count_naumen_records(),
+            changed=False,
+            filename=source.name,
+        )
+
+    from .naumen_import import import_naumen_xlsx
+
+    def report_progress(phase: str, percent: int) -> None:
+        on_progress(phase, 25 + int(percent * 0.65))
+
+    row_count = import_naumen_xlsx(dest, deps.state, on_progress=report_progress)
+    return SourceLoadResult(
+        ok=True,
+        message=f"Данные загружены: {row_count} строк",
+        record_count=row_count,
+        changed=True,
+        filename=source.name,
+    )
+
+
 _RUNNERS: dict[str, Callable[..., SourceLoadResult]] = {
     "cmdb": _run_cmdb,
     "requests": _run_requests,
+    "naumen": _run_naumen,
 }
 
 CMDB_SOURCE = SourceSpec(
@@ -213,9 +247,22 @@ REQUESTS_SOURCE = SourceSpec(
     storage_filename="requests.xlsx",
 )
 
+NAUMEN_SOURCE = SourceSpec(
+    key="naumen",
+    label="Данные из Naumen",
+    button_label="Обновить Naumen",
+    button_title=(
+        'Берёт самый свежий файл *.xlsx с «naumen» в имени '
+        '(например naumen_all.xlsx) из папки inputData'
+    ),
+    name_marker="naumen",
+    storage_filename="naumen.xlsx",
+)
+
 SOURCES: dict[str, SourceSpec] = {
     CMDB_SOURCE.key: CMDB_SOURCE,
     REQUESTS_SOURCE.key: REQUESTS_SOURCE,
+    NAUMEN_SOURCE.key: NAUMEN_SOURCE,
 }
 
 

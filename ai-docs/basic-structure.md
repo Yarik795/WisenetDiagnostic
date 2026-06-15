@@ -26,7 +26,7 @@
 - `data/monitoring.db` — SQLite с метриками каналов, историей опросов
 - `data/report_delivery_history.json` — журнал отправок email-сводки
 - `data/uploads/`, `data/reports/` — загруженные Excel-файлы и собранные отчёты
-- `inputData/` — исходные данные (cmdb.xlsx, выгрузки заявок)
+- `inputData/` — исходные данные (cmdb.xlsx, выгрузки заявок, `naumen_all.xlsx`)
 - `logs/wisenet.log` — структурированный JSON-лог
 
 Переменные окружения: `CONFIG_PATH` — путь к `config.json`; путь к БД задаётся в `StateStore` (по умолчанию `data/monitoring.db` от корня проекта).
@@ -85,8 +85,9 @@
 
 | Модуль | Назначение |
 |--------|------------|
-| `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки): спецификации, загрузка, импорт |
+| `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки, Naumen): спецификации, загрузка, импорт |
 | `cmdb_sync.py` | Синхронизация устройств в `config.json` из `cmdb.xlsx` (с резервной копией конфига) |
+| `naumen_import.py` | Импорт выгрузки Naumen (`naumen_all.xlsx`) в SQLite (`naumen_records`) |
 
 #### Веб-слой (`backend/app/web/`)
 
