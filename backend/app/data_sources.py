@@ -175,7 +175,11 @@ def _run_requests(
     def report_progress(phase: str, percent: int) -> None:
         on_progress(phase, 25 + int(percent * 0.65))
 
-    report = build_cashflow_report(dest, on_progress=report_progress)
+    report = build_cashflow_report(
+        dest,
+        on_progress=report_progress,
+        naumen_cost_map=deps.state.naumen_cost_by_sberdrug(),
+    )
     row_count = int(report.get("row_count", 0))
     return SourceLoadResult(
         ok=True,

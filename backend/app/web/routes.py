@@ -630,6 +630,7 @@ def _load_requests_from_input_data(
         refresh_url="/payments/partials/report",
         refresh_target="#payments-report-root",
         refresh_select="#payments-report-root",
+        naumen_cost_map=state.naumen_cost_by_sberdrug(),
     )
     return True, f"Загружен {source.name}, формируется отчёт", job
 
@@ -724,6 +725,7 @@ async def payments_refresh(
         refresh_url="/payments/partials/report",
         refresh_target="#payments-report-root",
         refresh_select="#payments-report-root",
+        naumen_cost_map=state.naumen_cost_by_sberdrug(),
     )
     return _payments_job_panel_response(request, job)
 

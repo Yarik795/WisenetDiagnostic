@@ -42,6 +42,8 @@ REQUIRED_COLUMNS = (
     "Заявка №",
 )
 
+DRUG_COLUMN = "№ заявки ДРУГ"
+
 RVR_EXTRA_COLUMNS = ("В лимите",)
 
 FIO_NAMES = [
@@ -262,7 +264,25 @@ def _apply_date_status_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _split_by_fio_tb(df: pd.DataFrame, pattern: str) -> dict[str, pd.DataFrame]:
+def _apply_naumen_cost_fallback(
+    dfx: pd.DataFrame,
+    naumen_cost_map: Optional[dict[str, float]],
+) -> None:
+    if not naumen_cost_map or DRUG_COLUMN not in dfx.columns:
+        return
+    zero = dfx["Сумма с НДС"] == 0
+    if not zero.any():
+        return
+    keys = dfx.loc[zero, DRUG_COLUMN].astype(str).str.strip()
+    dfx.loc[zero, "Сумма с НДС"] = keys.map(naumen_cost_map).fillna(0.0).values
+
+
+def _split_by_fio_tb(
+    df: pd.DataFrame,
+    pattern: str,
+    *,
+    naumen_cost_map: Optional[dict[str, float]] = None,
+) -> dict[str, pd.DataFrame]:
     fio_mask = df["ФИО заказчика"].str.contains(pattern, na=False, case=False)
     df_az = _apply_date_status_pipeline(df[fio_mask])
     df_vsp = _apply_date_status_pipeline(df[~fio_mask])
@@ -284,6 +304,7 @@ def _split_by_fio_tb(df: pd.DataFrame, pattern: str) -> dict[str, pd.DataFrame]:
     for key, dfx in result.items():
         dfx["Месяц выполнения"] = month_period_str(dfx["Фактическая дата выполнения (UTC)"])
         dfx["Сумма с НДС"] = cleanup_money(dfx["Сумма с НДС"])
+        _apply_naumen_cost_fallback(dfx, naumen_cost_map)
     return result
 
 
@@ -481,13 +502,23 @@ def _build_report_kind(
     return {"title": report_title, "sections": sections}
 
 
-def _process_modern(df: pd.DataFrame, pattern: str) -> dict[str, pd.DataFrame]:
+def _process_modern(
+    df: pd.DataFrame,
+    pattern: str,
+    *,
+    naumen_cost_map: Optional[dict[str, float]] = None,
+) -> dict[str, pd.DataFrame]:
     df_modern = df[~df["Вид работ"].isin(["РВР", "ПТО", "Внеплановое ТО"])]
     df_modern = df_modern[~df_modern["Статус"].isin(["Отозвана ДБ", "Отозвана ВК"])]
-    return _split_by_fio_tb(df_modern, pattern)
+    return _split_by_fio_tb(df_modern, pattern, naumen_cost_map=naumen_cost_map)
 
 
-def _process_rvr(df: pd.DataFrame, pattern: str) -> dict[str, pd.DataFrame]:
+def _process_rvr(
+    df: pd.DataFrame,
+    pattern: str,
+    *,
+    naumen_cost_map: Optional[dict[str, float]] = None,
+) -> dict[str, pd.DataFrame]:
     if "В лимите" not in df.columns:
         return _empty_frames()
     df_rvr = df[
@@ -512,13 +543,14 @@ def _process_rvr(df: pd.DataFrame, pattern: str) -> dict[str, pd.DataFrame]:
     ]
     if "Гарантийная заявка" in df_rvr.columns:
         df_rvr = df_rvr[df_rvr["Гарантийная заявка"] != 1]
-    return _split_by_fio_tb(df_rvr, pattern)
+    return _split_by_fio_tb(df_rvr, pattern, naumen_cost_map=naumen_cost_map)
 
 
 def build_cashflow_report(
     xlsx_path: Path,
     *,
     on_progress: Optional[ProgressCallback] = None,
+    naumen_cost_map: Optional[dict[str, float]] = None,
 ) -> dict[str, Any]:
     """Строит отчёт и возвращает JSON-структуру."""
     ensure_storage_dirs()
@@ -534,11 +566,11 @@ def build_cashflow_report(
     if on_progress:
         on_progress("Обработка данных (модернизация)", 25)
 
-    modern_frames = _process_modern(df, pattern)
+    modern_frames = _process_modern(df, pattern, naumen_cost_map=naumen_cost_map)
     if on_progress:
         on_progress("Обработка данных (РВР)", 45)
 
-    rvr_frames = _process_rvr(df, pattern)
+    rvr_frames = _process_rvr(df, pattern, naumen_cost_map=naumen_cost_map)
 
     modern_report = _build_report_kind(
         modern_frames,

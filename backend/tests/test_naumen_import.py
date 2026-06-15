@@ -175,3 +175,40 @@ def test_import_naumen_xlsx_missing_column(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="отсутствуют колонки"):
         import_naumen_xlsx(xlsx, state)
+
+
+def test_naumen_cost_by_sberdrug_first_nonzero(tmp_path: Path) -> None:
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    with state.replace_naumen_records() as session:
+        session.write_batch(
+            [
+                NaumenRow(
+                    external_id="1",
+                    number="100",
+                    cost=0.0,
+                    sberdrug_number="SD111",
+                    description="zero",
+                    source_row=2,
+                ),
+                NaumenRow(
+                    external_id="2",
+                    number="101",
+                    cost=500.5,
+                    sberdrug_number="SD111",
+                    description="nonzero",
+                    source_row=3,
+                ),
+                NaumenRow(
+                    external_id="3",
+                    number="102",
+                    cost=999.0,
+                    sberdrug_number="SD222",
+                    description="other",
+                    source_row=4,
+                ),
+            ]
+        )
+
+    cost_map = state.naumen_cost_by_sberdrug()
+    assert cost_map == {"SD111": 500.5, "SD222": 999.0}

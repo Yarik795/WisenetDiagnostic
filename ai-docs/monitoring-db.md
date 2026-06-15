@@ -544,6 +544,8 @@ Append-only журнал **каждой попытки** опроса регис
 
 Импорт: `naumen_import.import_naumen_xlsx()` → `StateStore.replace_naumen_records()` (DELETE + batch INSERT в одной транзакции). Парсинг — openpyxl `read_only=True` для больших файлов.
 
+Чтение для отчёта «Статус оплаты»: `StateStore.naumen_cost_by_sberdrug()` — карта `sberdrug_number` → первая ненулевая `cost` (по `source_row`). При сборке отчёта, если у заявки из ПП «Сумма с НДС» = 0, подставляется стоимость по ключу «№ заявки ДРУГ» ↔ `sberdrug_number`.
+
 ---
 
 ## 7. Жизненный цикл данных
@@ -619,7 +621,7 @@ sequenceDiagram
 | `list_poll_attempts` | `recorder_poll_attempts` | Выборка по `job_id` / `recorder_id` |
 | `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
 | `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
-| `replace_naumen_records` / `count_naumen_records` | `naumen_records` | Импорт выгрузки Naumen |
+| `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты» |
 
 ---
 

@@ -113,9 +113,14 @@ class ReportJobManager:
         refresh_url: Optional[str] = None,
         refresh_target: Optional[str] = None,
         refresh_select: Optional[str] = None,
+        naumen_cost_map: Optional[dict[str, float]] = None,
     ) -> ReportJob:
         def runner(on_progress: ProgressCallback) -> str:
-            build_cashflow_report(xlsx_path, on_progress=on_progress)
+            build_cashflow_report(
+                xlsx_path,
+                on_progress=on_progress,
+                naumen_cost_map=naumen_cost_map,
+            )
             return "Отчёт успешно сформирован"
 
         return self.start(

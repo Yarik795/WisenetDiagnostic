@@ -402,6 +402,21 @@ class StateStore:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM naumen_records").fetchone()
         return int(row["cnt"]) if row else 0
 
+    def naumen_cost_by_sberdrug(self) -> dict[str, float]:
+        """Карта «Номер Сбердруг» -> первая ненулевая «Стоимость» (по source_row)."""
+        result: dict[str, float] = {}
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT sberdrug_number, cost FROM naumen_records "
+                "WHERE sberdrug_number IS NOT NULL AND sberdrug_number != '' "
+                "AND cost > 0 ORDER BY source_row"
+            ).fetchall()
+        for row in rows:
+            key = str(row["sberdrug_number"]).strip()
+            if key and key not in result:
+                result[key] = float(row["cost"])
+        return result
+
     def record_source_import(
         self,
         source_key: str,

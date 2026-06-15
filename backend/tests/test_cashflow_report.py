@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from app.cashflow_report import (
+    DRUG_COLUMN,
     REPORT_ARTIFACT,
     build_cashflow_report,
     find_latest_requests_source_file,
@@ -118,3 +119,45 @@ def test_import_requests_from_source(sample_xlsx: Path, tmp_path: Path):
     assert copied == dest
     assert size > 0
     assert dest.is_file()
+
+
+def test_build_cashflow_report_naumen_cost_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "with_drug.xlsx"
+    drug_key = "SD198350794"
+    rows = [
+        _sample_row(
+            **{
+                "Сумма с НДС": "0",
+                "Заявка №": "13674730",
+                DRUG_COLUMN: drug_key,
+            }
+        ),
+    ]
+    pd.DataFrame(rows).to_excel(path, index=False, engine="openpyxl")
+    artifact = tmp_path / "cashflow_report.json"
+    monkeypatch.setattr("app.cashflow_report.REPORT_ARTIFACT", artifact)
+
+    payload = build_cashflow_report(path, naumen_cost_map={drug_key: 12345.0})
+    az_mb = next(
+        section
+        for section in payload["reports"]["modern"]["sections"]
+        if section["key"] == "az_mb"
+    )
+    row = next(
+        item for item in az_mb["rows"] if item["request_number"] == "13674730"
+    )
+    assert row["amount"] == "12 345,00"
+    assert "12 345,00" in az_mb["kpi"]["total_sum"]
+
+    payload_empty = build_cashflow_report(path, naumen_cost_map={})
+    az_mb_empty = next(
+        section
+        for section in payload_empty["reports"]["modern"]["sections"]
+        if section["key"] == "az_mb"
+    )
+    row_empty = next(
+        item for item in az_mb_empty["rows"] if item["request_number"] == "13674730"
+    )
+    assert row_empty["amount"] == "0,00"
