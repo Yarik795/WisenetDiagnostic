@@ -1,0 +1,16 @@
+<div class="ai-chat-turn" data-stream-url="{{ stream_url }}">
+  {% set message = user_message %}
+  {% include "partials/ai_chat_message.html" %}
+
+  {% set message = {
+    "id": "pending",
+    "role": "assistant",
+    "content": "",
+    "sql": none,
+    "chart": none,
+    "table": none,
+    "created_at": none,
+    "pending": true
+  } %}
+  {% include "partials/ai_chat_message.html" %}
+</div>

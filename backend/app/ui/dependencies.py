@@ -16,6 +16,15 @@ def get_state_store() -> StateStore:
     return store
 
 
+@lru_cache
+def get_chat_store() -> "ChatStore":
+    from ..chat_store import ChatStore
+
+    store = ChatStore()
+    store.init_db()
+    return store
+
+
 def get_store() -> ConfigStore:
     return ConfigStore()
 

@@ -124,6 +124,18 @@ class ExclusionSettings(BaseModel):
     recorder_ids: list[str] = Field(default_factory=list)
 
 
+class LLMSettings(BaseModel):
+    enabled: bool = False
+    base_url: str = "https://api.vsellm.ru/v1"
+    api_key: str = ""
+    model: str = "anthropic/claude-haiku-4.5"
+    verify_ssl: bool = False
+    max_iterations: int = Field(default=5, ge=1, le=20)
+    max_rows: int = Field(default=1000, ge=1, le=10000)
+    llm_result_sample_rows: int = Field(default=50, ge=1, le=500)
+    history_context_messages: int = Field(default=20, ge=2, le=100)
+
+
 class EmailReportSettings(BaseModel):
     enabled: bool = False
     smtp_host: str = "MTA.SIGMA.SBRF.RU"
@@ -159,6 +171,7 @@ class AppConfig(BaseModel):
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     exclusions: ExclusionSettings = Field(default_factory=ExclusionSettings)
     email_report: EmailReportSettings = Field(default_factory=EmailReportSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
 
 
 class CheckResult(BaseModel):

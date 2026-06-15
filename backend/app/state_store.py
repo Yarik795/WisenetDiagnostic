@@ -188,62 +188,70 @@ class StateStore:
         with self._connect() as conn:
             conn.executescript(
                 """
+                -- channels: текущее (последнее известное) состояние каждого
+                -- видеоканала на каждом регистраторе. Одна строка = один канал.
                 CREATE TABLE IF NOT EXISTS channels (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    recorder_id TEXT NOT NULL,
-                    channel_no INTEGER NOT NULL,
-                    name TEXT,
-                    camera_ip TEXT,
-                    camera_model TEXT,
-                    source_state TEXT,
-                    health_status TEXT NOT NULL DEFAULT 'unknown',
-                    health_reason TEXT,
-                    video_loss INTEGER,
-                    last_polled_at TEXT,
-                    UNIQUE(recorder_id, channel_no)
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,    -- суррогатный PK (автоинкремент)
+                    recorder_id TEXT NOT NULL,               -- ID регистратора из config.json (recorders[].id)
+                    channel_no INTEGER NOT NULL,             -- номер канала на NVR (0-based, как в SUNAPI)
+                    name TEXT,                               -- отображаемое имя канала (ChannelInfo.name)
+                    camera_ip TEXT,                          -- IP сетевой камеры канала (NULL для аналоговых/пустых)
+                    camera_model TEXT,                       -- модель камеры из атрибутов канала
+                    source_state TEXT,                       -- состояние источника с NVR: On/Off/Deactive/Covert1/Covert2 (как от API)
+                    health_status TEXT NOT NULL DEFAULT 'unknown',  -- агрегированный статус канала: ok/warn/error/unknown
+                    health_reason TEXT,                      -- человекочитаемое объяснение статуса (рус. текст из evaluate_channel_health)
+                    video_loss INTEGER,                      -- 1=VideoLoss активен, 0=нет, NULL=событие не опрашивалось
+                    last_polled_at TEXT,                     -- время последнего обновления строки (ISO 8601, UTC)
+                    UNIQUE(recorder_id, channel_no)          -- один канал — одна строка; основа UPSERT
                 );
 
+                -- recorder_metrics: снимок последнего полного опроса каждого NVR.
+                -- Ровно одна строка на регистратор (PK = recorder_id).
                 CREATE TABLE IF NOT EXISTS recorder_metrics (
-                    recorder_id TEXT PRIMARY KEY,
-                    model TEXT,
-                    firmware_version TEXT,
-                    device_online INTEGER NOT NULL DEFAULT 0,
-                    health_status TEXT NOT NULL DEFAULT 'unknown',
-                    health_reason TEXT,
-                    ntp_status TEXT,
-                    time_skew_seconds REAL,
-                    storage_used_percent REAL,
-                    storage_status TEXT,
-                    archive_start TEXT,
-                    archive_end TEXT,
-                    archive_days REAL,
-                    channel_count INTEGER NOT NULL DEFAULT 0,
-                    channels_ok INTEGER NOT NULL DEFAULT 0,
-                    channels_warn INTEGER NOT NULL DEFAULT 0,
-                    channels_error INTEGER NOT NULL DEFAULT 0,
-                    channels_unknown INTEGER NOT NULL DEFAULT 0,
-                    last_polled_at TEXT
+                    recorder_id TEXT PRIMARY KEY,            -- ID регистратора из config.json
+                    model TEXT,                              -- модель устройства (DeviceInfo.model)
+                    firmware_version TEXT,                   -- версия прошивки NVR
+                    device_online INTEGER NOT NULL DEFAULT 0,  -- 1, если SUNAPI ответил в последнем опросе
+                    health_status TEXT NOT NULL DEFAULT 'unknown',  -- сводный статус NVR: ok/warn/error/unknown
+                    health_reason TEXT,                      -- причины статуса через "; " (evaluate_recorder_health)
+                    ntp_status TEXT,                         -- статус NTP с устройства: Success/Fail/...
+                    time_skew_seconds REAL,                  -- расхождение времени NVR и сервера приложения, сек
+                    storage_used_percent REAL,               -- заполненность хранилища, %
+                    storage_status TEXT,                     -- худший статус дисков агрегатом (Normal/error/...)
+                    archive_start TEXT,                      -- начало глобального периода записи (если API вернул общий период)
+                    archive_end TEXT,                        -- конец глобального периода записи
+                    archive_days REAL,                       -- глубина архива в сутках (часто max по каналам / глобальное значение)
+                    channel_count INTEGER NOT NULL DEFAULT 0,    -- всего учтённых каналов
+                    channels_ok INTEGER NOT NULL DEFAULT 0,      -- каналов со статусом ok
+                    channels_warn INTEGER NOT NULL DEFAULT 0,    -- каналов со статусом warn
+                    channels_error INTEGER NOT NULL DEFAULT 0,   -- каналов со статусом error
+                    channels_unknown INTEGER NOT NULL DEFAULT 0, -- каналов со статусом unknown
+                    last_polled_at TEXT                      -- время последнего опроса метрик (ISO 8601, UTC)
                 );
 
+                -- status_history: журнал смены агрегированного health_status
+                -- сущностей (канал/регистратор). Запись добавляется только при смене статуса.
                 CREATE TABLE IF NOT EXISTS status_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    entity_type TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    reason TEXT,
-                    recorded_at TEXT NOT NULL
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,    -- PK (автоинкремент)
+                    entity_type TEXT NOT NULL,               -- тип сущности: 'channel' или 'recorder'
+                    entity_id TEXT NOT NULL,                 -- идентификатор: '{recorder_id}:{channel_no}' или '{recorder_id}'
+                    status TEXT NOT NULL,                    -- новый статус: ok/warn/error/unknown
+                    reason TEXT,                             -- текст причины на момент смены
+                    recorded_at TEXT NOT NULL                -- время фиксации (ISO 8601, UTC)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_history_entity
                     ON status_history(entity_type, entity_id, recorded_at DESC);
 
+                -- category_status_history: история смены статуса по категориям
+                -- здоровья NVR (время/NTP, температура, диски, вентиляторы, каналы, архив).
                 CREATE TABLE IF NOT EXISTS category_status_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    recorder_id TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    reason TEXT,
-                    recorded_at TEXT NOT NULL
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,    -- PK (автоинкремент)
+                    recorder_id TEXT NOT NULL,               -- ID регистратора
+                    category TEXT NOT NULL,                  -- ключ категории: time/temperature/storage/fans/channels/archive
+                    status TEXT NOT NULL,                    -- статус категории: ok/warn/error/unknown
+                    reason TEXT,                             -- пояснение от classify_*_health()
+                    recorded_at TEXT NOT NULL                -- время фиксации (ISO 8601, UTC)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_category_history_entity
@@ -251,16 +259,18 @@ class StateStore:
                 CREATE INDEX IF NOT EXISTS idx_channels_recorder
                     ON channels(recorder_id);
 
+                -- recorder_poll_attempts: append-only журнал каждой попытки опроса
+                -- регистратора в рамках массового job (планировщик/опрос всех/инвентаризация).
                 CREATE TABLE IF NOT EXISTS recorder_poll_attempts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    job_id TEXT NOT NULL,
-                    recorder_id TEXT NOT NULL,
-                    attempt INTEGER NOT NULL,
-                    outcome TEXT NOT NULL,
-                    online INTEGER NOT NULL DEFAULT 0,
-                    error TEXT,
-                    duration_ms INTEGER,
-                    recorded_at TEXT NOT NULL
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,    -- PK (автоинкремент)
+                    job_id TEXT NOT NULL,                    -- идентификатор job из PollJobManager (12 hex)
+                    recorder_id TEXT NOT NULL,               -- ID регистратора
+                    attempt INTEGER NOT NULL,                -- номер попытки/волны в job (1 = первый проход)
+                    outcome TEXT NOT NULL,                   -- итог попытки: success/offline/error
+                    online INTEGER NOT NULL DEFAULT 0,       -- 1, если NVR ответил (RecorderPollData.online)
+                    error TEXT,                              -- текст ошибки подключения/исключения
+                    duration_ms INTEGER,                     -- длительность попытки, мс
+                    recorded_at TEXT NOT NULL                -- время попытки (ISO 8601, UTC)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_poll_attempts_recorder
@@ -268,27 +278,31 @@ class StateStore:
                 CREATE INDEX IF NOT EXISTS idx_poll_attempts_job
                     ON recorder_poll_attempts(job_id, recorder_id, attempt);
 
+                -- source_imports: журнал загрузок исходных файлов со страницы /sources
+                -- (CMDB, заявки, Naumen).
                 CREATE TABLE IF NOT EXISTS source_imports (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source_key TEXT NOT NULL,
-                    filename TEXT,
-                    imported_at TEXT NOT NULL,
-                    record_count INTEGER NOT NULL DEFAULT 0,
-                    status TEXT NOT NULL,
-                    message TEXT
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,    -- PK (автоинкремент)
+                    source_key TEXT NOT NULL,                -- ключ источника: cmdb/requests/naumen
+                    filename TEXT,                           -- имя исходного файла из inputData/
+                    imported_at TEXT NOT NULL,               -- время импорта (ISO 8601, UTC)
+                    record_count INTEGER NOT NULL DEFAULT 0, -- число обработанных записей
+                    status TEXT NOT NULL,                    -- результат импорта: ok/error
+                    message TEXT                             -- текст результата/ошибки
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_source_imports_key
                     ON source_imports(source_key, imported_at DESC);
 
+                -- naumen_records: выгрузка заявок Naumen (naumen_all.xlsx).
+                -- Полностью перезаписывается при каждом импорте (DELETE + batch INSERT).
                 CREATE TABLE IF NOT EXISTS naumen_records (
-                    external_id TEXT PRIMARY KEY,
-                    number TEXT NOT NULL,
-                    cost REAL NOT NULL DEFAULT 0,
-                    sberdrug_number TEXT,
-                    description TEXT,
-                    source_row INTEGER,
-                    imported_at TEXT NOT NULL
+                    external_id TEXT PRIMARY KEY,            -- "ID внешней системы" (PK)
+                    number TEXT NOT NULL,                    -- "Номер" заявки
+                    cost REAL NOT NULL DEFAULT 0,            -- "Стоимость" (пусто в xlsx → 0)
+                    sberdrug_number TEXT,                    -- "Номер Сбердруг" (ключ подстановки суммы в отчёт оплаты)
+                    description TEXT,                        -- "Описание" заявки
+                    source_row INTEGER,                      -- номер строки в исходном xlsx
+                    imported_at TEXT NOT NULL                -- время импорта (ISO 8601, UTC)
                 );
                 """
             )
@@ -298,31 +312,33 @@ class StateStore:
         metrics_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(recorder_metrics)").fetchall()
         }
+        # Колонки recorder_metrics, добавленные миграциями поверх базовой схемы.
+        # Формат: (имя, тип). Комментарий справа — назначение поля.
         metrics_additions = [
-            ("local_time", "TEXT"),
-            ("utc_time", "TEXT"),
-            ("sync_type", "TEXT"),
-            ("storage_used_mb", "REAL"),
-            ("storage_total_mb", "REAL"),
-            ("disks_json", "TEXT"),
-            ("archive_min_days", "REAL"),
-            ("archive_max_days", "REAL"),
-            ("system_events_json", "TEXT"),
-            ("storageinfo_ok", "INTEGER NOT NULL DEFAULT 0"),
-            ("archive_poll_error", "TEXT"),
-            ("recording_storage_enable", "INTEGER"),
-            ("last_poll_job_id", "TEXT"),
-            ("last_poll_attempts", "INTEGER"),
-            ("last_poll_success_attempt", "INTEGER"),
-            ("last_poll_first_try_ok", "INTEGER"),
-            ("recording_storage_overwrite", "INTEGER"),
-            ("cpu_usage_max", "REAL"),
-            ("cpu_usage_avg", "REAL"),
-            ("data_rate_total_mbps", "REAL"),
-            ("channels_zero_bitrate", "INTEGER"),
-            ("channels_poe_off", "INTEGER"),
-            ("serial_number", "TEXT"),
-            ("manufacture_date", "TEXT"),
+            ("local_time", "TEXT"),                  # локальное время на NVR (строка с устройства)
+            ("utc_time", "TEXT"),                    # UTC-время на NVR (строка с устройства)
+            ("sync_type", "TEXT"),                   # режим синхронизации времени: Manual/NTP/GPS
+            ("storage_used_mb", "REAL"),             # занято хранилища, МБ
+            ("storage_total_mb", "REAL"),            # всего хранилища, МБ
+            ("disks_json", "TEXT"),                  # JSON-массив дисков (Storage/Status/Model/Temperature/...)
+            ("archive_min_days", "REAL"),            # минимальная глубина архива среди каналов, сут.
+            ("archive_max_days", "REAL"),            # максимальная глубина архива среди каналов, сут.
+            ("system_events_json", "TEXT"),          # JSON-объект "событие SUNAPI -> активно ли" (HDDFail, CPUFanError, ...)
+            ("storageinfo_ok", "INTEGER NOT NULL DEFAULT 0"),  # 1, если CGI хранилища вернул валидные данные (метрикам дисков можно доверять)
+            ("archive_poll_error", "TEXT"),          # текст ошибки при опросе периода записи (иначе NULL)
+            ("recording_storage_enable", "INTEGER"), # 1=запись на накопитель включена, 0=выключена, NULL=неизвестно
+            ("last_poll_job_id", "TEXT"),            # ID последнего массового job, обновившего сводку (last_poll_*)
+            ("last_poll_attempts", "INTEGER"),       # число попыток NVR в том job
+            ("last_poll_success_attempt", "INTEGER"),  # номер успешной попытки (1-based); NULL, если ответа не было
+            ("last_poll_first_try_ok", "INTEGER"),   # 1=ответ с первой попытки job, 0=с повтора или без ответа
+            ("recording_storage_overwrite", "INTEGER"),  # 1=режим перезаписи (overwrite) при заполнении, 0=нет, NULL=неизвестно
+            ("cpu_usage_max", "REAL"),               # макс. нагрузка декодирования по активным каналам, %
+            ("cpu_usage_avg", "REAL"),               # средняя нагрузка декодирования по активным каналам, %
+            ("data_rate_total_mbps", "REAL"),        # суммарный битрейт всех активных каналов, Мбит/с
+            ("channels_zero_bitrate", "INTEGER"),    # число IP-каналов с нулевым битрейтом (без аналоговых)
+            ("channels_poe_off", "INTEGER"),         # число PoE-портов без питания (резерв; сейчас не заполняется)
+            ("serial_number", "TEXT"),               # серийный номер устройства
+            ("manufacture_date", "TEXT"),            # дата производства, выведенная из серийника (Samsung/Hanwha date code)
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -333,13 +349,14 @@ class StateStore:
         channel_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(channels)").fetchall()
         }
+        # Колонки channels, добавленные миграциями поверх базовой схемы.
         channel_additions = [
-            ("archive_start", "TEXT"),
-            ("archive_end", "TEXT"),
-            ("archive_days", "REAL"),
-            ("data_rate", "REAL"),
-            ("cpu_usage", "REAL"),
-            ("poe_status", "INTEGER"),
+            ("archive_start", "TEXT"),   # начало периода записи по каналу (строка с NVR)
+            ("archive_end", "TEXT"),     # конец периода записи по каналу (строка с NVR)
+            ("archive_days", "REAL"),    # глубина архива канала, сут.
+            ("data_rate", "REAL"),       # битрейт потока канала, Мбит/с (DataRate из SUNAPI)
+            ("cpu_usage", "REAL"),       # нагрузка декодирования на канал, %
+            ("poe_status", "INTEGER"),   # 1=питание PoE-порта включено, 0=выключено, NULL=нет данных/не поддерживается
         ]
         for name, col_type in channel_additions:
             if name not in channel_columns:

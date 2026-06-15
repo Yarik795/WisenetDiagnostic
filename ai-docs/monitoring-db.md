@@ -100,22 +100,25 @@ erDiagram
 
 | Поле | Тип SQLite | NULL | По умолчанию | Назначение |
 |------|------------|------|--------------|------------|
-| `id` | `INTEGER` | NO | AUTO | Суррогатный первичный ключ |
-| `recorder_id` | `TEXT` | NO | — | ID регистратора из `config.json` |
-| `channel_no` | `INTEGER` | NO | — | Номер канала на NVR (0-based, как в SUNAPI) |
-| `name` | `TEXT` | YES | — | Отображаемое имя канала (`ChannelInfo.name`) |
-| `camera_ip` | `TEXT` | YES | — | IP сетевой камеры, если канал с IP-камерой |
-| `camera_model` | `TEXT` | YES | — | Модель камеры из атрибутов канала |
-| `source_state` | `TEXT` | YES | — | Состояние источника с NVR: `On`, `Off`, `Deactive`, `Covert1`, `Covert2` и т.д. (как от API; сравнение в коде через `.lower()`) |
-| `health_status` | `TEXT` | NO | `'unknown'` | Агрегированный статус: `ok` / `warn` / `error` / `unknown` |
-| `health_reason` | `TEXT` | YES | — | Человекочитаемое объяснение статуса (русский текст из `evaluate_channel_health`) |
-| `video_loss` | `INTEGER` | YES | — | `1` — событие VideoLoss активно; `0` — нет; `NULL` — событие не опрашивалось |
-| `last_polled_at` | `TEXT` | YES | — | Время последнего обновления строки (ISO UTC) |
-| `archive_start` | `TEXT` | YES | — | Начало периода записи на канале (строка с NVR) |
-| `archive_end` | `TEXT` | YES | — | Конец периода записи |
-| `archive_days` | `REAL` | YES | — | Глубина архива в сутках для канала |
+| `id` | `INTEGER` | NO | AUTO | Суррогатный первичный ключ (автоинкремент). Внутренний идентификатор строки; не привязан к устройству и может меняться при пересоздании канала |
+| `recorder_id` | `TEXT` | NO | — | ID регистратора-владельца канала из `config.json` (`recorders[].id`, формат `nvr-{8 hex}`). Связь с конфигом и со всеми остальными таблицами |
+| `channel_no` | `INTEGER` | NO | — | Номер канала на NVR (**0-based**, как в SUNAPI). Вместе с `recorder_id` образует бизнес-ключ канала |
+| `name` | `TEXT` | YES | — | Отображаемое имя канала (`ChannelInfo.name`), заданное на NVR. `NULL`, если имя не получено |
+| `camera_ip` | `TEXT` | YES | — | IP сетевой камеры канала. `NULL` для аналоговых каналов и пустых слотов; используется как признак «канал с IP-камерой» при оценке здоровья |
+| `camera_model` | `TEXT` | YES | — | Модель камеры из атрибутов канала. `NULL`, если NVR не сообщил модель |
+| `source_state` | `TEXT` | YES | — | Состояние источника с NVR в исходном регистре API: `On`, `Off`, `Deactive`, `Covert1`, `Covert2` и т.д. (сравнение в коде через `.lower()`). Базовый вход для `evaluate_channel_health` |
+| `health_status` | `TEXT` | NO | `'unknown'` | Агрегированный статус канала: `ok` / `warn` / `error` / `unknown`. Вычисляется при каждом успешном обновлении (см. §2.4) |
+| `health_reason` | `TEXT` | YES | — | Человекочитаемое объяснение текущего статуса (русский текст из `evaluate_channel_health`), напр. «Потеря видео (VideoLoss)», «Нулевой битрейт потока» |
+| `video_loss` | `INTEGER` | YES | — | Признак события VideoLoss: `1` — активно (нет сигнала с камеры), `0` — нет, `NULL` — событие не опрашивалось в этом цикле |
+| `last_polled_at` | `TEXT` | YES | — | Время последнего обновления строки, ISO 8601 с timezone (UTC). Маркер актуальности данных канала |
+| `archive_start` | `TEXT` | YES | — | Начало периода записи на канале — строка в формате NVR (не ISO). `NULL`, если период не получен |
+| `archive_end` | `TEXT` | YES | — | Конец периода записи на канале — строка в формате NVR (не ISO) |
+| `archive_days` | `REAL` | YES | — | Глубина архива канала в сутках (вычислена из периода записи). Источник для `archive_min_days`/`archive_max_days` регистратора |
+| `data_rate` | `REAL` | YES | — | Битрейт потока канала, **Мбит/с** (`DataRate` из SUNAPI). Значение `≤ 0` у активного канала трактуется как «нулевой битрейт» (warn) |
+| `cpu_usage` | `REAL` | YES | — | Нагрузка декодирования на канал, **%** (`CPUUsage` из SUNAPI). Пороги warn/error — `cpu_usage_warn_percent` / `cpu_usage_error_percent` |
+| `poe_status` | `INTEGER` | YES | — | Питание PoE-порта канала: `1` — включено, `0` — выключено, `NULL` — нет данных или модель не поддерживает PoE-статус (`profile.supports_poe_status`) |
 
-> Поля `archive_*` добавлены миграцией `_migrate_schema()`; в старых БД могли отсутствовать до первого `init_db()` после обновления.
+> Поля `archive_*`, `data_rate`, `cpu_usage`, `poe_status` добавлены миграцией `_migrate_schema()`; в старых БД могли отсутствовать до первого `init_db()` после обновления.
 
 ### 2.3. Ограничения и индексы
 
@@ -138,6 +141,9 @@ erDiagram
 | `connected` = false (события) | `error` | Камера не подключена |
 | register status — ошибка при `on` | `error` | Статус регистрации: … |
 | register status не success/ok | `warn` | Статус регистрации: … |
+| активный канал, `data_rate` ≤ 0 | `warn` | Нулевой битрейт потока |
+| активный канал, `cpu_usage` ≥ `cpu_usage_error_percent` | `error` | Нагрузка декодирования {n}% |
+| активный канал, `cpu_usage` ≥ `cpu_usage_warn_percent` | `warn` | Нагрузка декодирования {n}% |
 | канал активен с IP | `ok` | Канал активен |
 | `on` без IP | `ok` | Канал включён |
 | иначе | `unknown` | Нет данных о канале |
@@ -161,7 +167,10 @@ erDiagram
   "last_polled_at": "2026-05-25T14:32:01.123456+00:00",
   "archive_start": "2026-04-20 00:00:00",
   "archive_end": "2026-05-25 12:00:00",
-  "archive_days": 35.5
+  "archive_days": 35.5,
+  "data_rate": 8.2,
+  "cpu_usage": 35.0,
+  "poe_status": 1
 }
 ```
 
@@ -194,40 +203,90 @@ erDiagram
 
 ### 3.2. Поля
 
+Поля сгруппированы по смыслу. Колонки `local_time` … `manufacture_date` добавлены миграциями `_migrate_schema()` (в старых БД могли отсутствовать до первого `init_db()` после обновления).
+
+**Идентификация устройства:**
+
 | Поле | Тип SQLite | NULL | По умолчанию | Назначение |
 |------|------------|------|--------------|------------|
-| `recorder_id` | `TEXT` | NO | — | **PRIMARY KEY** — ID из `config.json` |
-| `model` | `TEXT` | YES | — | Модель устройства (`DeviceInfo.model`) |
-| `firmware_version` | `TEXT` | YES | — | Версия прошивки |
-| `device_online` | `INTEGER` | NO | `0` | `1` если SUNAPI ответил успешно в последнем опросе |
-| `health_status` | `TEXT` | NO | `'unknown'` | Сводный статус NVR: `ok` / `warn` / `error` / `unknown` |
-| `health_reason` | `TEXT` | YES | — | Текст причин (через `; `), из `evaluate_recorder_health()` |
-| `ntp_status` | `TEXT` | YES | — | Статус NTP с устройства, напр. `Success`, `Fail` |
-| `time_skew_seconds` | `REAL` | YES | — | Расхождение времени NVR и сервера приложения, секунды |
+| `recorder_id` | `TEXT` | NO | — | **PRIMARY KEY** — ID из `config.json` (`recorders[].id`). Связывает строку со всеми остальными таблицами и с конфигом |
+| `model` | `TEXT` | YES | — | Модель устройства (`DeviceInfo.model`), напр. `PRN-4011` |
+| `firmware_version` | `TEXT` | YES | — | Версия прошивки NVR |
+| `serial_number` | `TEXT` | YES | — | Серийный номер устройства (с SUNAPI). Сохраняется прежнее значение, если в опросе серийник не пришёл |
+| `manufacture_date` | `TEXT` | YES | — | Дата производства, **выведенная из серийного номера** (Samsung/Hanwha date code, `resolve_manufacture_date`), а не полученная от API. `YYYY-MM` или `NULL`, если код не распознан |
+
+**Доступность и сводный статус:**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
+| `device_online` | `INTEGER` | NO | `0` | `1`, если SUNAPI ответил успешно в последнем опросе; `0` — NVR недоступен. При `0` метрики дисков/NTP могут быть устаревшими |
+| `health_status` | `TEXT` | NO | `'unknown'` | Сводный статус NVR: `ok` / `warn` / `error` / `unknown` (см. §3.4) |
+| `health_reason` | `TEXT` | YES | — | Текст причин статуса, склеенный через `; ` (`evaluate_recorder_health()`) |
+| `last_polled_at` | `TEXT` | YES | — | Время последнего опроса метрик, ISO 8601 (UTC). Маркер актуальности всей строки |
+
+**Время и синхронизация:**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
+| `ntp_status` | `TEXT` | YES | — | Статус NTP с устройства, напр. `Success`, `Fail`. `Fail` повышает статус до warn |
+| `time_skew_seconds` | `REAL` | YES | — | Расхождение времени NVR и сервера приложения, секунды. Пороги — `time_skew_warn_seconds` / `time_skew_error_seconds` |
+| `local_time` | `TEXT` | YES | — | Локальное время на NVR (строка с устройства) |
+| `utc_time` | `TEXT` | YES | — | UTC-время на NVR (строка с устройства) |
+| `sync_type` | `TEXT` | YES | — | Режим синхронизации времени: `Manual`, `NTP`, `GPS` (в UI приводится к нижнему регистру) |
+
+**Хранилище и архив:**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
 | `storage_used_percent` | `REAL` | YES | — | Заполненность хранилища, % |
-| `storage_status` | `TEXT` | YES | — | Худший статус дисков агрегатом (`error`, `Normal`, …) |
-| `archive_start` | `TEXT` | YES | — | Начало глобального периода записи (если API вернул общий период) |
-| `archive_end` | `TEXT` | YES | — | Конец периода |
-| `archive_days` | `REAL` | YES | — | Глубина архива (часто max по каналам или глобальное значение) |
-| `archive_min_days` | `REAL` | YES | — | Минимальная глубина среди каналов |
-| `archive_max_days` | `REAL` | YES | — | Максимальная глубина среди каналов |
+| `storage_used_mb` | `REAL` | YES | — | Занято на накопителях, МБ |
+| `storage_total_mb` | `REAL` | YES | — | Полный объём накопителей, МБ |
+| `storage_status` | `TEXT` | YES | — | Худший статус дисков агрегатом (`Normal`, `error`, `fail`, …). `error`/`fail` → error по NVR |
+| `storageinfo_ok` | `INTEGER` | NO | `0` | `1`, если CGI хранилища вернул валидные данные (метрикам дисков можно доверять); `0` — ответ-ошибка, метрики дисков ненадёжны |
+| `disks_json` | `TEXT` | YES | — | JSON-массив объектов дисков (см. §3.5) |
+| `archive_start` | `TEXT` | YES | — | Начало глобального периода записи (если API вернул общий период), строка в формате NVR |
+| `archive_end` | `TEXT` | YES | — | Конец глобального периода записи |
+| `archive_days` | `REAL` | YES | — | Глубина архива в сутках (часто max по каналам или глобальное значение) |
+| `archive_min_days` | `REAL` | YES | — | Минимальная глубина архива среди каналов, сут. Основной вход для warn/error по архиву |
+| `archive_max_days` | `REAL` | YES | — | Максимальная глубина архива среди каналов, сут. |
+| `archive_poll_error` | `TEXT` | YES | — | Текст ошибки при опросе периода записи (`recording_period_error`); `NULL`, если период получен без ошибок |
+| `recording_storage_enable` | `INTEGER` | YES | — | Запись на накопитель: `1` — включена, `0` — выключена (→ error «Запись на накопитель отключена»), `NULL` — неизвестно |
+| `recording_storage_overwrite` | `INTEGER` | YES | — | Режим перезаписи при заполнении: `1` — перезапись включена (циклическая запись), `0` — нет, `NULL` — неизвестно |
+
+**Каналы (агрегаты по NVR):**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
 | `channel_count` | `INTEGER` | NO | `0` | Всего учтённых каналов |
 | `channels_ok` | `INTEGER` | NO | `0` | Каналов со статусом `ok` |
 | `channels_warn` | `INTEGER` | NO | `0` | Каналов со статусом `warn` |
 | `channels_error` | `INTEGER` | NO | `0` | Каналов со статусом `error` |
 | `channels_unknown` | `INTEGER` | NO | `0` | Каналов со статусом `unknown` |
-| `last_polled_at` | `TEXT` | YES | — | Время последнего опроса метрик |
-| `local_time` | `TEXT` | YES | — | Локальное время на NVR |
-| `utc_time` | `TEXT` | YES | — | UTC на NVR |
-| `sync_type` | `TEXT` | YES | — | Режим синхронизации: `Manual`, `NTP`, `GPS` (в UI — нижний регистр) |
-| `storage_used_mb` | `REAL` | YES | — | Занято, МБ |
-| `storage_total_mb` | `REAL` | YES | — | Всего, МБ |
-| `disks_json` | `TEXT` | YES | — | JSON-массив объектов дисков (см. §3.5) |
-| `system_events_json` | `TEXT` | YES | — | JSON-объект `{ "HDDFail": true, "CPUFanError": false, … }` |
-| `last_poll_job_id` | `TEXT` | YES | — | ID последнего массового опроса (`PollJob.job_id`) |
-| `last_poll_attempts` | `INTEGER` | YES | — | Число попыток в том job |
-| `last_poll_success_attempt` | `INTEGER` | YES | — | Номер успешной попытки (1-based); `NULL` если ответа не было |
-| `last_poll_first_try_ok` | `INTEGER` | YES | — | `1` — ответ с первой попытки job; `0` — с повтора или без ответа |
+| `channels_zero_bitrate` | `INTEGER` | YES | — | Число IP-каналов с нулевым битрейтом (аналоговые исключены). `> 0` → warn по NVR |
+| `channels_poe_off` | `INTEGER` | YES | — | Число PoE-портов без питания. **Резервное поле**: вычисляется, но в текущей версии всегда записывается `NULL` |
+
+**Нагрузка и поток:**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
+| `cpu_usage_max` | `REAL` | YES | — | Максимальная нагрузка декодирования по активным каналам, %. Пороги — `cpu_usage_warn_percent` / `cpu_usage_error_percent` |
+| `cpu_usage_avg` | `REAL` | YES | — | Средняя нагрузка декодирования по активным каналам, % |
+| `data_rate_total_mbps` | `REAL` | YES | — | Суммарный битрейт всех активных каналов, Мбит/с (сумма `channels.data_rate`) |
+
+**Системные события:**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
+| `system_events_json` | `TEXT` | YES | — | JSON-объект `{ "HDDFail": true, "CPUFanError": false, … }` (см. §3.6) |
+
+**Сводка последнего массового опроса (job):**
+
+| Поле | Тип SQLite | NULL | По умолчанию | Назначение |
+|------|------------|------|--------------|------------|
+| `last_poll_job_id` | `TEXT` | YES | — | ID последнего массового опроса (`PollJob.job_id`), обновившего поля `last_poll_*` |
+| `last_poll_attempts` | `INTEGER` | YES | — | Число попыток (волн) по этому NVR в том job |
+| `last_poll_success_attempt` | `INTEGER` | YES | — | Номер успешной попытки (1-based); `NULL`, если ответа не было |
+| `last_poll_first_try_ok` | `INTEGER` | YES | — | `1` — ответ получен с первой попытки job; `0` — с повтора или без ответа |
 
 ### 3.3. Ограничения и индексы
 
@@ -244,6 +303,9 @@ erDiagram
 - недоступность NVR → `error`;
 - активные системные события (`system_events_json`) — ошибки/предупреждения HDD, вентиляторов, CPU и др.;
 - статус и температуру HDD (пороги из `config.monitoring`);
+- запись на накопитель отключена (`recording_storage_enable = 0`) → `error`;
+- нагрузку декодирования (`cpu_usage_max`) vs `cpu_usage_warn_percent` / `cpu_usage_error_percent`;
+- каналы с нулевым битрейтом (`channels_zero_bitrate > 0`) → `warn`;
 - NTP fail, расхождение времени (`time_skew_*`);
 - глубину архива (`archive_min_days` / `archive_days`) vs `archive_days_required` / `archive_days_error_threshold`;
 - худший статус среди каналов.
@@ -285,6 +347,8 @@ erDiagram
   "recorder_id": "nvr-a1b2c3d4",
   "model": "PRN-4011",
   "firmware_version": "2.12.02",
+  "serial_number": "ZNXR1234567",
+  "manufacture_date": "2022-08",
   "device_online": 1,
   "health_status": "warn",
   "health_reason": "Расхождение времени 95 с; Глубина архива 22.0-31.0 сут. (норма 30)",
@@ -292,16 +356,25 @@ erDiagram
   "time_skew_seconds": 95.2,
   "storage_used_percent": 78.5,
   "storage_status": "Normal",
+  "storageinfo_ok": 1,
   "archive_start": "2026-04-01 00:00:00",
   "archive_end": "2026-05-25 10:00:00",
   "archive_days": 31.0,
   "archive_min_days": 22.0,
   "archive_max_days": 31.0,
+  "archive_poll_error": null,
+  "recording_storage_enable": 1,
+  "recording_storage_overwrite": 1,
   "channel_count": 16,
   "channels_ok": 14,
   "channels_warn": 1,
   "channels_error": 1,
   "channels_unknown": 0,
+  "channels_zero_bitrate": 1,
+  "channels_poe_off": null,
+  "cpu_usage_max": 72.0,
+  "cpu_usage_avg": 41.5,
+  "data_rate_total_mbps": 128.4,
   "last_polled_at": "2026-05-25T14:32:05+00:00",
   "local_time": "2026-05-25T17:32:05+03:00",
   "utc_time": "2026-05-25T14:32:05+00:00",
@@ -309,7 +382,11 @@ erDiagram
   "storage_used_mb": 3200000.0,
   "storage_total_mb": 4000000.0,
   "disks_json": "[{\"Storage\":\"0\",\"Status\":\"Normal\",\"Temperature\":\"41\"}]",
-  "system_events_json": "{\"HDDFail\":false,\"CPUFanError\":false}"
+  "system_events_json": "{\"HDDFail\":false,\"CPUFanError\":false}",
+  "last_poll_job_id": "abc123def456",
+  "last_poll_attempts": 1,
+  "last_poll_success_attempt": 1,
+  "last_poll_first_try_ok": 1
 }
 ```
 
@@ -623,6 +700,33 @@ sequenceDiagram
 | `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
 | `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты» |
 
+### 6.7. Таблицы чата с AI
+
+История диалогов LLM хранится в той же БД (`ChatStore.init_db()`).
+
+#### `chat_sessions`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | TEXT PK | UUID сессии |
+| `title` | TEXT | Заголовок (по умолчанию «Новый чат», первый вопрос обрезается до 60 символов) |
+| `created_at` | TEXT | ISO UTC |
+
+#### `chat_messages`
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Автоинкремент |
+| `session_id` | TEXT FK | Ссылка на `chat_sessions.id` |
+| `role` | TEXT | `user` / `assistant` |
+| `content` | TEXT | Текст сообщения |
+| `sql` | TEXT | Выполненный SQL (аудит ответов ассистента) |
+| `chart_json` | TEXT | JSON ECharts option для переоткрытия графика |
+| `table_json` | TEXT | JSON результата запроса (колонки + строки) |
+| `created_at` | TEXT | ISO UTC |
+
+Индекс: `idx_chat_messages_session` на `(session_id, created_at)`.
+
 ---
 
 ## 9. Примеры SQL для LLM и аналитики
@@ -765,5 +869,6 @@ WHERE last_poll_job_id IS NOT NULL
 |--------|------|------------|
 | 1.0 | 2026-05-25 | Первое описание по `state_store.py`, `monitoring.py`, `health_classifiers.py` |
 | 1.1 | 2026-06-02 | `recorder_poll_attempts`, поля `last_poll_*`, многоэтапный `run_poll_cycle` |
+| 1.2 | 2026-06-15 | Полный реестр полей: добавлены `channels.data_rate/cpu_usage/poe_status`; `recorder_metrics.serial_number/manufacture_date/storageinfo_ok/archive_poll_error/recording_storage_*/cpu_usage_*/data_rate_total_mbps/channels_zero_bitrate/channels_poe_off`. Подробные пояснения к каждому полю, inline-комментарии в схеме `state_store.py` |
 
 При изменении схемы в `_migrate_schema()` обновляйте этот файл и таблицу полей в §2–§3.

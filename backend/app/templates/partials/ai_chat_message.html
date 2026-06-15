@@ -1,0 +1,52 @@
+<div class="chat-msg chat-msg--{{ message.role }}" data-msg-id="{{ message.id }}">
+  <div class="chat-msg-role">
+    {% if message.role == 'user' %}Вы{% else %}AI{% endif %}
+  </div>
+  <div class="chat-msg-body">
+    <div class="chat-msg-text{% if message.pending %} chat-msg-text--pending{% endif %}"
+         {% if message.pending %}data-pending="1"{% endif %}>
+      {{ message.content }}
+    </div>
+
+    {% if message.chart %}
+    <div class="chat-chart" data-echart='{{ message.chart | tojson }}'></div>
+    {% endif %}
+
+    {% if message.table and message.table.rows %}
+    <details class="chat-details">
+      <summary>Таблица данных ({{ message.table.row_count }} строк)</summary>
+      <div class="chat-table-wrap">
+        <table class="chat-table">
+          <thead>
+            <tr>
+              {% for col in message.table.columns %}
+              <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in message.table.rows[:100] %}
+            <tr>
+              {% for col in message.table.columns %}
+              <td>{{ row[col] }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+
+    {% if message.sql %}
+    <details class="chat-details">
+      <summary>SQL-запрос</summary>
+      <pre class="chat-sql">{{ message.sql }}</pre>
+    </details>
+    {% endif %}
+
+    {% if message.created_at %}
+    <div class="chat-msg-time">{{ message.created_at }}</div>
+    {% endif %}
+  </div>
+</div>

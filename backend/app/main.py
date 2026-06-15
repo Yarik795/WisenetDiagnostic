@@ -13,6 +13,7 @@ from .scheduler import MonitoringScheduler
 from .state_store import StateStore
 from .ui.dependencies import get_state_store
 from .web.routes import router as web_router
+from .web.ai_chat import router as ai_chat_router
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -97,3 +98,4 @@ async def log_requests(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 app.include_router(web_router)
+app.include_router(ai_chat_router)

@@ -27,6 +27,17 @@
   "exclusions": {
     "recorder_ids": []
   },
+  "llm": {
+    "enabled": false,
+    "base_url": "https://api.vsellm.ru/v1",
+    "api_key": "",
+    "model": "anthropic/claude-haiku-4.5",
+    "verify_ssl": false,
+    "max_iterations": 5,
+    "max_rows": 1000,
+    "llm_result_sample_rows": 50,
+    "history_context_messages": 20
+  },
   "email_report": {
     "enabled": false,
     "smtp_host": "MTA.SIGMA.SBRF.RU",

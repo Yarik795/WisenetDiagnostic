@@ -185,6 +185,8 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 - `Recorder`, `RecorderCreate`, `RecorderUpdate` — устройство в инвентаре.
 - `Credentials`, `AppConfig`, `MonitoringSettings` — учётные данные и пороги мониторинга.
+- `LLMSettings` — настройки чата с AI (`enabled`, `api_key`, `base_url`, `model`, лимиты SQL/итераций).
+- `LLMSettings` — настройки чата с AI (`llm` в `config.json`: `enabled`, `api_key`, `base_url`, `model`, лимиты SQL/итераций).
 - `CheckStatus` — online / offline / unknown / disabled (доступность в конфиге).
 - `CheckResult`, `RecorderCheckResponse` — ответы API/UI для быстрой проверки.
 
@@ -206,6 +208,32 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 Отчёт **«Статус оплаты»** (`/payments`): «Экспорт в HTML» передаёт активную вкладку (Модернизация/РВР) и метрику графиков по разделам (`kind`, `m_<section>`). `GET /payments/export.html` — standalone HTML со встроенным CSS и inline-SVG. «Отправить на почту» (`POST /payments/report/email`) — одно письмо с **двумя** HTML-вложениями (Модернизация и РВР); метрики Модернизации берутся из UI (`m_<section>`), для РВР всегда **Количество**. Отправка через `send_report_email` на `email_report.to_emails` (в `report_delivery_history` не пишется).
 
 Тест SMTP без UI: `python scripts/send_test_email.py`.
+
+---
+
+## Чат с AI (`llm/`, `chat_store.py`, `web/ai_chat.py`)
+
+Интерактивный чат с LLM (OpenAI-совместимый API, по умолчанию `api.vsellm.ru`) для вопросов по данным `monitoring.db`. Настройки — секция `llm` в `config.json` (`LLMSettings`).
+
+| Компонент | Роль |
+|-----------|------|
+| `LLMClient` | HTTP-клиент OpenAI SDK (`base_url`, `api_key`, `verify_ssl`) |
+| `ChatOrchestrator` | Цикл function-calling: LLM вызывает инструменты, формирует ответ |
+| `sql_guard` | Только `SELECT`/`WITH`, read-only подключение, `LIMIT`, без DDL/DML |
+| `ChatStore` | Сессии и сообщения в SQLite (`chat_sessions`, `chat_messages`) |
+
+**Инструменты LLM (function calling):**
+
+| Имя | Назначение |
+|-----|------------|
+| `run_sql` | Read-only SELECT к `monitoring.db`; в LLM возвращается сэмпл строк (`llm_result_sample_rows`) |
+| `make_chart` | Спецификация графика (bar/line/pie, колонки X/Y); сервер строит ECharts `option` |
+| `get_recorder_health` | Метрики регистратора по `recorder_id` из `StateStore` |
+| `count_problems_by_kind` | Проблемы по видам систем (tsv/skud/bio/sots) из конфига + метрик |
+
+**Поток UI:** `POST /ai-chat/message` сохраняет реплику пользователя → `GET /ai-chat/stream` (SSE) запускает оркестратор → дельты текста и финальное событие `done` (текст, SQL, таблица, график) → `ChatStore.append_message` для ответа ассистента. Графики рисует ECharts на клиенте (`static/js/ai_chat.js`).
+
+**Инварианты:** credentials и `config.json` в инструменты LLM не передаются; запись в БД мониторинга через чат невозможна.
 
 ---
 

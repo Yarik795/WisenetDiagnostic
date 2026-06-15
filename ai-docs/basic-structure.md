@@ -81,6 +81,18 @@
 | `cashflow_report.py` | Отчёт «Статус оплаты» из Excel-выгрузки заявок: разбор, JSON-артефакт `data/reports/cashflow_report.json` с `series` (сумма по месяцам × ответственный) для интерактивных графиков ECharts на `/payments` |
 | `report_jobs.py` | Менеджер фоновых задач построения отчётов и импорта источников (прогресс для UI) |
 
+#### Чат с AI (`backend/app/llm/`, `chat_store.py`)
+
+| Модуль | Назначение |
+|--------|------------|
+| `llm/client.py` | OpenAI-совместимый клиент к `api.vsellm.ru` (настройки из `config.json` → `LLMSettings`) |
+| `llm/sql_guard.py` | Валидатор read-only SQL и выполнение SELECT к `monitoring.db` |
+| `llm/schema_context.py` | Системный промпт и динамическое описание схемы БД (`PRAGMA table_info`) |
+| `llm/tools.py` | Function-calling: `run_sql`, `make_chart`, typed-инструменты; сборка ECharts option |
+| `llm/orchestrator.py` | Цикл tool calling, SSE-стриминг финального текста |
+| `chat_store.py` | История чата: таблицы `chat_sessions`, `chat_messages` в SQLite |
+| `web/ai_chat.py` | Маршруты `/ai-chat`, `/ai-chat/message`, `/ai-chat/stream`, `/ai-chat/session` |
+
 #### Источники данных и CMDB
 
 | Модуль | Назначение |
@@ -94,10 +106,11 @@
 | Модуль | Назначение |
 |--------|------------|
 | `routes.py` | HTML-страницы и HTMX-partials: сводка, мониторинг ТСВ, СКУД/био, источники, оплата, настройки, опрос, NTP, email-отчёты |
+| `ai_chat.py` | Страница `/ai-chat`: сообщения, SSE-стриминг ответа LLM, сессии диалога |
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -127,7 +140,7 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `payments.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `payments.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
 - `exports/` — печатные/экспортные отчёты (отчёт об ошибках)
 
@@ -135,6 +148,8 @@
 
 - `css/app.css` — стили
 - `js/app.js` — сворачивание групп, обновление дашбордов, взаимодействие с HTMX
+- `js/ai_chat.js` — SSE-стриминг ответов LLM, рендер ECharts в сообщениях чата
+- `js/ai_chat.js` — SSE-стриминг ответа LLM, рендер ECharts в сообщениях чата
 
 ---
 

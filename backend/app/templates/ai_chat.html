@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+{% block title %}Чат с AI — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Чат с AI{% endblock %}
+
+{% block page_actions %}
+<form method="post" action="/ai-chat/session" style="display:inline;">
+  <button type="submit" class="btn btn-ghost">Новый чат</button>
+</form>
+{% endblock %}
+
+{% block content %}
+<p class="page-lead">
+  Задавайте вопросы о данных мониторинга на естественном языке.
+  Ассистент выполняет read-only запросы к БД и может строить графики.
+</p>
+
+{% if not llm_enabled %}
+<div class="banner-error" style="margin-bottom:16px;">
+  Чат отключён. Установите <code>llm.enabled: true</code> в config.json.
+</div>
+{% elif not llm_configured %}
+<div class="banner-error" style="margin-bottom:16px;">
+  Не задан <code>llm.api_key</code> в config.json.
+</div>
+{% endif %}
+
+<div class="ai-chat-layout">
+  <aside class="ai-chat-sessions" aria-label="Сессии чата">
+    <div class="ai-chat-sessions-title">История</div>
+    <nav class="ai-chat-sessions-list">
+      {% for s in sessions %}
+      <a href="/ai-chat?session_id={{ s.id }}"
+         class="ai-chat-session-link{% if s.id == session_id %} active{% endif %}">
+        {{ s.title }}
+      </a>
+      {% else %}
+      <span class="text-muted">Нет сессий</span>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <section class="ai-chat-main">
+    <div id="ai-chat-messages" class="ai-chat-messages">
+      {% for msg in messages %}
+      {% with message=msg %}
+      {% include "partials/ai_chat_message.html" %}
+      {% endwith %}
+      {% endfor %}
+    </div>
+
+    <form id="ai-chat-form" class="ai-chat-form"
+          hx-post="/ai-chat/message"
+          hx-target="#ai-chat-messages"
+          hx-swap="beforeend"
+          hx-disabled-elt="find button, find textarea">
+      <input type="hidden" name="session_id" value="{{ session_id }}">
+      <textarea name="text" rows="2" placeholder="Например: сколько регистраторов в статусе error?"
+                required {% if not llm_enabled or not llm_configured %}disabled{% endif %}></textarea>
+      <button type="submit" class="btn btn-primary"
+              {% if not llm_enabled or not llm_configured %}disabled{% endif %}>
+        Отправить
+      </button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/echarts.min.js?v=5.5.1"></script>
+<script src="/static/js/ai_chat.js?v=20260615-1"></script>
+{{ super() }}
+{% endblock %}
