@@ -9,6 +9,7 @@ import pytest
 from app.cashflow_report import (
     DRUG_COLUMN,
     REPORT_ARTIFACT,
+    _series_by_month_party,
     build_cashflow_report,
     find_latest_requests_source_file,
     import_requests_from_source,
@@ -59,6 +60,14 @@ def test_build_cashflow_report_success(sample_xlsx: Path, monkeypatch: pytest.Mo
     assert "modern" in payload["reports"]
     assert "rvr" in payload["reports"]
     assert len(payload["reports"]["modern"]["sections"]) == 4
+    az_mb = next(
+        s for s in payload["reports"]["modern"]["sections"] if s["key"] == "az_mb"
+    )
+    assert "series" in az_mb
+    assert "chart_b64" not in az_mb
+    series = az_mb["series"]
+    assert set(series.keys()) >= {"months", "parties", "matrix", "party_totals", "colors"}
+    assert "largest_amount" in az_mb["kpi"]
     assert artifact.is_file()
     loaded = load_report_artifact()
     assert loaded is not None
@@ -161,3 +170,36 @@ def test_build_cashflow_report_naumen_cost_fallback(
         item for item in az_mb_empty["rows"] if item["request_number"] == "13674730"
     )
     assert row_empty["amount"] == "0,00"
+
+
+def test_series_by_month_party_sums_unpaid_only() -> None:
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "Месяц выполнения": ["2026-01", "2026-01", "2026-02"],
+            "Статус согласования": ["Войнов", "Согласовано", "ЦС"],
+            "Сумма с НДС": [1000.0, 5000.0, 2000.0],
+        }
+    )
+    series = _series_by_month_party(df)
+    assert series["months"] == ["2026-01", "2026-02"]
+    assert series["party_totals"]["Войнов"] == 1000.0
+    assert series["party_totals"]["ЦС"] == 2000.0
+    assert "Согласовано" not in series["party_totals"]
+    assert sum(series["party_totals"].values()) == 3000.0
+
+
+def test_build_cashflow_report_series_matches_kpi(
+    sample_xlsx: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    artifact = tmp_path / "cashflow_report.json"
+    monkeypatch.setattr("app.cashflow_report.REPORT_ARTIFACT", artifact)
+    payload = build_cashflow_report(sample_xlsx)
+    az_mb = next(
+        s for s in payload["reports"]["modern"]["sections"] if s["key"] == "az_mb"
+    )
+    series_total = sum(az_mb["series"]["party_totals"].values())
+    rows_total = sum(row.get("amount_value", 0) for row in az_mb["rows"])
+    assert series_total == pytest.approx(rows_total)
+    assert az_mb["kpi"]["total_count"] == len(az_mb["rows"])

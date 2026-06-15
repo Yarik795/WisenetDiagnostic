@@ -64,10 +64,60 @@
           <div class="payments-kpi-value">{{ section.kpi.oldest_date }}</div>
           <div class="payments-kpi-label">Самая «старая» заявка</div>
         </div>
+        <div class="payments-kpi-card">
+          <div class="payments-kpi-value">{{ section.kpi.largest_amount }}</div>
+          <div class="payments-kpi-label">Крупнейшая заявка</div>
+        </div>
       </div>
 
-      <div class="payments-chart-box">
-        <img src="data:image/png;base64,{{ section.chart_b64 }}" alt="График {{ section.title }}" class="payments-chart-img">
+      {% set section_id = kind ~ '-' ~ section.key %}
+      <script type="application/json" data-payments-series="{{ section_id }}">{{ section.series | tojson }}</script>
+
+      <div class="payments-filters" data-payments-filter="{{ section_id }}">
+        <div class="payments-filter-group">
+          <label class="payments-filter-label" for="filter-month-{{ section_id }}">Месяц</label>
+          {% set month_select_size = section.series.months|length %}
+          {% if month_select_size > 4 %}{% set month_select_size = 4 %}{% elif month_select_size < 1 %}{% set month_select_size = 1 %}{% endif %}
+          <select id="filter-month-{{ section_id }}" class="payments-filter-select" data-filter-month multiple size="{{ month_select_size }}">
+            {% for month in section.series.months %}
+            <option value="{{ month }}" selected>{{ month }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="payments-filter-group">
+          <label class="payments-filter-label" for="filter-party-{{ section_id }}">Ответственный</label>
+          {% set party_select_size = section.series.parties|length %}
+          {% if party_select_size > 4 %}{% set party_select_size = 4 %}{% elif party_select_size < 1 %}{% set party_select_size = 1 %}{% endif %}
+          <select id="filter-party-{{ section_id }}" class="payments-filter-select" data-filter-party multiple size="{{ party_select_size }}">
+            {% for party in section.series.parties %}
+            <option value="{{ party }}" selected>{{ party }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="payments-filter-group">
+          <label class="payments-filter-label" for="filter-min-{{ section_id }}">Мин. сумма, ₽</label>
+          <input
+            type="number"
+            id="filter-min-{{ section_id }}"
+            class="payments-filter-input"
+            data-filter-min
+            min="0"
+            step="1000"
+            placeholder="0"
+          >
+        </div>
+        <button type="button" class="btn btn-ghost payments-filter-reset" data-filter-reset>Сбросить</button>
+      </div>
+
+      <div class="payments-charts-grid">
+        <div class="payments-chart-box payments-chart-box--bar">
+          <div class="payments-chart-title">Неоплаченная сумма по месяцам</div>
+          <div class="payments-chart-canvas" data-payments-chart-bar="{{ section_id }}"></div>
+        </div>
+        <div class="payments-chart-box payments-chart-box--pie">
+          <div class="payments-chart-title">Где деньги сейчас</div>
+          <div class="payments-chart-canvas" data-payments-chart-pie="{{ section_id }}"></div>
+        </div>
       </div>
 
       <div class="payments-collapsible" data-payments-collapsible>
@@ -99,7 +149,11 @@
               </thead>
               <tbody>
                 {% for row in section.rows %}
-                <tr>
+                <tr
+                  data-month="{{ row.month }}"
+                  data-party="{{ row.status.text }}"
+                  data-amount="{{ row.amount_value }}"
+                >
                   <td>{{ row.month }}</td>
                   <td><span class="status-badge {{ row.status.class }}">{{ row.status.text }}</span></td>
                   <td>

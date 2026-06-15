@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import re
 import shutil
 from datetime import date, datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 import pandas as pd
 
@@ -167,34 +161,6 @@ def format_amount_rub(value: float) -> str:
     return f"{s.replace(',', ' ').replace('.', ',')} руб."
 
 
-def _set_matplotlib_style() -> None:
-    plt.rcParams.update(
-        {
-            "font.family": "DejaVu Sans",
-            "axes.unicode_minus": False,
-            "figure.facecolor": "#1a1d24",
-            "axes.facecolor": "#1a1d24",
-            "axes.edgecolor": "#3d4450",
-            "axes.labelcolor": "#e8eaed",
-            "text.color": "#e8eaed",
-            "xtick.color": "#9aa0a6",
-            "ytick.color": "#9aa0a6",
-            "grid.color": "#2d323c",
-            "legend.facecolor": "#1a1d24",
-            "legend.edgecolor": "#3d4450",
-        }
-    )
-    for style in (
-        "seaborn-v0_8-darkgrid",
-        "seaborn-darkgrid",
-        "ggplot",
-        "classic",
-    ):
-        if style in plt.style.available:
-            plt.style.use(style)
-            break
-
-
 def _validate_columns(df: pd.DataFrame) -> None:
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     if missing:
@@ -340,49 +306,37 @@ def _empty_frames() -> dict[str, pd.DataFrame]:
     return {key: empty.copy() for key, _ in SECTION_SPECS}
 
 
-def _plot_stacked_by_month(df: pd.DataFrame, title: str) -> str:
-    if df.empty or "Месяц выполнения" not in df.columns:
-        fig, ax = plt.subplots(figsize=(12, 5))
-        ax.text(0.5, 0.5, "Нет данных", ha="center", va="center", color="#9aa0a6")
-        ax.set_axis_off()
-        fig.tight_layout()
-        buf = BytesIO()
-        fig.savefig(buf, format="png", dpi=120, facecolor=fig.get_facecolor())
-        plt.close(fig)
-        return base64.b64encode(buf.getvalue()).decode("ascii")
+def _empty_series() -> dict[str, Any]:
+    return {
+        "months": [],
+        "parties": [],
+        "matrix": {},
+        "party_totals": {},
+        "colors": {},
+    }
 
-    grouped = (
-        df.groupby(["Месяц выполнения", "Статус согласования"]).size().unstack(fill_value=0)
+
+def _series_by_month_party(df: pd.DataFrame) -> dict[str, Any]:
+    """Агрегирует неоплаченную сумму по месяцам и ответственным сторонам."""
+    if df.empty or "Месяц выполнения" not in df.columns:
+        return _empty_series()
+    filtered = df[df["Статус согласования"] != "Согласовано"]
+    if filtered.empty:
+        return _empty_series()
+    pivot = (
+        filtered.groupby(["Месяц выполнения", "Статус согласования"])["Сумма с НДС"]
+        .sum()
+        .unstack(fill_value=0.0)
+        .sort_index()
     )
-    colors = [COLOR_MAP.get(col, "#6b7280") for col in grouped.columns]
-    fig, ax = plt.subplots(figsize=(12, 5))
-    grouped.plot(kind="bar", stacked=True, ax=ax, color=colors)
-    for container in ax.containers:
-        for bar in container:
-            value = bar.get_height()
-            if value > 0:
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_y() + value / 2,
-                    f"{int(value)}",
-                    ha="center",
-                    va="center",
-                    fontsize=9,
-                    color="white",
-                )
-    ax.set_title(title, fontsize=14, pad=12)
-    ax.set_xlabel("Месяц выполнения", fontsize=11)
-    ax.set_ylabel("Количество заявок", fontsize=11)
-    ax.legend(title="Статус", bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
-    max_value = grouped.values.max() if grouped.size else 0
-    if max_value > 843:
-        ax.axhline(y=843, color="#6b7280", linestyle="--", linewidth=1)
-    fig.tight_layout()
-    buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=120, facecolor=fig.get_facecolor())
-    plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    parties = [str(col) for col in pivot.columns]
+    return {
+        "months": [str(month) for month in pivot.index],
+        "parties": parties,
+        "matrix": {party: [float(v) for v in pivot[party].values] for party in parties},
+        "party_totals": {party: float(pivot[party].sum()) for party in parties},
+        "colors": {party: COLOR_MAP.get(party, "#6b7280") for party in parties},
+    }
 
 
 def _normalize_request_number(value: Any) -> str:
@@ -404,18 +358,23 @@ def _status_badge(status: str) -> dict[str, str]:
 
 def _kpi_payload(df_filtered: pd.DataFrame, df_source: pd.DataFrame) -> dict[str, Any]:
     total_count = len(df_filtered)
-    total_sum_val = df_source[df_source["Статус согласования"] != "Согласовано"][
-        "Сумма с НДС"
-    ].sum()
+    unpaid = df_source[df_source["Статус согласования"] != "Согласовано"]
+    total_sum_val = unpaid["Сумма с НДС"].sum()
     oldest_date = (
         str(df_filtered["Месяц выполнения"].min())
         if not df_filtered.empty
         else "—"
     )
+    if df_filtered.empty:
+        largest_amount = "—"
+    else:
+        largest_val = float(df_filtered["Сумма с НДС"].max())
+        largest_amount = format_amount_rub(largest_val)
     return {
         "total_count": int(total_count),
         "total_sum": format_amount_rub(float(total_sum_val)),
         "oldest_date": oldest_date,
+        "largest_amount": largest_amount,
     }
 
 
@@ -447,27 +406,12 @@ def _table_rows(dfx: pd.DataFrame) -> list[dict[str, Any]]:
                 "amount": format_amount_rub(float(row["Сумма с НДС"])).replace(
                     " руб.", ""
                 ),
+                "amount_value": float(row["Сумма с НДС"]),
                 "status_raw": str(row["Статус"]),
                 "act_status": str(row["Статус акта"]),
             }
         )
     return rows
-
-
-def _chart_titles(modern: bool) -> dict[str, str]:
-    if modern:
-        return {
-            "az_mb": "Статус согласования заявок на модернизацию административных зданий МБ",
-            "az_ca": "Статус согласования заявок на модернизацию административных зданий ЦА-МБ",
-            "vsp_mb": "Статус согласования заявок на модернизацию ВСП и УС МБ",
-            "vsp_ca": "Статус согласования заявок на модернизацию административных зданий ЦА (К32 и др.)",
-        }
-    return {
-        "az_mb": "Статус согласования заявок на РВР административных зданий МБ",
-        "az_ca": "Статус согласования заявок на РВР административных зданий ЦА-МБ",
-        "vsp_mb": "Статус согласования заявок на РВР ВСП и УС МБ",
-        "vsp_ca": "Статус согласования заявок на РВР административных зданий ЦА (К32 и др.)",
-    }
 
 
 def _build_report_kind(
@@ -478,7 +422,6 @@ def _build_report_kind(
     progress_base: int = 0,
 ) -> dict[str, Any]:
     _apply_chart_renames(frames, modern=modern)
-    titles = _chart_titles(modern)
     sections: list[dict[str, Any]] = []
     for idx, (key, title) in enumerate(SECTION_SPECS):
         if on_progress:
@@ -490,7 +433,7 @@ def _build_report_kind(
                 "key": key,
                 "title": title,
                 "kpi": _kpi_payload(filtered, dfx),
-                "chart_b64": _plot_stacked_by_month(dfx, titles[key]),
+                "series": _series_by_month_party(dfx),
                 "rows": _table_rows(dfx),
             }
         )
@@ -554,7 +497,6 @@ def build_cashflow_report(
 ) -> dict[str, Any]:
     """Строит отчёт и возвращает JSON-структуру."""
     ensure_storage_dirs()
-    _set_matplotlib_style()
 
     if on_progress:
         on_progress("Чтение файла", 5)

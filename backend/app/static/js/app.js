@@ -364,6 +364,7 @@ function initPaymentsTabs(root) {
         container.querySelectorAll("[data-payments-panel]").forEach((panel) => {
           panel.classList.toggle("hidden", panel.dataset.paymentsPanel !== kind);
         });
+        resizePaymentsCharts();
       });
     });
   });
@@ -403,7 +404,9 @@ function initPaymentsTables(root) {
       search.addEventListener("input", () => {
         const q = search.value.trim().toLowerCase();
         table.querySelectorAll("tbody tr").forEach((row) => {
-          row.style.display = row.textContent.toLowerCase().includes(q) ? "" : "none";
+          const filterOk = row.dataset.filterHidden !== "1";
+          const searchOk = !q || row.textContent.toLowerCase().includes(q);
+          row.style.display = filterOk && searchOk ? "" : "none";
         });
       });
     }
@@ -432,10 +435,297 @@ function initPaymentsTables(root) {
   });
 }
 
+const paymentsChartStore = new Map();
+
+function formatPaymentsRub(value) {
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function parsePaymentsSeriesScript(el) {
+  try {
+    return JSON.parse(el.textContent);
+  } catch (err) {
+    console.error("[wisenet] payments series JSON parse error", err);
+    return { months: [], parties: [], matrix: {}, party_totals: {}, colors: {} };
+  }
+}
+
+function getMultiSelectValues(select) {
+  if (!select) return [];
+  return Array.from(select.selectedOptions).map((opt) => opt.value);
+}
+
+function filterPaymentsSeries(series, months, parties) {
+  const monthSet = new Set(months);
+  const partySet = new Set(parties);
+  const filteredMonths = series.months.filter((month) => monthSet.has(month));
+  const filteredParties = series.parties.filter((party) => partySet.has(party));
+  const matrix = {};
+  filteredParties.forEach((party) => {
+    matrix[party] = filteredMonths.map((month) => {
+      const idx = series.months.indexOf(month);
+      return idx >= 0 && series.matrix[party] ? series.matrix[party][idx] || 0 : 0;
+    });
+  });
+  const partyTotals = {};
+  filteredParties.forEach((party) => {
+    partyTotals[party] = (matrix[party] || []).reduce((sum, val) => sum + val, 0);
+  });
+  return {
+    months: filteredMonths,
+    parties: filteredParties,
+    matrix,
+    party_totals: partyTotals,
+    colors: series.colors || {},
+  };
+}
+
+function paymentsBarOption(data) {
+  const textColor = "#e8eaed";
+  const axisColor = "#9aa0a6";
+  const gridColor = "#2d323c";
+  if (!data.months.length || !data.parties.length) {
+    return {
+      backgroundColor: "transparent",
+      title: {
+        text: "Нет данных",
+        left: "center",
+        top: "middle",
+        textStyle: { color: axisColor, fontSize: 14, fontWeight: 400 },
+      },
+    };
+  }
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter(params) {
+        if (!params?.length) return "";
+        const month = params[0].axisValue;
+        let total = 0;
+        const lines = params
+          .filter((item) => item.value > 0)
+          .map((item) => {
+            total += item.value;
+            return `${item.marker}${item.seriesName}: ${formatPaymentsRub(item.value)} ₽`;
+          });
+        const pct = (val) => (total > 0 ? ` (${((val / total) * 100).toFixed(1)}%)` : "");
+        return [
+          `<strong>${month}</strong>`,
+          ...lines.map((line, idx) => {
+            const val = params.filter((p) => p.value > 0)[idx]?.value || 0;
+            return line + pct(val);
+          }),
+          `<strong>Итого: ${formatPaymentsRub(total)} ₽</strong>`,
+        ].join("<br>");
+      },
+    },
+    legend: {
+      type: "scroll",
+      bottom: 0,
+      textStyle: { color: textColor },
+    },
+    grid: { left: 48, right: 16, top: 24, bottom: 48 },
+    xAxis: {
+      type: "category",
+      data: data.months,
+      axisLabel: { color: axisColor, rotate: 35 },
+      axisLine: { lineStyle: { color: gridColor } },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        color: axisColor,
+        formatter: (val) => (val >= 1_000_000 ? `${(val / 1_000_000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val),
+      },
+      splitLine: { lineStyle: { color: gridColor } },
+    },
+    series: data.parties.map((party) => ({
+      name: party,
+      type: "bar",
+      stack: "total",
+      emphasis: { focus: "series" },
+      itemStyle: { color: data.colors[party] || "#6b7280" },
+      data: data.matrix[party] || [],
+    })),
+  };
+}
+
+function paymentsPieOption(data) {
+  const textColor = "#e8eaed";
+  const axisColor = "#9aa0a6";
+  const entries = data.parties
+    .map((party) => ({ name: party, value: data.party_totals[party] || 0 }))
+    .filter((item) => item.value > 0);
+  if (!entries.length) {
+    return {
+      backgroundColor: "transparent",
+      title: {
+        text: "Нет данных",
+        left: "center",
+        top: "middle",
+        textStyle: { color: axisColor, fontSize: 14, fontWeight: 400 },
+      },
+    };
+  }
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "item",
+      formatter: (params) => {
+        const val = params.value || 0;
+        return `${params.marker}${params.name}: ${formatPaymentsRub(val)} ₽ (${params.percent}%)`;
+      },
+    },
+    legend: {
+      type: "scroll",
+      orient: "vertical",
+      right: 0,
+      top: "middle",
+      textStyle: { color: textColor },
+    },
+    series: [
+      {
+        type: "pie",
+        radius: ["42%", "68%"],
+        center: ["38%", "50%"],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: "#1a1d24",
+          borderWidth: 2,
+        },
+        label: { color: textColor, formatter: "{b}\n{d}%" },
+        data: entries.map((item) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: { color: data.colors[item.name] || "#6b7280" },
+        })),
+      },
+    ],
+  };
+}
+
+function applyPaymentsTableFilters(sectionId, months, parties, minAmount) {
+  const table = document.querySelector(`[data-payments-table="${sectionId}"]`);
+  if (!table) return;
+  const monthSet = new Set(months);
+  const partySet = new Set(parties);
+  const search = document.querySelector(`[data-payments-search="${sectionId}"]`);
+  const q = search ? search.value.trim().toLowerCase() : "";
+  table.querySelectorAll("tbody tr[data-month]").forEach((row) => {
+    const monthOk = !monthSet.size || monthSet.has(row.dataset.month);
+    const partyOk = !partySet.size || partySet.has(row.dataset.party);
+    const amount = parseFloat(row.dataset.amount) || 0;
+    const amountOk = !minAmount || amount >= minAmount;
+    const filterOk = monthOk && partyOk && amountOk;
+    row.dataset.filterHidden = filterOk ? "0" : "1";
+    const searchOk = !q || row.textContent.toLowerCase().includes(q);
+    row.style.display = filterOk && searchOk ? "" : "none";
+  });
+}
+
+function updatePaymentsChartsForSection(sectionId) {
+  const store = paymentsChartStore.get(sectionId);
+  if (!store) return;
+  const { series, barChart, pieChart, filterEl } = store;
+  const months = getMultiSelectValues(filterEl.querySelector("[data-filter-month]"));
+  const parties = getMultiSelectValues(filterEl.querySelector("[data-filter-party]"));
+  const minRaw = filterEl.querySelector("[data-filter-min]")?.value;
+  const minAmount = minRaw ? parseFloat(minRaw) : 0;
+  const filtered = filterPaymentsSeries(series, months, parties);
+  barChart.setOption(paymentsBarOption(filtered), true);
+  pieChart.setOption(paymentsPieOption(filtered), true);
+  applyPaymentsTableFilters(sectionId, months, parties, minAmount);
+}
+
+function bindPaymentsChartFilters(sectionId, filterEl) {
+  if (filterEl.dataset.paymentsFilterBound === "1") return;
+  filterEl.dataset.paymentsFilterBound = "1";
+  const onChange = () => updatePaymentsChartsForSection(sectionId);
+  filterEl.querySelector("[data-filter-month]")?.addEventListener("change", onChange);
+  filterEl.querySelector("[data-filter-party]")?.addEventListener("change", onChange);
+  filterEl.querySelector("[data-filter-min]")?.addEventListener("input", onChange);
+  filterEl.querySelector("[data-filter-reset]")?.addEventListener("click", () => {
+    filterEl.querySelectorAll("[data-filter-month] option, [data-filter-party] option").forEach((opt) => {
+      opt.selected = true;
+    });
+    const minInput = filterEl.querySelector("[data-filter-min]");
+    if (minInput) minInput.value = "";
+    onChange();
+  });
+}
+
+function disposePaymentsCharts(sectionId) {
+  const store = paymentsChartStore.get(sectionId);
+  if (!store) return;
+  store.barChart?.dispose();
+  store.pieChart?.dispose();
+  paymentsChartStore.delete(sectionId);
+}
+
+function resizePaymentsCharts() {
+  paymentsChartStore.forEach((store) => {
+    store.barChart?.resize();
+    store.pieChart?.resize();
+  });
+}
+
+function initPaymentsCharts(root) {
+  if (typeof echarts === "undefined") {
+    console.warn("[wisenet] echarts is undefined — графики оплаты не инициализированы");
+    return;
+  }
+  const scope = root || document;
+  scope.querySelectorAll("[data-payments-series]").forEach((scriptEl) => {
+    const sectionId = scriptEl.dataset.paymentsSeries;
+    if (!sectionId) return;
+    disposePaymentsCharts(sectionId);
+    const series = parsePaymentsSeriesScript(scriptEl);
+    const barEl = scope.querySelector(`[data-payments-chart-bar="${sectionId}"]`);
+    const pieEl = scope.querySelector(`[data-payments-chart-pie="${sectionId}"]`);
+    const filterEl = scope.querySelector(`[data-payments-filter="${sectionId}"]`);
+    if (!barEl || !pieEl || !filterEl) return;
+    const barChart = echarts.init(barEl, null, { renderer: "canvas" });
+    const pieChart = echarts.init(pieEl, null, { renderer: "canvas" });
+    paymentsChartStore.set(sectionId, { series, barChart, pieChart, filterEl });
+    bindPaymentsChartFilters(sectionId, filterEl);
+    updatePaymentsChartsForSection(sectionId);
+    barChart.on("click", (params) => {
+      if (!params?.name) return;
+      const monthSelect = filterEl.querySelector("[data-filter-month]");
+      if (!monthSelect) return;
+      Array.from(monthSelect.options).forEach((opt) => {
+        opt.selected = opt.value === params.name;
+      });
+      updatePaymentsChartsForSection(sectionId);
+    });
+    pieChart.on("click", (params) => {
+      if (!params?.name) return;
+      const partySelect = filterEl.querySelector("[data-filter-party]");
+      if (!partySelect) return;
+      Array.from(partySelect.options).forEach((opt) => {
+        opt.selected = opt.value === params.name;
+      });
+      updatePaymentsChartsForSection(sectionId);
+    });
+  });
+}
+
+if (!window.__paymentsChartsResizeBound) {
+  window.__paymentsChartsResizeBound = true;
+  window.addEventListener("resize", resizePaymentsCharts);
+}
+
 function initPaymentsPage(root) {
   initPaymentsTabs(root);
   initPaymentsCollapsibles(root);
   initPaymentsTables(root);
+  initPaymentsCharts(root);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -469,6 +759,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsTabs(e.detail?.target);
   initPaymentsCollapsibles(e.detail?.target);
   initPaymentsTables(e.detail?.target);
+  initPaymentsCharts(e.detail?.target);
   scrollToHighlightedCategory();
 });
 

@@ -16,3 +16,7 @@
   {% include "partials/payments_report.html" %}
 </div>
 {% endblock %}
+{% block scripts %}
+<script src="/static/js/echarts.min.js"></script>
+{{ super() }}
+{% endblock %}

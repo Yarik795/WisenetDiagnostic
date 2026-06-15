@@ -78,7 +78,7 @@
 | `report_delivery.py` | Плановая отправка email-сводки: расписание `email_report.send_time`, catchup, сборка письма |
 | `report_delivery_history.py` | Журнал отправок (`data/report_delivery_history.json`): триггеры scheduled/catchup/manual |
 | `email_sender.py` | SMTP-отправка письма (HTML-тело + вложение), настройки из `EmailReportSettings` |
-| `cashflow_report.py` | Отчёт «Статус оплаты» из Excel-выгрузки заявок: разбор, артефакты в `data/reports/` |
+| `cashflow_report.py` | Отчёт «Статус оплаты» из Excel-выгрузки заявок: разбор, JSON-артефакт `data/reports/cashflow_report.json` с `series` (сумма по месяцам × ответственный) для интерактивных графиков ECharts на `/payments` |
 | `report_jobs.py` | Менеджер фоновых задач построения отчётов и импорта источников (прогресс для UI) |
 
 #### Источники данных и CMDB
