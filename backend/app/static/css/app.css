@@ -2254,6 +2254,37 @@ tr.recorder-row--excluded {
   margin-left: auto;
 }
 
+.payments-metric-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-secondary, #1a1d24);
+}
+
+.payments-metric-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.payments-metric-btn:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.payments-metric-btn:hover {
+  color: var(--text-primary);
+}
+
+.payments-metric-btn.active {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+}
+
 .payments-chart-img {
   max-width: 100%;
   height: auto;

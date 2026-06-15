@@ -67,7 +67,16 @@ def test_build_cashflow_report_success(sample_xlsx: Path, monkeypatch: pytest.Mo
     assert "series" in az_mb
     assert "chart_b64" not in az_mb
     series = az_mb["series"]
-    assert set(series.keys()) >= {"months", "parties", "matrix", "party_totals", "colors"}
+    assert set(series.keys()) >= {
+        "months",
+        "parties",
+        "matrix",
+        "party_totals",
+        "count_matrix",
+        "count_totals",
+        "approved",
+        "colors",
+    }
     assert "largest_amount" in az_mb["kpi"]
     assert artifact.is_file()
     loaded = load_report_artifact()
@@ -189,6 +198,31 @@ def test_series_by_month_party_sums_unpaid_only() -> None:
     assert series["party_totals"]["ЦС"] == 2000.0
     assert "Согласовано" not in series["party_totals"]
     assert sum(series["party_totals"].values()) == 3000.0
+    assert series["count_totals"]["Войнов"] == 1
+    assert series["count_totals"]["ЦС"] == 1
+    assert series["approved"]["total_amount"] == 5000.0
+    assert series["approved"]["total_count"] == 1
+    assert series["approved"]["amount"][0] == 5000.0
+    assert series["approved"]["count"][0] == 1
+    assert series["colors"]["Согласовано"] == "#34d399"
+
+
+def test_series_by_month_party_approved_only() -> None:
+    df = pd.DataFrame(
+        {
+            "Месяц выполнения": ["2026-03", "2026-03"],
+            "Статус согласования": ["Согласовано", "Согласовано"],
+            "Сумма с НДС": [3000.0, 7000.0],
+        }
+    )
+    series = _series_by_month_party(df)
+    assert series["months"] == ["2026-03"]
+    assert series["parties"] == []
+    assert series["party_totals"] == {}
+    assert series["approved"]["total_amount"] == 10000.0
+    assert series["approved"]["total_count"] == 2
+    assert series["approved"]["amount"] == [10000.0]
+    assert series["approved"]["count"] == [2]
 
 
 def test_build_cashflow_report_series_matches_kpi(

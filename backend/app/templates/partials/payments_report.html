@@ -107,6 +107,13 @@
             placeholder="0"
           >
         </div>
+        <div class="payments-filter-group">
+          <label class="payments-filter-label">Метрика графиков</label>
+          <div class="payments-metric-toggle" data-payments-metric="{{ section_id }}">
+            <button type="button" class="payments-metric-btn active" data-metric="amount">Сумма</button>
+            <button type="button" class="payments-metric-btn" data-metric="count">Количество</button>
+          </div>
+        </div>
         <button type="button" class="btn btn-ghost payments-filter-reset" data-filter-reset>Сбросить</button>
       </div>
 

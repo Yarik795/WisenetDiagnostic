@@ -458,36 +458,64 @@ function getMultiSelectValues(select) {
   return Array.from(select.selectedOptions).map((opt) => opt.value);
 }
 
-function filterPaymentsSeries(series, months, parties) {
+function filterPaymentsSeries(series, months, parties, metric) {
   const monthSet = new Set(months);
   const partySet = new Set(parties);
   const filteredMonths = series.months.filter((month) => monthSet.has(month));
   const filteredParties = series.parties.filter((party) => partySet.has(party));
+  const valueMatrix = metric === "count" ? series.count_matrix || {} : series.matrix || {};
   const matrix = {};
   filteredParties.forEach((party) => {
     matrix[party] = filteredMonths.map((month) => {
       const idx = series.months.indexOf(month);
-      return idx >= 0 && series.matrix[party] ? series.matrix[party][idx] || 0 : 0;
+      return idx >= 0 && valueMatrix[party] ? valueMatrix[party][idx] || 0 : 0;
     });
   });
   const partyTotals = {};
   filteredParties.forEach((party) => {
     partyTotals[party] = (matrix[party] || []).reduce((sum, val) => sum + val, 0);
   });
+  const approvedKey = metric === "count" ? "count" : "amount";
+  const approvedSource = series.approved || {};
+  const approvedArr = approvedSource[approvedKey] || [];
+  const approved = filteredMonths.map((month) => {
+    const idx = series.months.indexOf(month);
+    return idx >= 0 && approvedArr[idx] !== undefined ? approvedArr[idx] : 0;
+  });
   return {
     months: filteredMonths,
     parties: filteredParties,
     matrix,
     party_totals: partyTotals,
+    approved,
+    approved_total: approved.reduce((sum, val) => sum + val, 0),
+    metric: metric || "amount",
     colors: series.colors || {},
   };
+}
+
+function formatPaymentsMetricValue(value, metric) {
+  if (metric === "count") {
+    const n = Math.round(value);
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    let word = "заявок";
+    if (mod100 < 11 || mod100 > 14) {
+      if (mod10 === 1) word = "заявка";
+      else if (mod10 >= 2 && mod10 <= 4) word = "заявки";
+    }
+    return `${n} ${word}`;
+  }
+  return `${formatPaymentsRub(value)} ₽`;
 }
 
 function paymentsBarOption(data) {
   const textColor = "#e8eaed";
   const axisColor = "#9aa0a6";
   const gridColor = "#2d323c";
-  if (!data.months.length || !data.parties.length) {
+  const metric = data.metric || "amount";
+  const hasApproved = (data.approved || []).some((val) => val > 0);
+  if (!data.months.length || (!data.parties.length && !hasApproved)) {
     return {
       backgroundColor: "transparent",
       title: {
@@ -498,6 +526,24 @@ function paymentsBarOption(data) {
       },
     };
   }
+  const barSeries = data.parties.map((party) => ({
+    name: party,
+    type: "bar",
+    stack: "total",
+    emphasis: { focus: "series" },
+    itemStyle: { color: data.colors[party] || "#6b7280" },
+    data: data.matrix[party] || [],
+  }));
+  if (hasApproved) {
+    barSeries.push({
+      name: "Согласовано",
+      type: "bar",
+      stack: "total",
+      emphasis: { focus: "series" },
+      itemStyle: { color: data.colors["Согласовано"] || "#34d399" },
+      data: data.approved || [],
+    });
+  }
   return {
     backgroundColor: "transparent",
     tooltip: {
@@ -507,20 +553,19 @@ function paymentsBarOption(data) {
         if (!params?.length) return "";
         const month = params[0].axisValue;
         let total = 0;
-        const lines = params
-          .filter((item) => item.value > 0)
-          .map((item) => {
-            total += item.value;
-            return `${item.marker}${item.seriesName}: ${formatPaymentsRub(item.value)} ₽`;
-          });
+        const positive = params.filter((item) => item.value > 0);
+        const lines = positive.map((item) => {
+          total += item.value;
+          return `${item.marker}${item.seriesName}: ${formatPaymentsMetricValue(item.value, metric)}`;
+        });
         const pct = (val) => (total > 0 ? ` (${((val / total) * 100).toFixed(1)}%)` : "");
         return [
           `<strong>${month}</strong>`,
-          ...lines.map((line, idx) => {
-            const val = params.filter((p) => p.value > 0)[idx]?.value || 0;
-            return line + pct(val);
-          }),
-          `<strong>Итого: ${formatPaymentsRub(total)} ₽</strong>`,
+          ...positive.map(
+            (item) =>
+              `${item.marker}${item.seriesName}: ${formatPaymentsMetricValue(item.value, metric)}${pct(item.value)}`
+          ),
+          `<strong>Итого: ${formatPaymentsMetricValue(total, metric)}</strong>`,
         ].join("<br>");
       },
     },
@@ -540,24 +585,25 @@ function paymentsBarOption(data) {
       type: "value",
       axisLabel: {
         color: axisColor,
-        formatter: (val) => (val >= 1_000_000 ? `${(val / 1_000_000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val),
+        formatter: (val) => {
+          if (metric === "count") return val;
+          return val >= 1_000_000
+            ? `${(val / 1_000_000).toFixed(1)}M`
+            : val >= 1000
+              ? `${(val / 1000).toFixed(0)}k`
+              : val;
+        },
       },
       splitLine: { lineStyle: { color: gridColor } },
     },
-    series: data.parties.map((party) => ({
-      name: party,
-      type: "bar",
-      stack: "total",
-      emphasis: { focus: "series" },
-      itemStyle: { color: data.colors[party] || "#6b7280" },
-      data: data.matrix[party] || [],
-    })),
+    series: barSeries,
   };
 }
 
 function paymentsPieOption(data) {
   const textColor = "#e8eaed";
   const axisColor = "#9aa0a6";
+  const metric = data.metric || "amount";
   const entries = data.parties
     .map((party) => ({ name: party, value: data.party_totals[party] || 0 }))
     .filter((item) => item.value > 0);
@@ -578,7 +624,7 @@ function paymentsPieOption(data) {
       trigger: "item",
       formatter: (params) => {
         const val = params.value || 0;
-        return `${params.marker}${params.name}: ${formatPaymentsRub(val)} ₽ (${params.percent}%)`;
+        return `${params.marker}${params.name}: ${formatPaymentsMetricValue(val, metric)} (${params.percent}%)`;
       },
     },
     legend: {
@@ -633,14 +679,33 @@ function updatePaymentsChartsForSection(sectionId) {
   const store = paymentsChartStore.get(sectionId);
   if (!store) return;
   const { series, barChart, pieChart, filterEl } = store;
+  const metric = store.metric || "amount";
   const months = getMultiSelectValues(filterEl.querySelector("[data-filter-month]"));
   const parties = getMultiSelectValues(filterEl.querySelector("[data-filter-party]"));
   const minRaw = filterEl.querySelector("[data-filter-min]")?.value;
   const minAmount = minRaw ? parseFloat(minRaw) : 0;
-  const filtered = filterPaymentsSeries(series, months, parties);
+  const filtered = filterPaymentsSeries(series, months, parties, metric);
   barChart.setOption(paymentsBarOption(filtered), true);
   pieChart.setOption(paymentsPieOption(filtered), true);
   applyPaymentsTableFilters(sectionId, months, parties, minAmount);
+}
+
+function bindPaymentsMetricToggle(sectionId, metricEl) {
+  if (metricEl.dataset.paymentsMetricBound === "1") return;
+  metricEl.dataset.paymentsMetricBound = "1";
+  metricEl.querySelectorAll("[data-metric]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const store = paymentsChartStore.get(sectionId);
+      if (!store) return;
+      const metric = btn.dataset.metric;
+      if (!metric || store.metric === metric) return;
+      store.metric = metric;
+      metricEl.querySelectorAll("[data-metric]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.metric === metric);
+      });
+      updatePaymentsChartsForSection(sectionId);
+    });
+  });
 }
 
 function bindPaymentsChartFilters(sectionId, filterEl) {
@@ -689,11 +754,20 @@ function initPaymentsCharts(root) {
     const barEl = scope.querySelector(`[data-payments-chart-bar="${sectionId}"]`);
     const pieEl = scope.querySelector(`[data-payments-chart-pie="${sectionId}"]`);
     const filterEl = scope.querySelector(`[data-payments-filter="${sectionId}"]`);
+    const metricEl = scope.querySelector(`[data-payments-metric="${sectionId}"]`);
     if (!barEl || !pieEl || !filterEl) return;
     const barChart = echarts.init(barEl, null, { renderer: "canvas" });
     const pieChart = echarts.init(pieEl, null, { renderer: "canvas" });
-    paymentsChartStore.set(sectionId, { series, barChart, pieChart, filterEl });
+    paymentsChartStore.set(sectionId, {
+      series,
+      barChart,
+      pieChart,
+      filterEl,
+      metricEl,
+      metric: "amount",
+    });
     bindPaymentsChartFilters(sectionId, filterEl);
+    if (metricEl) bindPaymentsMetricToggle(sectionId, metricEl);
     updatePaymentsChartsForSection(sectionId);
     barChart.on("click", (params) => {
       if (!params?.name) return;

@@ -306,36 +306,105 @@ def _empty_frames() -> dict[str, pd.DataFrame]:
     return {key: empty.copy() for key, _ in SECTION_SPECS}
 
 
+def _empty_approved(month_count: int = 0) -> dict[str, Any]:
+    return {
+        "amount": [0.0] * month_count,
+        "count": [0] * month_count,
+        "total_amount": 0.0,
+        "total_count": 0,
+    }
+
+
 def _empty_series() -> dict[str, Any]:
     return {
         "months": [],
         "parties": [],
         "matrix": {},
         "party_totals": {},
+        "count_matrix": {},
+        "count_totals": {},
+        "approved": _empty_approved(),
         "colors": {},
     }
 
 
 def _series_by_month_party(df: pd.DataFrame) -> dict[str, Any]:
-    """Агрегирует неоплаченную сумму по месяцам и ответственным сторонам."""
+    """Агрегирует неоплаченную сумму/кол-во по месяцам и сторонам; отдельно — согласованные."""
     if df.empty or "Месяц выполнения" not in df.columns:
         return _empty_series()
-    filtered = df[df["Статус согласования"] != "Согласовано"]
-    if filtered.empty:
-        return _empty_series()
-    pivot = (
-        filtered.groupby(["Месяц выполнения", "Статус согласования"])["Сумма с НДС"]
-        .sum()
-        .unstack(fill_value=0.0)
-        .sort_index()
+
+    unpaid = df[df["Статус согласования"] != "Согласовано"]
+    approved_df = df[df["Статус согласования"] == "Согласовано"]
+
+    unpaid_months = (
+        set(unpaid["Месяц выполнения"].astype(str).unique()) if not unpaid.empty else set()
     )
-    parties = [str(col) for col in pivot.columns]
+    approved_months = (
+        set(approved_df["Месяц выполнения"].astype(str).unique())
+        if not approved_df.empty
+        else set()
+    )
+    all_months = sorted(unpaid_months | approved_months)
+    if not all_months:
+        return _empty_series()
+
+    if unpaid.empty:
+        parties: list[str] = []
+        matrix: dict[str, list[float]] = {}
+        party_totals: dict[str, float] = {}
+        count_matrix: dict[str, list[int]] = {}
+        count_totals: dict[str, int] = {}
+    else:
+        pivot = (
+            unpaid.groupby(["Месяц выполнения", "Статус согласования"])["Сумма с НДС"]
+            .sum()
+            .unstack(fill_value=0.0)
+        )
+        count_pivot = (
+            unpaid.groupby(["Месяц выполнения", "Статус согласования"])
+            .size()
+            .unstack(fill_value=0)
+        )
+        parties = [str(col) for col in pivot.columns]
+        pivot = pivot.reindex(all_months, fill_value=0.0)
+        count_pivot = count_pivot.reindex(all_months, fill_value=0)
+        for party in parties:
+            if party not in count_pivot.columns:
+                count_pivot[party] = 0
+        matrix = {party: [float(v) for v in pivot[party].values] for party in parties}
+        party_totals = {party: float(pivot[party].sum()) for party in parties}
+        count_matrix = {
+            party: [int(v) for v in count_pivot[party].values] for party in parties
+        }
+        count_totals = {party: int(count_pivot[party].sum()) for party in parties}
+
+    if approved_df.empty:
+        approved = _empty_approved(len(all_months))
+    else:
+        approved_by_month = (
+            approved_df.groupby("Месяц выполнения")
+            .agg(amount=("Сумма с НДС", "sum"), count=("Сумма с НДС", "size"))
+            .reindex(all_months, fill_value=0)
+        )
+        approved = {
+            "amount": [float(v) for v in approved_by_month["amount"].values],
+            "count": [int(v) for v in approved_by_month["count"].values],
+            "total_amount": float(approved_by_month["amount"].sum()),
+            "total_count": int(approved_by_month["count"].sum()),
+        }
+
+    colors = {party: COLOR_MAP.get(party, "#6b7280") for party in parties}
+    colors["Согласовано"] = COLOR_MAP.get("Согласовано", "#34d399")
+
     return {
-        "months": [str(month) for month in pivot.index],
+        "months": all_months,
         "parties": parties,
-        "matrix": {party: [float(v) for v in pivot[party].values] for party in parties},
-        "party_totals": {party: float(pivot[party].sum()) for party in parties},
-        "colors": {party: COLOR_MAP.get(party, "#6b7280") for party in parties},
+        "matrix": matrix,
+        "party_totals": party_totals,
+        "count_matrix": count_matrix,
+        "count_totals": count_totals,
+        "approved": approved,
+        "colors": colors,
     }
 
 
@@ -372,13 +441,18 @@ def _series_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return _empty_series()
     month_party_amount: dict[str, dict[str, float]] = {}
+    month_party_count: dict[str, dict[str, int]] = {}
     for row in rows:
         month = str(row.get("month", "")).strip()
         party = _row_party_name(row)
         if not month or not party:
             continue
         month_party_amount.setdefault(month, {})
-        month_party_amount[month][party] = month_party_amount[month].get(party, 0.0) + _row_amount_value(row)
+        month_party_count.setdefault(month, {})
+        month_party_amount[month][party] = (
+            month_party_amount[month].get(party, 0.0) + _row_amount_value(row)
+        )
+        month_party_count[month][party] = month_party_count[month].get(party, 0) + 1
     if not month_party_amount:
         return _empty_series()
     months = sorted(month_party_amount.keys())
@@ -387,13 +461,23 @@ def _series_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         party: [float(month_party_amount.get(month, {}).get(party, 0.0)) for month in months]
         for party in parties
     }
+    count_matrix = {
+        party: [int(month_party_count.get(month, {}).get(party, 0)) for month in months]
+        for party in parties
+    }
     party_totals = {party: float(sum(matrix[party])) for party in parties}
+    count_totals = {party: int(sum(count_matrix[party])) for party in parties}
+    colors = {party: COLOR_MAP.get(party, "#6b7280") for party in parties}
+    colors["Согласовано"] = COLOR_MAP.get("Согласовано", "#34d399")
     return {
         "months": months,
         "parties": parties,
         "matrix": matrix,
         "party_totals": party_totals,
-        "colors": {party: COLOR_MAP.get(party, "#6b7280") for party in parties},
+        "count_matrix": count_matrix,
+        "count_totals": count_totals,
+        "approved": _empty_approved(len(months)),
+        "colors": colors,
     }
 
 
