@@ -65,31 +65,32 @@
           <div class="payments-kpi-label">Самая «старая» заявка</div>
         </div>
         <div class="payments-kpi-card">
-          <div class="payments-kpi-value">{{ section.kpi.largest_amount }}</div>
+          <div class="payments-kpi-value">{{ section.kpi.largest_amount | default('—') }}</div>
           <div class="payments-kpi-label">Крупнейшая заявка</div>
         </div>
       </div>
 
       {% set section_id = kind ~ '-' ~ section.key %}
-      <script type="application/json" data-payments-series="{{ section_id }}">{{ section.series | tojson }}</script>
+      {% set series = section.series | default({}) %}
+      <script type="application/json" data-payments-series="{{ section_id }}">{{ series | tojson }}</script>
 
       <div class="payments-filters" data-payments-filter="{{ section_id }}">
         <div class="payments-filter-group">
           <label class="payments-filter-label" for="filter-month-{{ section_id }}">Месяц</label>
-          {% set month_select_size = section.series.months|length %}
+          {% set month_select_size = series.months | default([]) | length %}
           {% if month_select_size > 4 %}{% set month_select_size = 4 %}{% elif month_select_size < 1 %}{% set month_select_size = 1 %}{% endif %}
           <select id="filter-month-{{ section_id }}" class="payments-filter-select" data-filter-month multiple size="{{ month_select_size }}">
-            {% for month in section.series.months %}
+            {% for month in series.months | default([]) %}
             <option value="{{ month }}" selected>{{ month }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="payments-filter-group">
           <label class="payments-filter-label" for="filter-party-{{ section_id }}">Ответственный</label>
-          {% set party_select_size = section.series.parties|length %}
+          {% set party_select_size = series.parties | default([]) | length %}
           {% if party_select_size > 4 %}{% set party_select_size = 4 %}{% elif party_select_size < 1 %}{% set party_select_size = 1 %}{% endif %}
           <select id="filter-party-{{ section_id }}" class="payments-filter-select" data-filter-party multiple size="{{ party_select_size }}">
-            {% for party in section.series.parties %}
+            {% for party in series.parties | default([]) %}
             <option value="{{ party }}" selected>{{ party }}</option>
             {% endfor %}
           </select>
@@ -152,7 +153,7 @@
                 <tr
                   data-month="{{ row.month }}"
                   data-party="{{ row.status.text }}"
-                  data-amount="{{ row.amount_value }}"
+                  data-amount="{{ row.amount_value | default(0) }}"
                 >
                   <td>{{ row.month }}</td>
                   <td><span class="status-badge {{ row.status.class }}">{{ row.status.text }}</span></td>

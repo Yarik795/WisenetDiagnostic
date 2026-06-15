@@ -339,6 +339,105 @@ def _series_by_month_party(df: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def _parse_amount_display(amount: Any) -> float:
+    if amount is None:
+        return 0.0
+    if isinstance(amount, (int, float)):
+        return float(amount)
+    text = str(amount).replace(" руб.", "").replace("\xa0", " ").strip()
+    text = re.sub(r"\s+", "", text).replace(",", ".")
+    if not text:
+        return 0.0
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
+def _row_amount_value(row: dict[str, Any]) -> float:
+    if "amount_value" in row and row["amount_value"] is not None:
+        return float(row["amount_value"])
+    return _parse_amount_display(row.get("amount"))
+
+
+def _row_party_name(row: dict[str, Any]) -> str:
+    status = row.get("status")
+    if isinstance(status, dict):
+        return str(status.get("text", ""))
+    return str(status or "")
+
+
+def _series_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Восстанавливает series из строк таблицы (старые артефакты с chart_b64)."""
+    if not rows:
+        return _empty_series()
+    month_party_amount: dict[str, dict[str, float]] = {}
+    for row in rows:
+        month = str(row.get("month", "")).strip()
+        party = _row_party_name(row)
+        if not month or not party:
+            continue
+        month_party_amount.setdefault(month, {})
+        month_party_amount[month][party] = month_party_amount[month].get(party, 0.0) + _row_amount_value(row)
+    if not month_party_amount:
+        return _empty_series()
+    months = sorted(month_party_amount.keys())
+    parties = sorted({party for amounts in month_party_amount.values() for party in amounts})
+    matrix = {
+        party: [float(month_party_amount.get(month, {}).get(party, 0.0)) for month in months]
+        for party in parties
+    }
+    party_totals = {party: float(sum(matrix[party])) for party in parties}
+    return {
+        "months": months,
+        "parties": parties,
+        "matrix": matrix,
+        "party_totals": party_totals,
+        "colors": {party: COLOR_MAP.get(party, "#6b7280") for party in parties},
+    }
+
+
+def _normalize_section(section: dict[str, Any]) -> dict[str, Any]:
+    out = dict(section)
+    rows = list(out.get("rows") or [])
+    for row in rows:
+        if "amount_value" not in row or row["amount_value"] is None:
+            row["amount_value"] = _row_amount_value(row)
+    out["rows"] = rows
+    if "series" not in out or out["series"] is None:
+        out["series"] = _series_from_rows(rows)
+    kpi = dict(out.get("kpi") or {})
+    if "largest_amount" not in kpi:
+        if rows:
+            largest_val = max(_row_amount_value(row) for row in rows)
+            kpi["largest_amount"] = format_amount_rub(largest_val) if largest_val else "—"
+        else:
+            kpi["largest_amount"] = "—"
+    out["kpi"] = kpi
+    out.pop("chart_b64", None)
+    return out
+
+
+def normalize_report_payload(report: dict[str, Any]) -> dict[str, Any]:
+    """Приводит артефакт отчёта к актуальной схеме (series, largest_amount)."""
+    out = dict(report)
+    reports = out.get("reports")
+    if not isinstance(reports, dict):
+        return out
+    normalized_reports: dict[str, Any] = {}
+    for kind, kind_report in reports.items():
+        if not isinstance(kind_report, dict):
+            normalized_reports[kind] = kind_report
+            continue
+        kind_out = dict(kind_report)
+        sections = kind_out.get("sections")
+        if isinstance(sections, list):
+            kind_out["sections"] = [_normalize_section(section) for section in sections if isinstance(section, dict)]
+        normalized_reports[kind] = kind_out
+    out["reports"] = normalized_reports
+    return out
+
+
 def _normalize_request_number(value: Any) -> str:
     if pd.isna(value):
         return ""
@@ -562,9 +661,12 @@ def load_report_artifact() -> Optional[dict[str, Any]]:
     if not REPORT_ARTIFACT.is_file():
         return None
     try:
-        return json.loads(REPORT_ARTIFACT.read_text(encoding="utf-8"))
+        payload = json.loads(REPORT_ARTIFACT.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    if not isinstance(payload, dict):
+        return None
+    return normalize_report_payload(payload)
 
 
 def requests_file_info() -> Optional[dict[str, Any]]:

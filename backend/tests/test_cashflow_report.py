@@ -14,6 +14,7 @@ from app.cashflow_report import (
     find_latest_requests_source_file,
     import_requests_from_source,
     load_report_artifact,
+    normalize_report_payload,
     read_excel,
     requests_file_path,
 )
@@ -203,3 +204,38 @@ def test_build_cashflow_report_series_matches_kpi(
     rows_total = sum(row.get("amount_value", 0) for row in az_mb["rows"])
     assert series_total == pytest.approx(rows_total)
     assert az_mb["kpi"]["total_count"] == len(az_mb["rows"])
+
+
+def test_normalize_report_payload_legacy_chart_b64() -> None:
+    legacy = {
+        "reports": {
+            "modern": {
+                "sections": [
+                    {
+                        "key": "az_mb",
+                        "title": "АЗ МБ",
+                        "kpi": {
+                            "total_count": 1,
+                            "total_sum": "10 000,50 руб.",
+                            "oldest_date": "2026-06",
+                        },
+                        "chart_b64": "abc123",
+                        "rows": [
+                            {
+                                "month": "2026-06",
+                                "status": {"text": "Войнов", "class": "status-otso"},
+                                "amount": "10 000,50",
+                                "request_number": "123",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+    normalized = normalize_report_payload(legacy)
+    section = normalized["reports"]["modern"]["sections"][0]
+    assert "chart_b64" not in section
+    assert section["series"]["party_totals"]["Войнов"] == pytest.approx(10000.50)
+    assert section["kpi"]["largest_amount"] == "10 000,50 руб."
+    assert section["rows"][0]["amount_value"] == pytest.approx(10000.50)
