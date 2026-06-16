@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -101,10 +103,35 @@ def files_identical(source: Path, dest: Path) -> bool:
     return _file_hash(source) == _file_hash(dest)
 
 
+def _clear_readonly(path: Path) -> None:
+    if not path.is_file():
+        return
+    mode = path.stat().st_mode
+    if not mode & stat.S_IWRITE:
+        path.chmod(mode | stat.S_IWRITE)
+
+
+def storage_permission_message(target: Path) -> str:
+    return (
+        f"Не удалось перезаписать {target.name} в data/uploads/. "
+        "Закройте этот файл в Excel или проводнике и повторите загрузку."
+    )
+
+
 def copy_to_storage(spec: SourceSpec, source: Path) -> Path:
     ensure_storage_dirs()
     target = storage_path(spec)
-    shutil.copy2(source, target)
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        shutil.copy2(source, tmp)
+        _clear_readonly(target)
+        os.replace(tmp, target)
+    except PermissionError as exc:
+        tmp.unlink(missing_ok=True)
+        raise PermissionError(storage_permission_message(target)) from exc
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return target
 
 
@@ -341,10 +368,17 @@ def load_source(
 
     dest = storage_path(spec)
     unchanged = dest.is_file() and files_identical(source, dest)
+    storage_copy_skipped = False
 
     if not unchanged:
         progress("Копирование", 20)
-        copy_to_storage(spec, source)
+        try:
+            copy_to_storage(spec, source)
+        except PermissionError:
+            # Файл в data/uploads/ часто занят Excel на Windows — импортируем из inputData.
+            dest = source
+            storage_copy_skipped = True
+            progress("Чтение из inputData", 20)
     else:
         progress("Файл без изменений", 20)
 
@@ -354,8 +388,21 @@ def load_source(
         source,
         deps,
         progress,
-        file_unchanged=unchanged,
+        file_unchanged=unchanged and not storage_copy_skipped,
     )
+
+    if result.ok and storage_copy_skipped:
+        result = SourceLoadResult(
+            ok=True,
+            message=(
+                f"{result.message} "
+                f"(копия в data/uploads не обновлена: {storage_path(spec).name} занят — "
+                "закройте файл в Excel)"
+            ),
+            record_count=result.record_count,
+            changed=result.changed,
+            filename=result.filename,
+        )
 
     if result.ok:
         deps.state.record_source_import(
