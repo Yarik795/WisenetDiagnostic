@@ -1079,13 +1079,20 @@ function loadArsenalDetail(queryParams) {
 
 function resolveArsenalDashboard(root) {
   const scope = root || document;
+  let dashboard = null;
   if (scope instanceof Element && scope.hasAttribute("data-arsenal-dashboard")) {
-    return scope;
+    dashboard = scope;
+  } else if (scope instanceof Document || scope instanceof Element) {
+    dashboard = scope.querySelector("[data-arsenal-dashboard]");
   }
-  if (scope instanceof Document || scope instanceof Element) {
-    return scope.querySelector("[data-arsenal-dashboard]");
+  if (!dashboard) {
+    dashboard = document.querySelector("[data-arsenal-dashboard]");
   }
-  return document.querySelector("[data-arsenal-dashboard]");
+  // outerHTML swap: HTMX afterSwap target is the removed node, not the new dashboard.
+  if (dashboard && !dashboard.isConnected) {
+    dashboard = document.querySelector("[data-arsenal-dashboard]");
+  }
+  return dashboard;
 }
 
 function initArsenalCharts(root) {
