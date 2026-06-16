@@ -261,6 +261,21 @@ CLI: обновление `recorders` в `config.json` из CMDB, резервн
 
 ---
 
+## Импорт исходных данных (`data_sources`)
+
+Единый реестр источников в `data_sources.py`: пользователь кладёт `.xlsx` в `inputData/`, на `/sources` нажимает кнопку обновления. Файл ищется по маркеру в имени, копируется в `data/uploads/`, обрабатывается runner'ом, результат пишется в `source_imports`.
+
+| key | Маркер в имени | Хранилище данных |
+|-----|----------------|------------------|
+| `cmdb` | `cmdb` | `config.json` (устройства) |
+| `requests` | `заявки` | `data/reports/cashflow_report.json` |
+| `naumen` | `naumen` | SQLite `naumen_records` |
+| `arsenal` | `паспортам` | SQLite `arsenal_analytics`, `arsenal_systems` |
+
+Импорт Арсенал: `arsenal_import.import_arsenal_xlsx()` — лист «Аналитика» (заполнение, ошибки, документация) и системные листы САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД (производители). Дашборд: `ui/arsenal_dashboard.py`, страница `/arsenal` (ECharts, срез по `Тип объекта охраны`).
+
+---
+
 ## Зависимости между сервисами
 
 ```text

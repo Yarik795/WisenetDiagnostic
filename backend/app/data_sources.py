@@ -223,10 +223,44 @@ def _run_naumen(
     )
 
 
+def _run_arsenal(
+    dest: Path,
+    source: Path,
+    deps: RunnerDeps,
+    on_progress: ProgressCallback,
+    *,
+    file_unchanged: bool,
+) -> SourceLoadResult:
+    if file_unchanged and deps.state.count_arsenal_records() > 0:
+        on_progress("Проверка", 50)
+        return SourceLoadResult(
+            ok=True,
+            message="Новых данных нет",
+            record_count=deps.state.count_arsenal_records(),
+            changed=False,
+            filename=source.name,
+        )
+
+    from .arsenal_import import import_arsenal_xlsx
+
+    def report_progress(phase: str, percent: int) -> None:
+        on_progress(phase, 25 + int(percent * 0.65))
+
+    row_count = import_arsenal_xlsx(dest, deps.state, on_progress=report_progress)
+    return SourceLoadResult(
+        ok=True,
+        message=f"Данные загружены: {row_count} паспортов",
+        record_count=row_count,
+        changed=True,
+        filename=source.name,
+    )
+
+
 _RUNNERS: dict[str, Callable[..., SourceLoadResult]] = {
     "cmdb": _run_cmdb,
     "requests": _run_requests,
     "naumen": _run_naumen,
+    "arsenal": _run_arsenal,
 }
 
 CMDB_SOURCE = SourceSpec(
@@ -263,10 +297,23 @@ NAUMEN_SOURCE = SourceSpec(
     storage_filename="naumen.xlsx",
 )
 
+ARSENAL_SOURCE = SourceSpec(
+    key="arsenal",
+    label="АС Арсенал",
+    button_label="Обновить Арсенал",
+    button_title=(
+        'Берёт самый свежий файл *.xlsx с «паспортам» в имени '
+        'из папки inputData'
+    ),
+    name_marker="паспортам",
+    storage_filename="arsenal.xlsx",
+)
+
 SOURCES: dict[str, SourceSpec] = {
     CMDB_SOURCE.key: CMDB_SOURCE,
     REQUESTS_SOURCE.key: REQUESTS_SOURCE,
     NAUMEN_SOURCE.key: NAUMEN_SOURCE,
+    ARSENAL_SOURCE.key: ARSENAL_SOURCE,
 }
 
 

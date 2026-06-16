@@ -61,6 +61,7 @@ from ..ui.payments_export import (
     render_payments_export_html,
 )
 from ..ui.source_imports import sources_page_context
+from ..ui.arsenal_dashboard import arsenal_page_context
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
 from .validation import parse_recorder_form
@@ -469,8 +470,33 @@ def budget_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/arsenal", response_class=HTMLResponse)
-def arsenal_page(request: Request) -> HTMLResponse:
-    return _placeholder_page(request, active_nav="arsenal", section_title="Арсенал")
+def arsenal_page(
+    request: Request,
+    object_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "arsenal.html",
+        {
+            "active_nav": "arsenal",
+            "toast": _toast_from_query(request),
+            **arsenal_page_context(state, object_type=object_type),
+        },
+    )
+
+
+@router.get("/arsenal/partials/dashboard", response_class=HTMLResponse)
+def arsenal_dashboard_partial(
+    request: Request,
+    object_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/arsenal_dashboard.html",
+        arsenal_page_context(state, object_type=object_type),
+    )
 
 
 @router.get("/smartview", response_class=HTMLResponse)

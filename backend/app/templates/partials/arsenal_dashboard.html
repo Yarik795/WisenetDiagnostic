@@ -1,0 +1,78 @@
+<div id="arsenal-dashboard-root" data-arsenal-dashboard>
+  {% if not arsenal_has_data %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет данных Арсенал. Загрузите файл выгрузки паспортов на странице
+      <a href="/sources">Исходные данные</a>.
+    </p>
+  </section>
+  {% else %}
+  <script type="application/json" data-arsenal-charts>{{ arsenal_charts | tojson }}</script>
+
+  <section class="fleet-overview card" aria-label="Показатели Арсенал">
+    <div class="fleet-kpi-grid">
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ arsenal_kpi.passport_count }}</span>
+        <span class="fleet-kpi-label">Паспортов</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--ok">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ arsenal_kpi.avg_fill_total }}%</span>
+        <span class="fleet-kpi-label">Среднее заполнение</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--warn">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ arsenal_kpi.total_errors }}</span>
+        <span class="fleet-kpi-label">Ошибок всего</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--warn">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ arsenal_kpi.passports_with_errors_pct }}%</span>
+        <span class="fleet-kpi-label">Паспортов с ошибками</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ arsenal_kpi.avg_fill_project }}%</span>
+        <span class="fleet-kpi-label">Проектная документация</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ arsenal_kpi.photos_pct }}%</span>
+        <span class="fleet-kpi-label">С фотографиями</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="arsenal-charts-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:16px;">
+    <section class="card arsenal-chart-card">
+      <h3 class="card-section-title">Распределение по типу объекта</h3>
+      <div class="arsenal-chart" data-arsenal-chart="object_types" style="height:320px;"></div>
+    </section>
+
+    <section class="card arsenal-chart-card">
+      <h3 class="card-section-title">Среднее заполнение по разделам</h3>
+      <div class="arsenal-chart" data-arsenal-chart="fill_sections" style="height:320px;"></div>
+    </section>
+
+    <section class="card arsenal-chart-card">
+      <h3 class="card-section-title">Ошибки по разделам</h3>
+      <div class="arsenal-chart" data-arsenal-chart="errors" style="height:320px;"></div>
+    </section>
+
+    <section class="card arsenal-chart-card">
+      <h3 class="card-section-title">Наличие документации по системам</h3>
+      <div class="arsenal-chart" data-arsenal-chart="docs" style="height:320px;"></div>
+    </section>
+
+    {% for system_type in arsenal_system_types %}
+    <section class="card arsenal-chart-card">
+      <h3 class="card-section-title">
+        {{ system_type }}: производители
+        {% if arsenal_charts.systems[system_type].total %}
+        <span class="text-secondary" style="font-weight:400;">({{ arsenal_charts.systems[system_type].total }})</span>
+        {% endif %}
+      </h3>
+      <div class="arsenal-chart" data-arsenal-chart="systems_{{ system_type }}" style="height:320px;"></div>
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

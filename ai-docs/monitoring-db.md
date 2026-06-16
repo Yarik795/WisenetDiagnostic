@@ -26,6 +26,7 @@
 - Журнал попыток опроса в рамках массового job (`recorder_poll_attempts`).
 - Журнал импортов исходных файлов (`source_imports`).
 - Выгрузка заявок Naumen (`naumen_records`).
+- Выгрузка паспортов АС Арсенал (`arsenal_analytics`, `arsenal_systems`).
 
 **Не в БД (смежные хранилища):**
 
@@ -596,7 +597,7 @@ Append-only журнал **каждой попытки** опроса регис
 | Колонка | Тип | Описание |
 |---------|-----|----------|
 | `id` | INTEGER PK | Автоинкремент |
-| `source_key` | TEXT | Ключ источника (`cmdb`, `requests`, `naumen`) |
+| `source_key` | TEXT | Ключ источника (`cmdb`, `requests`, `naumen`, `arsenal`) |
 | `filename` | TEXT | Имя исходного файла из `inputData/` |
 | `imported_at` | TEXT | UTC ISO |
 | `record_count` | INTEGER | Число обработанных записей |
@@ -622,6 +623,46 @@ Append-only журнал **каждой попытки** опроса регис
 Импорт: `naumen_import.import_naumen_xlsx()` → `StateStore.replace_naumen_records()` (DELETE + batch INSERT в одной транзакции). Парсинг — openpyxl `read_only=True` для больших файлов.
 
 Чтение для отчёта «Статус оплаты»: `StateStore.naumen_cost_by_sberdrug()` — карта `sberdrug_number` → первая ненулевая `cost` (по `source_row`). При сборке отчёта, если у заявки из ПП «Сумма с НДС» = 0, подставляется стоимость по ключу «№ заявки ДРУГ» ↔ `sberdrug_number`.
+
+### 6.7. Таблица `arsenal_analytics`
+
+Полная замена при каждом импорте выгрузки АС Арсенал (файл с «паспортам» в имени → `data/uploads/arsenal.xlsx`). Одна строка — один паспорт (лист «Аналитика»).
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `passport_number` | TEXT PK | `Номер паспорта` |
+| `tb` | TEXT | `Наименование ТБ` |
+| `gosb` | TEXT | `Наименование ГОСБ` |
+| `status` | TEXT | `Статус паспорта` |
+| `object_type` | TEXT | `Тип объекта охраны` (срез на дашборде) |
+| `subtype` | TEXT | `Подтип объекта охраны` |
+| `object_name` | TEXT | `Полное наименование объекта банка` |
+| `fill_total` | REAL | `% заполнения паспорта` |
+| `fill_sections_json` | TEXT | JSON: раздел → % заполнения |
+| `errors_total` | INTEGER | `Количество ошибок в паспорте` |
+| `errors_sections_json` | TEXT | JSON: раздел → число ошибок |
+| `fill_project_docs` | REAL | `% заполнения проектной документации` |
+| `docs_json` | TEXT | JSON: система → наличие документации (Да/Нет/-) |
+| `has_photos` | TEXT | Наличие фотографий в основной информации |
+| `source_row` | INTEGER | Номер строки в xlsx |
+| `imported_at` | TEXT | UTC ISO момента импорта |
+
+### 6.8. Таблица `arsenal_systems`
+
+Строки с системных листов (САЗ, СОУЭ, СОТС, САПС, ТСВ, СКУД): производитель (с подстановкой из колонки «Иной»).
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `id` | INTEGER PK | Автоинкремент |
+| `passport_number` | TEXT | `Номер паспорта` |
+| `tb`, `gosb`, `object_type`, `subtype` | TEXT | Идентификация объекта |
+| `system_type` | TEXT | САЗ / СОУЭ / СОТС / САПС / ТСВ / СКУД |
+| `manufacturer` | TEXT | Нормализованный производитель |
+| `year` | INTEGER | Год установки / капремонта (если есть) |
+| `source_row` | INTEGER | Номер строки в xlsx |
+| `imported_at` | TEXT | UTC ISO |
+
+Импорт: `arsenal_import.import_arsenal_xlsx()` → `StateStore.replace_arsenal_data()` (DELETE обеих таблиц + batch INSERT). UI: `/arsenal`, partial `GET /arsenal/partials/dashboard?object_type=…`.
 
 ---
 
@@ -699,8 +740,9 @@ sequenceDiagram
 | `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
 | `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
 | `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты» |
+| `replace_arsenal_data` / `count_arsenal_records` / `arsenal_analytics_rows` / `arsenal_systems_rows` | `arsenal_analytics`, `arsenal_systems` | Импорт АС Арсенал; данные дашборда `/arsenal` |
 
-### 6.7. Таблицы чата с AI
+### 6.9. Таблицы чата с AI
 
 История диалогов LLM хранится в той же БД (`ChatStore.init_db()`).
 

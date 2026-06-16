@@ -1,0 +1,279 @@
+"""Тесты импорта данных АС Арсенал."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from openpyxl import Workbook
+
+from app.arsenal_import import (
+    COL_OBJECT_TYPE,
+    COL_PASSPORT,
+    SHEET_ANALYTICS,
+    import_arsenal_xlsx,
+    normalize_manufacturer,
+    parse_percent,
+)
+from app.config_store import ConfigStore
+from app.data_sources import (
+    ARSENAL_SOURCE,
+    RunnerDeps,
+    copy_to_storage,
+    find_latest_source_file,
+    load_source,
+)
+from app.state_store import StateStore
+
+ANALYTICS_HEADERS = (
+    "Наименование ТБ",
+    "Наименование ГОСБ",
+    COL_PASSPORT,
+    "Статус паспорта",
+    COL_OBJECT_TYPE,
+    "Подтип объекта охраны",
+    "Полное наименование объекта банка",
+    "% заполнения паспорта",
+    "% заполнения Основные сведения",
+    "% заполнения Тех укрепленность",
+    "% заполнения Посты",
+    "% заполнения Договоры ФО",
+    "% заполнения САЗ",
+    "% заполнения СОУЭ",
+    "% заполнения САПС",
+    "% заполнения СОТС",
+    "% заполнения ТСВ",
+    "% заполнения СКУД",
+    "Количество ошибок в паспорте",
+    "Количество ошибок в Основные сведения",
+    "Количество ошибок в Тех укрепленность",
+    "Количество ошибок в Посты",
+    "Количество ошибок в Договоры ФО",
+    "Количество ошибок в САЗ",
+    "Количество ошибок в СОУЭ",
+    "Количество ошибок в САПС",
+    "Количество ошибок в СОТС",
+    "Количество ошибок в ТСВ",
+    "Количество ошибок в СКУД",
+    "% заполнения проектной документации",
+    "Наличие документации в САЗ",
+    "Наличие документации в СОУЭ",
+    "Наличие документации в СОТС",
+    "Наличие документации в САПС",
+    "Наличие документации в ТСВ",
+    "Наличие документации в СКУД",
+    "Наличие прикрепленных фотографий в разделе Основная информация",
+)
+
+
+def _write_arsenal_xlsx(path: Path) -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = SHEET_ANALYTICS
+    ws.append(list(ANALYTICS_HEADERS))
+    ws.append(
+        [
+            "Московский банк",
+            "ОПЕРУ Московский банк",
+            114585,
+            "Действительный",
+            "ВСП",
+            "Ритейл",
+            "Доп.офис №9038/030",
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            "83,33333",
+            "Да",
+            "Да",
+            "Да",
+            "Да",
+            "Да",
+            "Да",
+            "Нет",
+        ]
+    )
+
+    tsv = wb.create_sheet("ТСВ")
+    tsv.append(
+        [
+            "Наименование ТБ",
+            "Наименование ГОСБ",
+            COL_PASSPORT,
+            "Статус паспорта",
+            COL_OBJECT_TYPE,
+            "Подтип объекта охраны",
+            "Полное наименование объекта банка",
+            "Наличие ТСВ",
+            "Год установки, капитального ремонта ТСВ",
+            "Количество аналоговых видеокамер камер на объекте",
+            "Количество IP видеокамер камер на объекте",
+            "Количество видеорегистраторов на объекте",
+            "Вендоры IP оборудования на объекте",
+        ]
+    )
+    tsv.append(
+        [
+            "Московский банк",
+            "ОПЕРУ Московский банк",
+            114585,
+            "Действительный",
+            "ВСП",
+            "Ритейл",
+            "Доп.офис №9038/030",
+            "ДА",
+            2025,
+            29,
+            2,
+            3,
+            "HANWHA",
+        ]
+    )
+
+    skud = wb.create_sheet("СКУД")
+    skud.append(
+        [
+            "Наименование ТБ",
+            "Наименование ГОСБ",
+            COL_PASSPORT,
+            "Статус паспорта",
+            COL_OBJECT_TYPE,
+            "Подтип объекта охраны",
+            "Полное наименование объекта банка",
+            "Наличие СКУД",
+            "Год установки, капитального ремонта СКУД",
+            "Производитель контроллера",
+            'Производитель (в случае если выбрано "Иное")',
+        ]
+    )
+    skud.append(
+        [
+            "Московский банк",
+            "ОПЕРУ Московский банк",
+            114585,
+            "Действительный",
+            "ВСП",
+            "Ритейл",
+            "Доп.офис №9038/030",
+            "ДА",
+            2025,
+            "Иное",
+            "Бастион",
+        ]
+    )
+
+    wb.save(path)
+
+
+def test_parse_percent_variants() -> None:
+    assert parse_percent("83,33333") == pytest.approx(83.33333)
+    assert parse_percent(100) == 100.0
+
+
+def test_normalize_manufacturer_other() -> None:
+    assert normalize_manufacturer("Иное", "ROXTON") == "ROXTON"
+    assert normalize_manufacturer("HANWHA", "") == "HANWHA"
+    assert normalize_manufacturer("", "") == "Не указан"
+
+
+def test_import_arsenal_xlsx_parses_rows(tmp_path: Path) -> None:
+    xlsx = tmp_path / "паспортам_выгрузка.xlsx"
+    _write_arsenal_xlsx(xlsx)
+
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+
+    count = import_arsenal_xlsx(xlsx, state)
+    assert count == 1
+    assert state.count_arsenal_records() == 1
+
+    analytics = state.arsenal_analytics_rows()
+    assert analytics[0].passport_number == "114585"
+    assert analytics[0].object_type == "ВСП"
+    assert analytics[0].fill_total == 100.0
+
+    systems = state.arsenal_systems_rows()
+    manufacturers = {row.system_type: row.manufacturer for row in systems}
+    assert manufacturers["ТСВ"] == "HANWHA"
+    assert manufacturers["СКУД"] == "Бастион"
+
+
+def test_find_latest_source_file_arsenal_marker(tmp_path: Path) -> None:
+    wrong = tmp_path / "other.xlsx"
+    right = tmp_path / "паспортам_2025.xlsx"
+    _write_arsenal_xlsx(wrong)
+    _write_arsenal_xlsx(right)
+
+    found = find_latest_source_file(ARSENAL_SOURCE, tmp_path)
+    assert found == right
+
+
+def test_load_source_arsenal_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir = tmp_path / "inputData"
+    uploads = tmp_path / "uploads"
+    input_dir.mkdir()
+    uploads.mkdir()
+    monkeypatch.setattr("app.data_sources.INPUT_DATA_DIR", input_dir)
+    monkeypatch.setattr("app.data_sources.UPLOADS_DIR", uploads)
+
+    source = input_dir / "паспортам_2025.xlsx"
+    _write_arsenal_xlsx(source)
+
+    store = ConfigStore(path=tmp_path / "config.json")
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    deps = RunnerDeps(store=store, state=state)
+
+    result = load_source("arsenal", deps)
+    assert result.ok
+    assert result.record_count == 1
+    assert "1 паспорт" in result.message
+    assert state.count_arsenal_records() == 1
+
+
+def test_load_source_arsenal_skip_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir = tmp_path / "inputData"
+    uploads = tmp_path / "uploads"
+    input_dir.mkdir()
+    uploads.mkdir()
+    monkeypatch.setattr("app.data_sources.INPUT_DATA_DIR", input_dir)
+    monkeypatch.setattr("app.data_sources.UPLOADS_DIR", uploads)
+
+    source = input_dir / "паспортам_2025.xlsx"
+    _write_arsenal_xlsx(source)
+    copy_to_storage(ARSENAL_SOURCE, source)
+
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    import_arsenal_xlsx(copy_to_storage(ARSENAL_SOURCE, source), state)
+
+    store = ConfigStore(path=tmp_path / "config.json")
+    deps = RunnerDeps(store=store, state=state)
+
+    result = load_source("arsenal", deps)
+    assert result.ok
+    assert result.message == "Новых данных нет"
+    assert not result.changed

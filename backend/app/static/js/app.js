@@ -831,6 +831,314 @@ if (!window.__paymentsChartsResizeBound) {
   window.addEventListener("resize", resizePaymentsCharts);
 }
 
+const arsenalChartStore = new Map();
+
+function arsenalEmptyOption(message = "Нет данных") {
+  return {
+    backgroundColor: "transparent",
+    title: {
+      text: message,
+      left: "center",
+      top: "middle",
+      textStyle: { color: "#9aa0a6", fontSize: 14, fontWeight: 400 },
+    },
+  };
+}
+
+function arsenalDonutOption(chartData) {
+  const textColor = "#e8eaed";
+  const entries = chartData.entries || [];
+  if (!entries.length) return arsenalEmptyOption();
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "item",
+      formatter: (params) =>
+        `${params.marker}${params.name}: ${params.value} (${Math.round(params.percent || 0)}%)`,
+    },
+    legend: {
+      type: "scroll",
+      orient: "vertical",
+      right: 0,
+      top: "middle",
+      textStyle: { color: textColor },
+    },
+    series: [
+      {
+        type: "pie",
+        radius: ["42%", "68%"],
+        center: ["38%", "50%"],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: "#1a1d24",
+          borderWidth: 2,
+        },
+        label: {
+          color: textColor,
+          formatter: (params) => `${params.name}\n${Math.round(params.percent)}%`,
+        },
+        data: entries.map((item) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: { color: chartData.colors?.[item.name] || "#6b7280" },
+        })),
+      },
+    ],
+  };
+}
+
+function arsenalBarOption(labels, values, options = {}) {
+  const textColor = "#e8eaed";
+  const axisColor = "#9aa0a6";
+  const gridColor = "#2d323c";
+  const horizontal = Boolean(options.horizontal);
+  const suffix = options.suffix || "";
+  if (!labels.length || !values.some((val) => val > 0)) {
+    return arsenalEmptyOption();
+  }
+  const categoryAxis = {
+    type: "category",
+    data: labels,
+    axisLabel: { color: axisColor, rotate: horizontal ? 0 : 35 },
+    axisLine: { lineStyle: { color: gridColor } },
+  };
+  const valueAxis = {
+    type: "value",
+    axisLabel: { color: axisColor },
+    splitLine: { lineStyle: { color: gridColor } },
+  };
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params) => {
+        const item = params?.[0];
+        if (!item) return "";
+        return `${item.name}: ${item.value}${suffix}`;
+      },
+    },
+    grid: horizontal
+      ? { left: 120, right: 24, top: 16, bottom: 24 }
+      : { left: 48, right: 16, top: 24, bottom: 72 },
+    xAxis: horizontal ? valueAxis : categoryAxis,
+    yAxis: horizontal ? categoryAxis : valueAxis,
+    series: [
+      {
+        type: "bar",
+        data: values,
+        itemStyle: { color: options.color || "#3b82f6", borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0] },
+        label: horizontal
+          ? {
+              show: true,
+              position: "right",
+              color: textColor,
+              formatter: (params) => `${params.value}${suffix}`,
+            }
+          : undefined,
+      },
+    ],
+  };
+}
+
+function arsenalDocsStackOption(chartData) {
+  const textColor = "#e8eaed";
+  const axisColor = "#9aa0a6";
+  const gridColor = "#2d323c";
+  const systems = chartData.systems || [];
+  if (!systems.length) return arsenalEmptyOption();
+  const hasValues = (chartData.yes || []).some((val) => val > 0)
+    || (chartData.no || []).some((val) => val > 0)
+    || (chartData.dash || []).some((val) => val > 0);
+  if (!hasValues) return arsenalEmptyOption();
+  return {
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    legend: {
+      bottom: 0,
+      textStyle: { color: textColor },
+    },
+    grid: { left: 48, right: 16, top: 24, bottom: 48 },
+    xAxis: {
+      type: "category",
+      data: systems,
+      axisLabel: { color: axisColor },
+      axisLine: { lineStyle: { color: gridColor } },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: { color: axisColor },
+      splitLine: { lineStyle: { color: gridColor } },
+    },
+    series: [
+      {
+        name: "Да",
+        type: "bar",
+        stack: "docs",
+        itemStyle: { color: "#10b981" },
+        data: chartData.yes || [],
+      },
+      {
+        name: "Нет",
+        type: "bar",
+        stack: "docs",
+        itemStyle: { color: "#ef4444" },
+        data: chartData.no || [],
+      },
+      {
+        name: "—",
+        type: "bar",
+        stack: "docs",
+        itemStyle: { color: "#6b7280" },
+        data: chartData.dash || [],
+      },
+    ],
+  };
+}
+
+function arsenalManufacturersOption(chartData) {
+  const labels = chartData.manufacturers || [];
+  const values = chartData.counts || [];
+  if (!labels.length) return arsenalEmptyOption();
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params) => {
+        const item = params?.[0];
+        if (!item) return "";
+        return `${item.name}: ${item.value}`;
+      },
+    },
+    grid: { left: 120, right: 24, top: 16, bottom: 24 },
+    xAxis: {
+      type: "value",
+      axisLabel: { color: "#9aa0a6" },
+      splitLine: { lineStyle: { color: "#2d323c" } },
+    },
+    yAxis: {
+      type: "category",
+      data: labels,
+      axisLabel: { color: "#9aa0a6" },
+      axisLine: { lineStyle: { color: "#2d323c" } },
+    },
+    series: [
+      {
+        type: "bar",
+        data: values.map((value, idx) => ({
+          value,
+          itemStyle: {
+            color: chartData.colors?.[labels[idx]] || "#3b82f6",
+            borderRadius: [0, 4, 4, 0],
+          },
+        })),
+        label: {
+          show: true,
+          position: "right",
+          color: "#e8eaed",
+        },
+      },
+    ],
+  };
+}
+
+function disposeArsenalCharts(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-arsenal-chart]").forEach((el) => {
+    const chart = echarts.getInstanceByDom(el);
+    if (chart) chart.dispose();
+  });
+  arsenalChartStore.clear();
+}
+
+function initArsenalCharts(root) {
+  if (typeof echarts === "undefined") return;
+  const scope = root || document;
+  const dashboard = scope.querySelector("[data-arsenal-dashboard]");
+  if (!dashboard) return;
+
+  disposeArsenalCharts(dashboard);
+  const scriptEl = dashboard.querySelector("[data-arsenal-charts]");
+  if (!scriptEl) return;
+
+  let chartData;
+  try {
+    chartData = JSON.parse(scriptEl.textContent || "{}");
+  } catch (err) {
+    console.error("[wisenet] arsenal chart data parse error", err);
+    return;
+  }
+
+  const objectTypesEl = dashboard.querySelector('[data-arsenal-chart="object_types"]');
+  if (objectTypesEl) {
+    const chart = echarts.init(objectTypesEl, null, { renderer: "canvas" });
+    chart.setOption(arsenalDonutOption(chartData.object_types || {}), true);
+    chart.on("click", (params) => {
+      if (!params?.name) return;
+      const form = document.querySelector('form[hx-get="/arsenal/partials/dashboard"]');
+      const select = form?.querySelector('select[name="object_type"]');
+      if (!select) return;
+      select.value = params.name;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    arsenalChartStore.set("object_types", chart);
+  }
+
+  const fillEl = dashboard.querySelector('[data-arsenal-chart="fill_sections"]');
+  if (fillEl) {
+    const fill = chartData.fill_sections || {};
+    const chart = echarts.init(fillEl, null, { renderer: "canvas" });
+    chart.setOption(
+      arsenalBarOption(fill.labels || [], fill.values || [], {
+        horizontal: true,
+        suffix: "%",
+        color: "#10b981",
+      }),
+      true
+    );
+    arsenalChartStore.set("fill_sections", chart);
+  }
+
+  const errorsEl = dashboard.querySelector('[data-arsenal-chart="errors"]');
+  if (errorsEl) {
+    const errors = chartData.errors || {};
+    const chart = echarts.init(errorsEl, null, { renderer: "canvas" });
+    chart.setOption(
+      arsenalBarOption(errors.labels || [], errors.values || [], {
+        color: "#f59e0b",
+      }),
+      true
+    );
+    arsenalChartStore.set("errors", chart);
+  }
+
+  const docsEl = dashboard.querySelector('[data-arsenal-chart="docs"]');
+  if (docsEl) {
+    const chart = echarts.init(docsEl, null, { renderer: "canvas" });
+    chart.setOption(arsenalDocsStackOption(chartData.docs || {}), true);
+    arsenalChartStore.set("docs", chart);
+  }
+
+  dashboard.querySelectorAll('[data-arsenal-chart^="systems_"]').forEach((el) => {
+    const key = el.dataset.arsenalChart.replace("systems_", "");
+    const systemData = chartData.systems?.[key] || {};
+    const chart = echarts.init(el, null, { renderer: "canvas" });
+    chart.setOption(arsenalManufacturersOption(systemData), true);
+    arsenalChartStore.set(el.dataset.arsenalChart, chart);
+  });
+}
+
+function resizeArsenalCharts() {
+  arsenalChartStore.forEach((chart) => chart.resize());
+}
+
+if (!window.__arsenalChartsResizeBound) {
+  window.__arsenalChartsResizeBound = true;
+  window.addEventListener("resize", resizeArsenalCharts);
+}
+
 const PAYMENTS_SECTION_KEYS = ["az_mb", "az_ca", "vsp_mb", "vsp_ca"];
 
 function collectPaymentsEmailParams() {
@@ -900,6 +1208,7 @@ function initPaymentsPage(root) {
 document.addEventListener("DOMContentLoaded", () => {
   initServerToasts();
   initPaymentsPage();
+  initArsenalCharts();
   if (typeof htmx === "undefined") {
     showToast(
       "error",
@@ -929,6 +1238,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsCollapsibles(e.detail?.target);
   initPaymentsTables(e.detail?.target);
   initPaymentsCharts(e.detail?.target);
+  initArsenalCharts(e.detail?.target);
   initPaymentsExportActions(e.detail?.target);
   scrollToHighlightedCategory();
 });

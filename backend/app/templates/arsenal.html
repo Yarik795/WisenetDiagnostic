@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block title %}Арсенал — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Арсенал{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Аналитика заполнения паспортов объектов охраны и производители систем безопасности
+  по данным АС Арсенал.
+  {% if latest_arsenal_import %}
+  Последняя загрузка: {{ format_datetime(latest_arsenal_import.imported_at) }}
+  ({{ latest_arsenal_import.record_count }} паспортов).
+  {% else %}
+  Данные ещё не загружены — положите файл с «паспортам» в названии в
+  <a href="/sources">Исходные данные</a>.
+  {% endif %}
+</p>
+
+<form class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;"
+  hx-get="/arsenal/partials/dashboard"
+  hx-target="#arsenal-dashboard-root"
+  hx-swap="outerHTML"
+  hx-trigger="change, submit"
+>
+  <label class="text-secondary" for="arsenal-object-type">Тип объекта охраны</label>
+  <select id="arsenal-object-type" name="object_type" class="select" style="min-width:240px;">
+    <option value="">Все типы</option>
+    {% for option in arsenal_object_type_options %}
+    <option value="{{ option }}" {% if arsenal_object_type == option %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+</form>
+
+<div id="arsenal-dashboard-root">
+  {% include "partials/arsenal_dashboard.html" %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/echarts.min.js?v=5.5.1"></script>
+{{ super() }}
+{% endblock %}

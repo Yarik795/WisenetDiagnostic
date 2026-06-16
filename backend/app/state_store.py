@@ -134,6 +134,71 @@ class NaumenRecordRow:
     source_row: int
 
 
+@dataclass(frozen=True)
+class ArsenalAnalyticsRow:
+    passport_number: str
+    tb: str
+    gosb: str
+    status: str
+    object_type: str
+    subtype: str
+    object_name: str
+    fill_total: float
+    fill_sections: dict[str, float]
+    errors_total: int
+    errors_sections: dict[str, int]
+    fill_project_docs: float
+    docs: dict[str, str]
+    has_photos: str
+    source_row: int
+
+
+@dataclass(frozen=True)
+class ArsenalSystemRow:
+    passport_number: str
+    tb: str
+    gosb: str
+    object_type: str
+    subtype: str
+    system_type: str
+    manufacturer: str
+    year: Optional[int]
+    source_row: int
+
+
+@dataclass
+class ArsenalAnalyticsDbRow:
+    passport_number: str
+    tb: str
+    gosb: str
+    status: str
+    object_type: str
+    subtype: str
+    object_name: str
+    fill_total: float
+    fill_sections_json: str
+    errors_total: int
+    errors_sections_json: str
+    fill_project_docs: float
+    docs_json: str
+    has_photos: str
+    imported_at: datetime
+
+
+@dataclass
+class ArsenalSystemDbRow:
+    id: int
+    passport_number: str
+    tb: str
+    gosb: str
+    object_type: str
+    subtype: str
+    system_type: str
+    manufacturer: str
+    year: Optional[int]
+    imported_at: datetime
+
+
 class NaumenReplaceSession:
     def __init__(self, conn: sqlite3.Connection, imported_at: str) -> None:
         self._conn = conn
@@ -166,6 +231,82 @@ class NaumenReplaceSession:
             ],
         )
         self.count += len(rows)
+
+
+class ArsenalReplaceSession:
+    def __init__(self, conn: sqlite3.Connection, imported_at: str) -> None:
+        self._conn = conn
+        self._imported_at = imported_at
+        self.analytics_count = 0
+        self.systems_count = 0
+
+    def write_analytics_batch(self, rows: list[Any]) -> None:
+        if not rows:
+            return
+        conn = self._conn
+        imported_at = self._imported_at
+        conn.executemany(
+            """
+            INSERT INTO arsenal_analytics (
+                passport_number, tb, gosb, status, object_type, subtype,
+                object_name, fill_total, fill_sections_json, errors_total,
+                errors_sections_json, fill_project_docs, docs_json, has_photos,
+                source_row, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row.passport_number,
+                    row.tb,
+                    row.gosb,
+                    row.status,
+                    row.object_type,
+                    row.subtype,
+                    row.object_name,
+                    row.fill_total,
+                    json.dumps(row.fill_sections, ensure_ascii=False),
+                    row.errors_total,
+                    json.dumps(row.errors_sections, ensure_ascii=False),
+                    row.fill_project_docs,
+                    json.dumps(row.docs, ensure_ascii=False),
+                    row.has_photos,
+                    row.source_row,
+                    imported_at,
+                )
+                for row in rows
+            ],
+        )
+        self.analytics_count += len(rows)
+
+    def write_systems_batch(self, rows: list[Any]) -> None:
+        if not rows:
+            return
+        conn = self._conn
+        imported_at = self._imported_at
+        conn.executemany(
+            """
+            INSERT INTO arsenal_systems (
+                passport_number, tb, gosb, object_type, subtype,
+                system_type, manufacturer, year, source_row, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row.passport_number,
+                    row.tb,
+                    row.gosb,
+                    row.object_type,
+                    row.subtype,
+                    row.system_type,
+                    row.manufacturer,
+                    row.year,
+                    row.source_row,
+                    imported_at,
+                )
+                for row in rows
+            ],
+        )
+        self.systems_count += len(rows)
 
 
 _CATEGORY_PROBLEM_STATUSES = frozenset({"warn", "error"})
@@ -279,7 +420,7 @@ class StateStore:
                     ON recorder_poll_attempts(job_id, recorder_id, attempt);
 
                 -- source_imports: журнал загрузок исходных файлов со страницы /sources
-                -- (CMDB, заявки, Naumen).
+                -- (CMDB, заявки, Naumen, Арсенал).
                 CREATE TABLE IF NOT EXISTS source_imports (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,    -- PK (автоинкремент)
                     source_key TEXT NOT NULL,                -- ключ источника: cmdb/requests/naumen
@@ -304,6 +445,47 @@ class StateStore:
                     source_row INTEGER,                      -- номер строки в исходном xlsx
                     imported_at TEXT NOT NULL                -- время импорта (ISO 8601, UTC)
                 );
+
+                -- arsenal_analytics: лист «Аналитика» выгрузки АС Арсенал.
+                CREATE TABLE IF NOT EXISTS arsenal_analytics (
+                    passport_number TEXT PRIMARY KEY,
+                    tb TEXT NOT NULL DEFAULT '',
+                    gosb TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT '',
+                    object_type TEXT NOT NULL DEFAULT '',
+                    subtype TEXT NOT NULL DEFAULT '',
+                    object_name TEXT NOT NULL DEFAULT '',
+                    fill_total REAL NOT NULL DEFAULT 0,
+                    fill_sections_json TEXT NOT NULL DEFAULT '{}',
+                    errors_total INTEGER NOT NULL DEFAULT 0,
+                    errors_sections_json TEXT NOT NULL DEFAULT '{}',
+                    fill_project_docs REAL NOT NULL DEFAULT 0,
+                    docs_json TEXT NOT NULL DEFAULT '{}',
+                    has_photos TEXT NOT NULL DEFAULT '',
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_arsenal_analytics_object_type
+                    ON arsenal_analytics(object_type);
+
+                -- arsenal_systems: системные листы (САЗ, СОУЭ, СОТС, САПС, ТСВ, СКУД).
+                CREATE TABLE IF NOT EXISTS arsenal_systems (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    passport_number TEXT NOT NULL,
+                    tb TEXT NOT NULL DEFAULT '',
+                    gosb TEXT NOT NULL DEFAULT '',
+                    object_type TEXT NOT NULL DEFAULT '',
+                    subtype TEXT NOT NULL DEFAULT '',
+                    system_type TEXT NOT NULL,
+                    manufacturer TEXT NOT NULL DEFAULT '',
+                    year INTEGER,
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_arsenal_systems_type_object
+                    ON arsenal_systems(system_type, object_type);
                 """
             )
             self._migrate_schema(conn)
@@ -404,6 +586,61 @@ class StateStore:
                 """
             )
 
+        if "arsenal_analytics" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE arsenal_analytics (
+                    passport_number TEXT PRIMARY KEY,
+                    tb TEXT NOT NULL DEFAULT '',
+                    gosb TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT '',
+                    object_type TEXT NOT NULL DEFAULT '',
+                    subtype TEXT NOT NULL DEFAULT '',
+                    object_name TEXT NOT NULL DEFAULT '',
+                    fill_total REAL NOT NULL DEFAULT 0,
+                    fill_sections_json TEXT NOT NULL DEFAULT '{}',
+                    errors_total INTEGER NOT NULL DEFAULT 0,
+                    errors_sections_json TEXT NOT NULL DEFAULT '{}',
+                    fill_project_docs REAL NOT NULL DEFAULT 0,
+                    docs_json TEXT NOT NULL DEFAULT '{}',
+                    has_photos TEXT NOT NULL DEFAULT '',
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_arsenal_analytics_object_type
+                    ON arsenal_analytics(object_type)
+                """
+            )
+
+        if "arsenal_systems" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE arsenal_systems (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    passport_number TEXT NOT NULL,
+                    tb TEXT NOT NULL DEFAULT '',
+                    gosb TEXT NOT NULL DEFAULT '',
+                    object_type TEXT NOT NULL DEFAULT '',
+                    subtype TEXT NOT NULL DEFAULT '',
+                    system_type TEXT NOT NULL,
+                    manufacturer TEXT NOT NULL DEFAULT '',
+                    year INTEGER,
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_arsenal_systems_type_object
+                    ON arsenal_systems(system_type, object_type)
+                """
+            )
+
     @contextmanager
     def replace_naumen_records(
         self, imported_at: Optional[datetime] = None
@@ -418,6 +655,44 @@ class StateStore:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM naumen_records").fetchone()
         return int(row["cnt"]) if row else 0
+
+    @contextmanager
+    def replace_arsenal_data(
+        self, imported_at: Optional[datetime] = None
+    ) -> Iterator[ArsenalReplaceSession]:
+        when = _iso(imported_at or datetime.now(timezone.utc))
+        with self._connect() as conn:
+            conn.execute("DELETE FROM arsenal_systems")
+            conn.execute("DELETE FROM arsenal_analytics")
+            session = ArsenalReplaceSession(conn, when)
+            yield session
+
+    def count_arsenal_records(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM arsenal_analytics"
+            ).fetchone()
+        return int(row["cnt"]) if row else 0
+
+    def arsenal_analytics_rows(self) -> list[ArsenalAnalyticsDbRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM arsenal_analytics
+                ORDER BY object_type, passport_number
+                """
+            ).fetchall()
+        return [_arsenal_analytics_from_row(row) for row in rows]
+
+    def arsenal_systems_rows(self) -> list[ArsenalSystemDbRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM arsenal_systems
+                ORDER BY system_type, object_type, manufacturer
+                """
+            ).fetchall()
+        return [_arsenal_system_from_row(row) for row in rows]
 
     def naumen_cost_by_sberdrug(self) -> dict[str, float]:
         """Карта «Номер Сбердруг» -> первая ненулевая «Стоимость» (по source_row)."""
@@ -1193,6 +1468,42 @@ def _history_from_row(row: sqlite3.Row) -> HistoryRow:
         status=row["status"],
         reason=row["reason"],
         recorded_at=_parse_iso(row["recorded_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _arsenal_analytics_from_row(row: sqlite3.Row) -> ArsenalAnalyticsDbRow:
+    return ArsenalAnalyticsDbRow(
+        passport_number=row["passport_number"],
+        tb=row["tb"],
+        gosb=row["gosb"],
+        status=row["status"],
+        object_type=row["object_type"],
+        subtype=row["subtype"],
+        object_name=row["object_name"],
+        fill_total=float(row["fill_total"] or 0),
+        fill_sections_json=row["fill_sections_json"] or "{}",
+        errors_total=int(row["errors_total"] or 0),
+        errors_sections_json=row["errors_sections_json"] or "{}",
+        fill_project_docs=float(row["fill_project_docs"] or 0),
+        docs_json=row["docs_json"] or "{}",
+        has_photos=row["has_photos"] or "",
+        imported_at=_parse_iso(row["imported_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _arsenal_system_from_row(row: sqlite3.Row) -> ArsenalSystemDbRow:
+    year_raw = row["year"]
+    return ArsenalSystemDbRow(
+        id=row["id"],
+        passport_number=row["passport_number"],
+        tb=row["tb"],
+        gosb=row["gosb"],
+        object_type=row["object_type"],
+        subtype=row["subtype"],
+        system_type=row["system_type"],
+        manufacturer=row["manufacturer"] or "",
+        year=int(year_raw) if year_raw is not None else None,
+        imported_at=_parse_iso(row["imported_at"]) or datetime.now(timezone.utc),
     )
 
 

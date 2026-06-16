@@ -26,7 +26,7 @@
 - `data/monitoring.db` — SQLite с метриками каналов, историей опросов
 - `data/report_delivery_history.json` — журнал отправок email-сводки
 - `data/uploads/`, `data/reports/` — загруженные Excel-файлы и собранные отчёты
-- `inputData/` — исходные данные (cmdb.xlsx, выгрузки заявок, `naumen_all.xlsx`)
+- `inputData/` — исходные Excel-файлы (CMDB, заявки, `naumen_all.xlsx`, выгрузка паспортов Арсенал)
 - `logs/wisenet.log` — структурированный JSON-лог
 
 Переменные окружения: `CONFIG_PATH` — путь к `config.json`; путь к БД задаётся в `StateStore` (по умолчанию `data/monitoring.db` от корня проекта).
@@ -97,9 +97,10 @@
 
 | Модуль | Назначение |
 |--------|------------|
-| `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки, Naumen): спецификации, загрузка, импорт |
+| `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки, Naumen, Арсенал): спецификации, загрузка, импорт |
 | `cmdb_sync.py` | Синхронизация устройств в `config.json` из `cmdb.xlsx` (с резервной копией конфига) |
 | `naumen_import.py` | Импорт выгрузки Naumen (`naumen_all.xlsx`) в SQLite (`naumen_records`) |
+| `arsenal_import.py` | Импорт выгрузки АС Арсенал (листы «Аналитика», САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД) в SQLite |
 
 #### Веб-слой (`backend/app/web/`)
 
@@ -110,7 +111,7 @@
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -133,6 +134,7 @@
 | `payments.py` | Контекст страницы отчёта «Статус оплаты» |
 | `payments_export.py` | Статичный HTML-экспорт и тело письма отчёта «Статус оплаты» (inline-SVG графики) |
 | `source_imports.py` | Контекст страницы источников данных (импорты `inputData/`) |
+| `arsenal_dashboard.py` | Контекст дашборда АС Арсенал: KPI, агрегаты ECharts, срез по типу объекта |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
 #### Шаблоны и статика
@@ -140,7 +142,7 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `payments.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `payments.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
 - `exports/` — печатные/экспортные отчёты (отчёт об ошибках)
 
