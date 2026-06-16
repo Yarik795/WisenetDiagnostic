@@ -1053,10 +1053,44 @@ function disposeArsenalCharts(root) {
   arsenalChartStore.clear();
 }
 
+function currentArsenalObjectTypeFilter() {
+  const select = document.querySelector(
+    '#arsenal-object-type, form[hx-get="/arsenal/partials/dashboard"] select[name="object_type"]'
+  );
+  return select?.value || "";
+}
+
+function loadArsenalDetail(queryParams) {
+  if (typeof htmx === "undefined") return;
+  const params = new URLSearchParams(queryParams);
+  const objectType = currentArsenalObjectTypeFilter();
+  if (objectType) {
+    params.set("object_type", objectType);
+  }
+  const panel = document.getElementById("arsenal-detail-panel");
+  if (panel) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  htmx.ajax("GET", `/arsenal/partials/detail?${params.toString()}`, {
+    target: "#arsenal-detail-panel",
+    swap: "innerHTML",
+  });
+}
+
+function resolveArsenalDashboard(root) {
+  const scope = root || document;
+  if (scope instanceof Element && scope.hasAttribute("data-arsenal-dashboard")) {
+    return scope;
+  }
+  if (scope instanceof Document || scope instanceof Element) {
+    return scope.querySelector("[data-arsenal-dashboard]");
+  }
+  return document.querySelector("[data-arsenal-dashboard]");
+}
+
 function initArsenalCharts(root) {
   if (typeof echarts === "undefined") return;
-  const scope = root || document;
-  const dashboard = scope.querySelector("[data-arsenal-dashboard]");
+  const dashboard = resolveArsenalDashboard(root);
   if (!dashboard) return;
 
   disposeArsenalCharts(dashboard);
@@ -1077,11 +1111,10 @@ function initArsenalCharts(root) {
     chart.setOption(arsenalDonutOption(chartData.object_types || {}), true);
     chart.on("click", (params) => {
       if (!params?.name) return;
-      const form = document.querySelector('form[hx-get="/arsenal/partials/dashboard"]');
-      const select = form?.querySelector('select[name="object_type"]');
-      if (!select) return;
-      select.value = params.name;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      loadArsenalDetail({
+        dimension: "object_type",
+        value: params.name,
+      });
     });
     arsenalChartStore.set("object_types", chart);
   }
@@ -1098,6 +1131,14 @@ function initArsenalCharts(root) {
       }),
       true
     );
+    chart.on("click", (params) => {
+      const label = params.name || params.axisValue;
+      if (!label) return;
+      loadArsenalDetail({
+        dimension: "fill_section",
+        value: label,
+      });
+    });
     arsenalChartStore.set("fill_sections", chart);
   }
 
@@ -1111,6 +1152,14 @@ function initArsenalCharts(root) {
       }),
       true
     );
+    chart.on("click", (params) => {
+      const label = params.name || params.axisValue;
+      if (!label) return;
+      loadArsenalDetail({
+        dimension: "errors_section",
+        value: label,
+      });
+    });
     arsenalChartStore.set("errors", chart);
   }
 
@@ -1118,6 +1167,17 @@ function initArsenalCharts(root) {
   if (docsEl) {
     const chart = echarts.init(docsEl, null, { renderer: "canvas" });
     chart.setOption(arsenalDocsStackOption(chartData.docs || {}), true);
+    chart.on("click", (params) => {
+      const systemType = params.name || params.axisValue;
+      const status = params.seriesName;
+      if (!systemType || !status) return;
+      loadArsenalDetail({
+        dimension: "docs",
+        system_type: systemType,
+        status,
+        value: systemType,
+      });
+    });
     arsenalChartStore.set("docs", chart);
   }
 
@@ -1126,6 +1186,15 @@ function initArsenalCharts(root) {
     const systemData = chartData.systems?.[key] || {};
     const chart = echarts.init(el, null, { renderer: "canvas" });
     chart.setOption(arsenalManufacturersOption(systemData), true);
+    chart.on("click", (params) => {
+      const manufacturer = params.name || params.axisValue;
+      if (!manufacturer) return;
+      loadArsenalDetail({
+        dimension: "manufacturer",
+        system_type: key,
+        value: manufacturer,
+      });
+    });
     arsenalChartStore.set(el.dataset.arsenalChart, chart);
   });
 }

@@ -1,0 +1,119 @@
+<section class="card arsenal-passport-card" data-arsenal-passport>
+  {% if not arsenal_passport_found %}
+  <p class="text-secondary" style="margin:0;">Паспорт {{ passport_number }} не найден.</p>
+  {% else %}
+  <div class="arsenal-detail-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+    <div>
+      <h3 class="card-section-title" style="margin:0;">{{ name }}</h3>
+      <p class="text-secondary" style="margin:4px 0 0;">
+        Паспорт № {{ passport_number }}
+        · {{ object_type }}{% if subtype %} / {{ subtype }}{% endif %}
+        · {{ status }}
+      </p>
+      {% if object_name and object_name != name %}
+      <p class="text-secondary" style="margin:4px 0 0;">{{ object_name }}</p>
+      {% endif %}
+      <p class="text-secondary" style="margin:4px 0 0;">{{ tb }} · {{ gosb }}</p>
+    </div>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      onclick="document.getElementById('arsenal-detail-panel').innerHTML=''"
+      aria-label="Закрыть карточку"
+    >Закрыть</button>
+  </div>
+
+  <div class="fleet-kpi-grid" style="margin-bottom:16px;">
+    <div class="fleet-kpi fleet-kpi--ok">
+      <span class="fleet-kpi-value">{{ fill_total | round(0) }}%</span>
+      <span class="fleet-kpi-label">Заполнение</span>
+    </div>
+    <div class="fleet-kpi fleet-kpi--warn">
+      <span class="fleet-kpi-value">{{ errors_total }}</span>
+      <span class="fleet-kpi-label">Ошибок</span>
+    </div>
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ fill_project_docs | round(0) }}%</span>
+      <span class="fleet-kpi-label">Проектная документация</span>
+    </div>
+    <div class="fleet-kpi">
+      <span class="fleet-kpi-value">{{ has_photos or '—' }}</span>
+      <span class="fleet-kpi-label">Фотографии</span>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
+    <section>
+      <h4 class="card-section-title">Заполнение по разделам</h4>
+      <table class="table table-compact">
+        <tbody>
+          {% for item in fill_section_rows %}
+          <tr>
+            <td>{{ item.label }}</td>
+            <td>{{ item.value | round(0) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h4 class="card-section-title">Ошибки по разделам</h4>
+      {% if error_section_rows %}
+      <table class="table table-compact">
+        <tbody>
+          {% for item in error_section_rows %}
+          <tr>
+            <td>{{ item.label }}</td>
+            <td>{{ item.value }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-secondary" style="margin:0;">Ошибок нет.</p>
+      {% endif %}
+    </section>
+
+    <section>
+      <h4 class="card-section-title">Документация</h4>
+      <table class="table table-compact">
+        <tbody>
+          {% for item in doc_rows %}
+          <tr>
+            <td>{{ item.label }}</td>
+            <td>{{ item.value }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <section style="margin-top:16px;">
+    <h4 class="card-section-title">Системы безопасности</h4>
+    {% if system_rows %}
+    <table class="table table-compact">
+      <thead>
+        <tr>
+          <th>Система</th>
+          <th>Производитель</th>
+          <th>Год</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sys in system_rows %}
+        <tr>
+          <td>{{ sys.system_type }}</td>
+          <td>{{ sys.manufacturer }}</td>
+          <td>{{ sys.year or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-secondary" style="margin:0;">Системы не найдены в выгрузке.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</section>

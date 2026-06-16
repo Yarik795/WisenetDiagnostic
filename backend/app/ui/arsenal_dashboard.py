@@ -246,3 +246,256 @@ def arsenal_page_context(
             object_type=object_type,
         ),
     }
+
+
+def display_object_name(row: ArsenalAnalyticsDbRow) -> str:
+    address = (row.address or "").strip()
+    if address:
+        return address
+    name = (row.object_name or "").strip()
+    return name or f"Паспорт {row.passport_number}"
+
+
+def _top_manufacturer_names(
+    systems: list[ArsenalSystemDbRow],
+    system_type: str,
+) -> set[str]:
+    counter = Counter(
+        row.manufacturer
+        for row in systems
+        if row.system_type == system_type and row.manufacturer
+    )
+    names, _ = _top_manufacturers(counter)
+    if "Прочие" in names:
+        return {name for name, _ in counter.most_common(_TOP_MANUFACTURERS)}
+    return set(names)
+
+
+def _detail_title(
+    dimension: str,
+    value: str,
+    *,
+    system_type: str = "",
+    status: str = "",
+) -> str:
+    if dimension == "object_type":
+        return f"Тип объекта: {value}"
+    if dimension == "fill_section":
+        return f"Заполнение раздела: {value}"
+    if dimension == "errors_section":
+        return f"Ошибки в разделе: {value}"
+    if dimension == "docs":
+        return f"Документация {system_type}: {status}"
+    if dimension == "manufacturer":
+        return f"{system_type}: {value}"
+    return value or "Детали"
+
+
+def _filter_detail_rows(
+    analytics: list[ArsenalAnalyticsDbRow],
+    systems: list[ArsenalSystemDbRow],
+    *,
+    dimension: str,
+    value: str,
+    system_type: str = "",
+    status: str = "",
+    object_type: str = "",
+) -> list[dict[str, Any]]:
+    analytics, systems = _filter_rows(analytics, systems, object_type)
+    rows: list[dict[str, Any]] = []
+
+    if dimension == "object_type":
+        for row in analytics:
+            if row.object_type != value:
+                continue
+            rows.append(
+                {
+                    "passport_number": row.passport_number,
+                    "name": display_object_name(row),
+                    "tb": row.tb,
+                    "gosb": row.gosb,
+                    "object_type": row.object_type,
+                    "metric_label": "Заполнение",
+                    "metric_value": f"{row.fill_total:.0f}%",
+                }
+            )
+    elif dimension == "fill_section":
+        for row in analytics:
+            sections = _parse_json_dict(row.fill_sections_json)
+            fill_value = float(sections.get(value, 0))
+            rows.append(
+                {
+                    "passport_number": row.passport_number,
+                    "name": display_object_name(row),
+                    "tb": row.tb,
+                    "gosb": row.gosb,
+                    "object_type": row.object_type,
+                    "metric_label": value,
+                    "metric_value": f"{fill_value:.0f}%",
+                }
+            )
+        rows.sort(key=lambda item: float(item["metric_value"].rstrip("%")))
+    elif dimension == "errors_section":
+        for row in analytics:
+            sections = _parse_json_dict(row.errors_sections_json)
+            error_count = int(sections.get(value, 0))
+            if error_count <= 0:
+                continue
+            rows.append(
+                {
+                    "passport_number": row.passport_number,
+                    "name": display_object_name(row),
+                    "tb": row.tb,
+                    "gosb": row.gosb,
+                    "object_type": row.object_type,
+                    "metric_label": value,
+                    "metric_value": str(error_count),
+                }
+            )
+        rows.sort(key=lambda item: int(item["metric_value"]), reverse=True)
+    elif dimension == "docs":
+        target_status = _normalize_doc_value(status)
+        for row in analytics:
+            docs = _parse_json_dict(row.docs_json)
+            doc_status = _normalize_doc_value(str(docs.get(system_type, "-")))
+            if doc_status != target_status:
+                continue
+            rows.append(
+                {
+                    "passport_number": row.passport_number,
+                    "name": display_object_name(row),
+                    "tb": row.tb,
+                    "gosb": row.gosb,
+                    "object_type": row.object_type,
+                    "metric_label": system_type,
+                    "metric_value": doc_status,
+                }
+            )
+    elif dimension == "manufacturer":
+        passport_numbers: set[str] = set()
+        if value == "Прочие":
+            top_names = _top_manufacturer_names(systems, system_type)
+            for sys_row in systems:
+                if sys_row.system_type != system_type:
+                    continue
+                if sys_row.manufacturer in top_names:
+                    continue
+                passport_numbers.add(sys_row.passport_number)
+        else:
+            for sys_row in systems:
+                if (
+                    sys_row.system_type == system_type
+                    and sys_row.manufacturer == value
+                ):
+                    passport_numbers.add(sys_row.passport_number)
+
+        analytics_by_passport = {row.passport_number: row for row in analytics}
+        for passport_number in sorted(passport_numbers):
+            row = analytics_by_passport.get(passport_number)
+            if row is None:
+                continue
+            rows.append(
+                {
+                    "passport_number": row.passport_number,
+                    "name": display_object_name(row),
+                    "tb": row.tb,
+                    "gosb": row.gosb,
+                    "object_type": row.object_type,
+                    "metric_label": system_type,
+                    "metric_value": value,
+                }
+            )
+
+    return rows
+
+
+def arsenal_detail_context(
+    state: StateStore,
+    *,
+    dimension: str,
+    value: str,
+    system_type: str = "",
+    status: str = "",
+    object_type: str = "",
+) -> dict[str, Any]:
+    analytics = state.arsenal_analytics_rows()
+    systems = state.arsenal_systems_rows()
+    rows = _filter_detail_rows(
+        analytics,
+        systems,
+        dimension=dimension,
+        value=value,
+        system_type=system_type,
+        status=status,
+        object_type=object_type,
+    )
+    return {
+        "arsenal_detail_title": _detail_title(
+            dimension,
+            value,
+            system_type=system_type,
+            status=status,
+        ),
+        "arsenal_detail_rows": rows,
+        "arsenal_detail_count": len(rows),
+        "arsenal_object_type": object_type,
+        "arsenal_detail_dimension": dimension,
+        "arsenal_detail_value": value,
+        "arsenal_detail_system_type": system_type,
+        "arsenal_detail_status": status,
+    }
+
+
+def arsenal_passport_context(
+    state: StateStore,
+    passport_number: str,
+    *,
+    object_type: str = "",
+) -> dict[str, Any]:
+    row = state.get_arsenal_analytics(passport_number)
+    if row is None:
+        return {
+            "arsenal_passport_found": False,
+            "passport_number": passport_number,
+            "arsenal_object_type": object_type,
+        }
+
+    fill_sections = _parse_json_dict(row.fill_sections_json)
+    errors_sections = _parse_json_dict(row.errors_sections_json)
+    docs = _parse_json_dict(row.docs_json)
+    systems = state.arsenal_systems_for_passport(passport_number)
+
+    return {
+        "arsenal_passport_found": True,
+        "passport_number": passport_number,
+        "arsenal_object_type": object_type,
+        "name": display_object_name(row),
+        "address": row.address,
+        "object_name": row.object_name,
+        "tb": row.tb,
+        "gosb": row.gosb,
+        "status": row.status,
+        "object_type": row.object_type,
+        "subtype": row.subtype,
+        "fill_total": row.fill_total,
+        "errors_total": row.errors_total,
+        "fill_project_docs": row.fill_project_docs,
+        "has_photos": row.has_photos,
+        "fill_section_rows": [
+            {"label": label, "value": float(fill_sections.get(label, 0))}
+            for label in _FILL_LABELS
+        ],
+        "error_section_rows": [
+            {"label": label, "value": int(errors_sections.get(label, 0))}
+            for label in _ERROR_LABELS
+            if int(errors_sections.get(label, 0)) > 0
+        ],
+        "doc_rows": [
+            {
+                "label": label,
+                "value": _normalize_doc_value(str(docs.get(label, "-"))),
+            }
+            for label in _DOC_LABELS
+        ],
+        "system_rows": systems,
+    }

@@ -61,7 +61,11 @@ from ..ui.payments_export import (
     render_payments_export_html,
 )
 from ..ui.source_imports import sources_page_context
-from ..ui.arsenal_dashboard import arsenal_page_context
+from ..ui.arsenal_dashboard import (
+    arsenal_detail_context,
+    arsenal_page_context,
+    arsenal_passport_context,
+)
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
 from .validation import parse_recorder_form
@@ -496,6 +500,48 @@ def arsenal_dashboard_partial(
         request,
         "partials/arsenal_dashboard.html",
         arsenal_page_context(state, object_type=object_type),
+    )
+
+
+@router.get("/arsenal/partials/detail", response_class=HTMLResponse)
+def arsenal_detail_partial(
+    request: Request,
+    dimension: str = "",
+    value: str = "",
+    system_type: str = "",
+    status: str = "",
+    object_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/arsenal_detail.html",
+        arsenal_detail_context(
+            state,
+            dimension=dimension,
+            value=value,
+            system_type=system_type,
+            status=status,
+            object_type=object_type,
+        ),
+    )
+
+
+@router.get("/arsenal/passport/{passport_number}", response_class=HTMLResponse)
+def arsenal_passport_partial(
+    request: Request,
+    passport_number: str,
+    object_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/arsenal_passport_card.html",
+        arsenal_passport_context(
+            state,
+            passport_number,
+            object_type=object_type,
+        ),
     )
 
 

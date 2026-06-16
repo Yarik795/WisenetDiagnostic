@@ -1,0 +1,50 @@
+<section class="card arsenal-detail-panel" data-arsenal-detail>
+  <div class="arsenal-detail-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+    <div>
+      <h3 class="card-section-title" style="margin:0;">{{ arsenal_detail_title }}</h3>
+      <p class="text-secondary" style="margin:4px 0 0;">{{ arsenal_detail_count }} объектов</p>
+    </div>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      onclick="document.getElementById('arsenal-detail-panel').innerHTML=''"
+      aria-label="Закрыть панель"
+    >Закрыть</button>
+  </div>
+
+  {% if arsenal_detail_rows %}
+  <div class="table-wrap" style="max-height:420px;overflow:auto;">
+    <table class="table table-compact">
+      <thead>
+        <tr>
+          <th>Объект</th>
+          <th>Тип</th>
+          <th>ТБ / ГОСБ</th>
+          <th>{{ arsenal_detail_rows[0].metric_label }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in arsenal_detail_rows %}
+        <tr
+          class="arsenal-detail-row"
+          style="cursor:pointer;"
+          hx-get="/arsenal/passport/{{ row.passport_number }}{% if arsenal_object_type %}?object_type={{ arsenal_object_type | urlencode }}{% endif %}"
+          hx-target="#arsenal-detail-panel"
+          hx-swap="innerHTML"
+        >
+          <td>
+            <div>{{ row.name }}</div>
+            <div class="text-secondary mono" style="font-size:12px;">№ {{ row.passport_number }}</div>
+          </td>
+          <td>{{ row.object_type }}</td>
+          <td class="text-secondary">{{ row.tb }}<br>{{ row.gosb }}</td>
+          <td>{{ row.metric_value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-secondary" style="margin:0;">Нет объектов для выбранной категории.</p>
+  {% endif %}
+</section>

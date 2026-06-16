@@ -272,7 +272,7 @@ CLI: обновление `recorders` в `config.json` из CMDB, резервн
 | `naumen` | `naumen` | SQLite `naumen_records` |
 | `arsenal` | `паспортам` | SQLite `arsenal_analytics`, `arsenal_systems` |
 
-Импорт Арсенал: `arsenal_import.import_arsenal_xlsx()` — лист «Аналитика» (заполнение, ошибки, документация) и системные листы САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД (производители). Дашборд: `ui/arsenal_dashboard.py`, страница `/arsenal` (ECharts, срез по `Тип объекта охраны`).
+Импорт Арсенал: `arsenal_import.import_arsenal_xlsx()` — листы «Аналитика», «Общая информация» (адрес объекта), системные листы САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД (производители). Дашборд: `ui/arsenal_dashboard.py`, страница `/arsenal` (ECharts, срез по `Тип объекта охраны`, drill-down: `GET /arsenal/partials/detail`, карточка паспорта `GET /arsenal/passport/{номер}`).
 
 ---
 

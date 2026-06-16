@@ -637,6 +637,7 @@ Append-only журнал **каждой попытки** опроса регис
 | `object_type` | TEXT | `Тип объекта охраны` (срез на дашборде) |
 | `subtype` | TEXT | `Подтип объекта охраны` |
 | `object_name` | TEXT | `Полное наименование объекта банка` |
+| `address` | TEXT | `Уточненный фактический адрес расположения` (лист «Общая информация») |
 | `fill_total` | REAL | `% заполнения паспорта` |
 | `fill_sections_json` | TEXT | JSON: раздел → % заполнения |
 | `errors_total` | INTEGER | `Количество ошибок в паспорте` |
@@ -740,7 +741,7 @@ sequenceDiagram
 | `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
 | `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
 | `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты» |
-| `replace_arsenal_data` / `count_arsenal_records` / `arsenal_analytics_rows` / `arsenal_systems_rows` | `arsenal_analytics`, `arsenal_systems` | Импорт АС Арсенал; данные дашборда `/arsenal` |
+| `replace_arsenal_data` / `count_arsenal_records` / `arsenal_analytics_rows` / `arsenal_systems_rows` / `get_arsenal_analytics` / `arsenal_systems_for_passport` | `arsenal_analytics`, `arsenal_systems` | Импорт АС Арсенал; дашборд `/arsenal` и drill-down |
 
 ### 6.9. Таблицы чата с AI
 

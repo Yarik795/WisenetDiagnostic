@@ -143,6 +143,7 @@ class ArsenalAnalyticsRow:
     object_type: str
     subtype: str
     object_name: str
+    address: str
     fill_total: float
     fill_sections: dict[str, float]
     errors_total: int
@@ -175,6 +176,7 @@ class ArsenalAnalyticsDbRow:
     object_type: str
     subtype: str
     object_name: str
+    address: str
     fill_total: float
     fill_sections_json: str
     errors_total: int
@@ -249,10 +251,10 @@ class ArsenalReplaceSession:
             """
             INSERT INTO arsenal_analytics (
                 passport_number, tb, gosb, status, object_type, subtype,
-                object_name, fill_total, fill_sections_json, errors_total,
+                object_name, address, fill_total, fill_sections_json, errors_total,
                 errors_sections_json, fill_project_docs, docs_json, has_photos,
                 source_row, imported_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -263,6 +265,7 @@ class ArsenalReplaceSession:
                     row.object_type,
                     row.subtype,
                     row.object_name,
+                    row.address,
                     row.fill_total,
                     json.dumps(row.fill_sections, ensure_ascii=False),
                     row.errors_total,
@@ -455,6 +458,7 @@ class StateStore:
                     object_type TEXT NOT NULL DEFAULT '',
                     subtype TEXT NOT NULL DEFAULT '',
                     object_name TEXT NOT NULL DEFAULT '',
+                    address TEXT NOT NULL DEFAULT '',
                     fill_total REAL NOT NULL DEFAULT 0,
                     fill_sections_json TEXT NOT NULL DEFAULT '{}',
                     errors_total INTEGER NOT NULL DEFAULT 0,
@@ -597,6 +601,7 @@ class StateStore:
                     object_type TEXT NOT NULL DEFAULT '',
                     subtype TEXT NOT NULL DEFAULT '',
                     object_name TEXT NOT NULL DEFAULT '',
+                    address TEXT NOT NULL DEFAULT '',
                     fill_total REAL NOT NULL DEFAULT 0,
                     fill_sections_json TEXT NOT NULL DEFAULT '{}',
                     errors_total INTEGER NOT NULL DEFAULT 0,
@@ -640,6 +645,18 @@ class StateStore:
                     ON arsenal_systems(system_type, object_type)
                 """
             )
+
+        if "arsenal_analytics" in tables:
+            arsenal_columns = {
+                row[1]
+                for row in conn.execute(
+                    "PRAGMA table_info(arsenal_analytics)"
+                ).fetchall()
+            }
+            if "address" not in arsenal_columns:
+                conn.execute(
+                    "ALTER TABLE arsenal_analytics ADD COLUMN address TEXT NOT NULL DEFAULT ''"
+                )
 
     @contextmanager
     def replace_naumen_records(
@@ -691,6 +708,30 @@ class StateStore:
                 SELECT * FROM arsenal_systems
                 ORDER BY system_type, object_type, manufacturer
                 """
+            ).fetchall()
+        return [_arsenal_system_from_row(row) for row in rows]
+
+    def get_arsenal_analytics(self, passport_number: str) -> Optional[ArsenalAnalyticsDbRow]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM arsenal_analytics WHERE passport_number = ?",
+                (passport_number,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _arsenal_analytics_from_row(row)
+
+    def arsenal_systems_for_passport(
+        self, passport_number: str
+    ) -> list[ArsenalSystemDbRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM arsenal_systems
+                WHERE passport_number = ?
+                ORDER BY system_type, manufacturer
+                """,
+                (passport_number,),
             ).fetchall()
         return [_arsenal_system_from_row(row) for row in rows]
 
@@ -1480,6 +1521,7 @@ def _arsenal_analytics_from_row(row: sqlite3.Row) -> ArsenalAnalyticsDbRow:
         object_type=row["object_type"],
         subtype=row["subtype"],
         object_name=row["object_name"],
+        address=row["address"] if "address" in row.keys() else "",
         fill_total=float(row["fill_total"] or 0),
         fill_sections_json=row["fill_sections_json"] or "{}",
         errors_total=int(row["errors_total"] or 0),

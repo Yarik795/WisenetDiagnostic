@@ -18,7 +18,7 @@
   hx-get="/arsenal/partials/dashboard"
   hx-target="#arsenal-dashboard-root"
   hx-swap="outerHTML"
-  hx-trigger="change, submit"
+  hx-trigger="change from:select, submit"
 >
   <label class="text-secondary" for="arsenal-object-type">Тип объекта охраны</label>
   <select id="arsenal-object-type" name="object_type" class="select" style="min-width:240px;">
@@ -30,9 +30,7 @@
   <button type="submit" class="btn btn-outline btn-sm">Применить</button>
 </form>
 
-<div id="arsenal-dashboard-root">
-  {% include "partials/arsenal_dashboard.html" %}
-</div>
+{% include "partials/arsenal_dashboard.html" %}
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/echarts.min.js?v=5.5.1"></script>

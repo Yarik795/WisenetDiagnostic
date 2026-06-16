@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 ProgressCallback = Callable[[str, int], None]
 
 SHEET_ANALYTICS = "Аналитика"
+SHEET_GENERAL = "Общая информация"
 
 COL_TB = "Наименование ТБ"
 COL_GOSB = "Наименование ГОСБ"
@@ -22,6 +23,8 @@ COL_STATUS = "Статус паспорта"
 COL_OBJECT_TYPE = "Тип объекта охраны"
 COL_SUBTYPE = "Подтип объекта охраны"
 COL_OBJECT_NAME = "Полное наименование объекта банка"
+COL_ADDRESS = "Уточненный фактический адрес расположения"
+COL_ADDRESS_FALLBACK = "Адрес"
 
 COL_FILL_TOTAL = "% заполнения паспорта"
 COL_FILL_PROJECT = "% заполнения проектной документации"
@@ -245,6 +248,8 @@ def _analytics_row_from_values(
     values: tuple[Any, ...],
     col_index: dict[str, int],
     source_row: int,
+    *,
+    address_map: Optional[dict[str, str]] = None,
 ) -> Optional["ArsenalAnalyticsRow"]:
     from .state_store import ArsenalAnalyticsRow
 
@@ -276,6 +281,7 @@ def _analytics_row_from_values(
         object_type=_cell_str(_value_at(values, col_index, COL_OBJECT_TYPE)),
         subtype=_cell_str(_value_at(values, col_index, COL_SUBTYPE)),
         object_name=_cell_str(_value_at(values, col_index, COL_OBJECT_NAME)),
+        address=(address_map or {}).get(passport, ""),
         fill_total=parse_percent(_value_at(values, col_index, COL_FILL_TOTAL)),
         fill_sections=fill_sections,
         errors_total=parse_int(_value_at(values, col_index, COL_ERRORS_TOTAL)),
@@ -332,10 +338,45 @@ def _system_row_from_values(
     )
 
 
+def _build_address_map(wb: Any) -> dict[str, str]:
+    if SHEET_GENERAL not in wb.sheetnames:
+        return {}
+
+    ws = wb[SHEET_GENERAL]
+    row_iter = ws.iter_rows(values_only=True)
+    try:
+        header_row = list(next(row_iter))
+    except StopIteration:
+        return {}
+
+    try:
+        col_index = build_col_index(header_row, (COL_PASSPORT,))
+    except ValueError:
+        return {}
+
+    address_col = COL_ADDRESS if COL_ADDRESS in col_index else COL_ADDRESS_FALLBACK
+    if address_col not in col_index:
+        return {}
+
+    result: dict[str, str] = {}
+    for values in row_iter:
+        if values is None:
+            continue
+        passport = _cell_str(_value_at(tuple(values), col_index, COL_PASSPORT))
+        if not passport:
+            continue
+        address = _cell_str(_value_at(tuple(values), col_index, address_col))
+        if address:
+            result[passport] = address
+    return result
+
+
 def _import_analytics_sheet(
     wb: Any,
     session: Any,
     on_progress: ProgressCallback,
+    *,
+    address_map: Optional[dict[str, str]] = None,
 ) -> int:
     if SHEET_ANALYTICS not in wb.sheetnames:
         raise ValueError(f'В файле отсутствует лист «{SHEET_ANALYTICS}»')
@@ -355,7 +396,9 @@ def _import_analytics_sheet(
     for row_idx, values in enumerate(row_iter, start=2):
         if values is None:
             continue
-        row = _analytics_row_from_values(tuple(values), col_index, row_idx)
+        row = _analytics_row_from_values(
+            tuple(values), col_index, row_idx, address_map=address_map
+        )
         if row is None:
             continue
         batch.append(row)
@@ -430,8 +473,11 @@ def import_arsenal_xlsx(
     progress("Чтение Арсенал", 5)
     wb = load_workbook(path, read_only=True, data_only=True)
     try:
+        address_map = _build_address_map(wb)
         with state.replace_arsenal_data(imported_at) as session:
-            count = _import_analytics_sheet(wb, session, progress)
+            count = _import_analytics_sheet(
+                wb, session, progress, address_map=address_map
+            )
             if count == 0:
                 raise ValueError("Лист «Аналитика» не содержит валидных паспортов")
 

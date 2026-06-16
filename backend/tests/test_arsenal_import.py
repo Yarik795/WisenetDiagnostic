@@ -11,6 +11,7 @@ from app.arsenal_import import (
     COL_OBJECT_TYPE,
     COL_PASSPORT,
     SHEET_ANALYTICS,
+    SHEET_GENERAL,
     import_arsenal_xlsx,
     normalize_manufacturer,
     parse_percent,
@@ -181,6 +182,34 @@ def _write_arsenal_xlsx(path: Path) -> None:
         ]
     )
 
+    general = wb.create_sheet(SHEET_GENERAL)
+    general.append(
+        [
+            "Наименование ТБ",
+            "Наименование ГОСБ",
+            COL_PASSPORT,
+            "Статус паспорта",
+            COL_OBJECT_TYPE,
+            "Подтип объекта охраны",
+            "Полное наименование объекта банка",
+            "Адрес",
+            "Уточненный фактический адрес расположения",
+        ]
+    )
+    general.append(
+        [
+            "Московский банк",
+            "ОПЕРУ Московский банк",
+            114585,
+            "Действительный",
+            "ВСП",
+            "Ритейл",
+            "Доп.офис №9038/030",
+            "г.Москва, ул.Тестовая, 1",
+            "Россия, Москва, ул. Ясеневая, 26",
+        ]
+    )
+
     wb.save(path)
 
 
@@ -210,6 +239,7 @@ def test_import_arsenal_xlsx_parses_rows(tmp_path: Path) -> None:
     assert analytics[0].passport_number == "114585"
     assert analytics[0].object_type == "ВСП"
     assert analytics[0].fill_total == 100.0
+    assert analytics[0].address == "Россия, Москва, ул. Ясеневая, 26"
 
     systems = state.arsenal_systems_rows()
     manufacturers = {row.system_type: row.manufacturer for row in systems}

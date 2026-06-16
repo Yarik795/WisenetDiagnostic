@@ -100,7 +100,7 @@
 | `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки, Naumen, Арсенал): спецификации, загрузка, импорт |
 | `cmdb_sync.py` | Синхронизация устройств в `config.json` из `cmdb.xlsx` (с резервной копией конфига) |
 | `naumen_import.py` | Импорт выгрузки Naumen (`naumen_all.xlsx`) в SQLite (`naumen_records`) |
-| `arsenal_import.py` | Импорт выгрузки АС Арсенал (листы «Аналитика», САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД) в SQLite |
+| `arsenal_import.py` | Импорт выгрузки АС Арсенал (листы «Аналитика», «Общая информация», системные) в SQLite |
 
 #### Веб-слой (`backend/app/web/`)
 
@@ -134,7 +134,7 @@
 | `payments.py` | Контекст страницы отчёта «Статус оплаты» |
 | `payments_export.py` | Статичный HTML-экспорт и тело письма отчёта «Статус оплаты» (inline-SVG графики) |
 | `source_imports.py` | Контекст страницы источников данных (импорты `inputData/`) |
-| `arsenal_dashboard.py` | Контекст дашборда АС Арсенал: KPI, агрегаты ECharts, срез по типу объекта |
+| `arsenal_dashboard.py` | Дашборд АС Арсенал: KPI, ECharts, drill-down и карточка паспорта |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
 #### Шаблоны и статика
