@@ -164,6 +164,7 @@ class ArsenalSystemRow:
     system_type: str
     manufacturer: str
     year: Optional[int]
+    present: bool
     source_row: int
 
 
@@ -198,6 +199,7 @@ class ArsenalSystemDbRow:
     system_type: str
     manufacturer: str
     year: Optional[int]
+    present: bool
     imported_at: datetime
 
 
@@ -290,8 +292,8 @@ class ArsenalReplaceSession:
             """
             INSERT INTO arsenal_systems (
                 passport_number, tb, gosb, object_type, subtype,
-                system_type, manufacturer, year, source_row, imported_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                system_type, manufacturer, year, present, source_row, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -303,6 +305,7 @@ class ArsenalReplaceSession:
                     row.system_type,
                     row.manufacturer,
                     row.year,
+                    1 if row.present else 0,
                     row.source_row,
                     imported_at,
                 )
@@ -484,6 +487,7 @@ class StateStore:
                     system_type TEXT NOT NULL,
                     manufacturer TEXT NOT NULL DEFAULT '',
                     year INTEGER,
+                    present INTEGER NOT NULL DEFAULT 1,
                     source_row INTEGER,
                     imported_at TEXT NOT NULL
                 );
@@ -634,6 +638,7 @@ class StateStore:
                     system_type TEXT NOT NULL,
                     manufacturer TEXT NOT NULL DEFAULT '',
                     year INTEGER,
+                    present INTEGER NOT NULL DEFAULT 1,
                     source_row INTEGER,
                     imported_at TEXT NOT NULL
                 )
@@ -656,6 +661,18 @@ class StateStore:
             if "address" not in arsenal_columns:
                 conn.execute(
                     "ALTER TABLE arsenal_analytics ADD COLUMN address TEXT NOT NULL DEFAULT ''"
+                )
+
+        if "arsenal_systems" in tables:
+            arsenal_system_columns = {
+                row[1]
+                for row in conn.execute(
+                    "PRAGMA table_info(arsenal_systems)"
+                ).fetchall()
+            }
+            if "present" not in arsenal_system_columns:
+                conn.execute(
+                    "ALTER TABLE arsenal_systems ADD COLUMN present INTEGER NOT NULL DEFAULT 1"
                 )
 
     @contextmanager
@@ -1535,6 +1552,7 @@ def _arsenal_analytics_from_row(row: sqlite3.Row) -> ArsenalAnalyticsDbRow:
 
 def _arsenal_system_from_row(row: sqlite3.Row) -> ArsenalSystemDbRow:
     year_raw = row["year"]
+    present_raw = row["present"] if "present" in row.keys() else 1
     return ArsenalSystemDbRow(
         id=row["id"],
         passport_number=row["passport_number"],
@@ -1545,6 +1563,7 @@ def _arsenal_system_from_row(row: sqlite3.Row) -> ArsenalSystemDbRow:
         system_type=row["system_type"],
         manufacturer=row["manufacturer"] or "",
         year=int(year_raw) if year_raw is not None else None,
+        present=bool(present_raw),
         imported_at=_parse_iso(row["imported_at"]) or datetime.now(timezone.utc),
     )
 

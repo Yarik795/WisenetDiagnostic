@@ -185,6 +185,8 @@ def _build_system_charts(
     for row in systems:
         if row.system_type not in by_type:
             continue
+        if not row.present:
+            continue
         manufacturer = row.manufacturer or "Не указан"
         by_type[row.system_type][manufacturer] += 1
         totals[row.system_type] += 1
@@ -263,7 +265,7 @@ def _top_manufacturer_names(
     counter = Counter(
         row.manufacturer
         for row in systems
-        if row.system_type == system_type and row.manufacturer
+        if row.system_type == system_type and row.manufacturer and row.present
     )
     names, _ = _top_manufacturers(counter)
     if "Прочие" in names:
@@ -378,6 +380,8 @@ def _filter_detail_rows(
             for sys_row in systems:
                 if sys_row.system_type != system_type:
                     continue
+                if not sys_row.present:
+                    continue
                 if sys_row.manufacturer in top_names:
                     continue
                 passport_numbers.add(sys_row.passport_number)
@@ -386,6 +390,7 @@ def _filter_detail_rows(
                 if (
                     sys_row.system_type == system_type
                     and sys_row.manufacturer == value
+                    and sys_row.present
                 ):
                     passport_numbers.add(sys_row.passport_number)
 

@@ -66,6 +66,13 @@ from ..ui.arsenal_dashboard import (
     arsenal_page_context,
     arsenal_passport_context,
 )
+from ..ui.arsenal_export import (
+    arsenal_email_subject,
+    arsenal_export_filename,
+    build_arsenal_export_context,
+    render_arsenal_email_body,
+    render_arsenal_export_html,
+)
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
 from .validation import parse_recorder_form
@@ -543,6 +550,93 @@ def arsenal_passport_partial(
             object_type=object_type,
         ),
     )
+
+
+def _arsenal_export_html_response(
+    request: Request,
+    state: StateStore,
+    *,
+    object_type: str = "",
+) -> Response:
+    page_ctx = arsenal_page_context(state, object_type=object_type)
+    if not page_ctx.get("arsenal_has_data"):
+        return _redirect(
+            "/arsenal",
+            "error",
+            "Нет данных Арсенал для экспорта",
+            request=request,
+        )
+    export_ctx = build_arsenal_export_context(page_ctx)
+    filename = arsenal_export_filename(object_type)
+    html = render_arsenal_export_html(export_ctx)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/arsenal/export.html", include_in_schema=False)
+def arsenal_export_html(
+    request: Request,
+    object_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _arsenal_export_html_response(
+        request, state, object_type=object_type
+    )
+
+
+@router.post("/arsenal/report/email", include_in_schema=False)
+def arsenal_report_email(
+    request: Request,
+    object_type: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    page_ctx = arsenal_page_context(state, object_type=object_type)
+    if not page_ctx.get("arsenal_has_data"):
+        return JSONResponse(
+            {"ok": False, "message": "Нет данных Арсенал для отправки"},
+            status_code=400,
+        )
+
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: "
+                + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+
+    export_ctx = build_arsenal_export_context(page_ctx)
+    attachment_html = render_arsenal_export_html(export_ctx)
+    filename = arsenal_export_filename(object_type)
+    body_html = render_arsenal_email_body(export_ctx)
+    subject = arsenal_email_subject(object_type)
+
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            attachments=[(filename, attachment_html)],
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
 
 
 @router.get("/smartview", response_class=HTMLResponse)

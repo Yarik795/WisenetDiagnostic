@@ -15,6 +15,7 @@ from app.arsenal_import import (
     import_arsenal_xlsx,
     normalize_manufacturer,
     parse_percent,
+    parse_presence,
 )
 from app.config_store import ConfigStore
 from app.data_sources import (
@@ -25,6 +26,7 @@ from app.data_sources import (
     load_source,
 )
 from app.state_store import StateStore
+from app.ui.arsenal_dashboard import arsenal_dashboard_context
 
 ANALYTICS_HEADERS = (
     "Наименование ТБ",
@@ -213,7 +215,97 @@ def _write_arsenal_xlsx(path: Path) -> None:
     wb.save(path)
 
 
-def test_parse_percent_variants() -> None:
+def _write_arsenal_xlsx_skud_absent(path: Path) -> None:
+    """Паспорт с «Наличие СКУД» = НЕТ и пустым производителем."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = SHEET_ANALYTICS
+    ws.append(list(ANALYTICS_HEADERS))
+    ws.append(
+        [
+            "Московский банк",
+            "ОПЕРУ Московский банк",
+            999001,
+            "Действительный",
+            "ВСП",
+            "Ритейл",
+            "Доп.офис без СКУД",
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            "100",
+            "Да",
+            "Да",
+            "Да",
+            "Да",
+            "Да",
+            "Нет",
+            "Нет",
+        ]
+    )
+
+    skud = wb.create_sheet("СКУД")
+    skud.append(
+        [
+            "Наименование ТБ",
+            "Наименование ГОСБ",
+            COL_PASSPORT,
+            "Статус паспорта",
+            COL_OBJECT_TYPE,
+            "Подтип объекта охраны",
+            "Полное наименование объекта банка",
+            "Наличие СКУД",
+            "Год установки, капитального ремонта СКУД",
+            "Производитель контроллера",
+            'Производитель (в случае если выбрано "Иное")',
+        ]
+    )
+    skud.append(
+        [
+            "Московский банк",
+            "ОПЕРУ Московский банк",
+            999001,
+            "Действительный",
+            "ВСП",
+            "Ритейл",
+            "Доп.офис без СКУД",
+            "НЕТ",
+            None,
+            "",
+            "",
+        ]
+    )
+
+    wb.save(path)
+
+
+def test_parse_presence() -> None:
+    assert parse_presence("ДА") is True
+    assert parse_presence("да") is True
+    assert parse_presence("НЕТ") is False
+    assert parse_presence("нет") is False
+    assert parse_presence("no") is False
+    assert parse_presence("") is True
+    assert parse_presence(None) is True
     assert parse_percent("83,33333") == pytest.approx(83.33333)
     assert parse_percent(100) == 100.0
 
@@ -245,6 +337,56 @@ def test_import_arsenal_xlsx_parses_rows(tmp_path: Path) -> None:
     manufacturers = {row.system_type: row.manufacturer for row in systems}
     assert manufacturers["ТСВ"] == "HANWHA"
     assert manufacturers["СКУД"] == "Бастион"
+    present_by_type = {row.system_type: row.present for row in systems}
+    assert present_by_type["ТСВ"] is True
+    assert present_by_type["СКУД"] is True
+
+
+def test_import_skud_absent_excluded_from_manufacturer_chart(tmp_path: Path) -> None:
+    xlsx = tmp_path / "паспортам_absent_skud.xlsx"
+    _write_arsenal_xlsx_skud_absent(xlsx)
+
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    import_arsenal_xlsx(xlsx, state)
+
+    systems = state.arsenal_systems_rows()
+    skud_rows = [row for row in systems if row.system_type == "СКУД"]
+    assert len(skud_rows) == 1
+    assert skud_rows[0].present is False
+    assert skud_rows[0].manufacturer == "Не указан"
+
+    analytics = state.arsenal_analytics_rows()
+    ctx = arsenal_dashboard_context(analytics, systems)
+    skud_chart = ctx["arsenal_charts"]["systems"]["СКУД"]
+    assert skud_chart["total"] == 0
+    assert "Не указан" not in skud_chart["manufacturers"]
+
+
+def test_arsenal_export_context(tmp_path: Path) -> None:
+    xlsx = tmp_path / "паспортам_export.xlsx"
+    _write_arsenal_xlsx(xlsx)
+
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    import_arsenal_xlsx(xlsx, state)
+
+    from app.ui.arsenal_dashboard import arsenal_page_context
+    from app.ui.arsenal_export import (
+        build_arsenal_export_context,
+        render_arsenal_export_html,
+    )
+
+    page_ctx = arsenal_page_context(state)
+    export_ctx = build_arsenal_export_context(page_ctx)
+    assert export_ctx["filter_label"] == "Все типы"
+    assert export_ctx["kpi"]["passport_count"] == 1
+    assert len(export_ctx["system_sections"]) == 6
+
+    html = render_arsenal_export_html(export_ctx)
+    assert "Арсенал" in html
+    assert "<svg" in html
+    assert "HANWHA" in html
 
 
 def test_find_latest_source_file_arsenal_marker(tmp_path: Path) -> None:

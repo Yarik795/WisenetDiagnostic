@@ -28,6 +28,20 @@
     {% endfor %}
   </select>
   <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+  {% if arsenal_has_data %}
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-arsenal-export
+    title="Скачать HTML текущей выборки (выбранный тип объекта)"
+  >Экспорт в HTML</button>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-arsenal-email
+    title="Отправить HTML-отчёт на адреса из config.email_report"
+  >Отправить на почту</button>
+  {% endif %}
 </form>
 
 {% include "partials/arsenal_dashboard.html" %}

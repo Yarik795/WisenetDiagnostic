@@ -660,10 +660,13 @@ Append-only журнал **каждой попытки** опроса регис
 | `system_type` | TEXT | САЗ / СОУЭ / СОТС / САПС / ТСВ / СКУД |
 | `manufacturer` | TEXT | Нормализованный производитель |
 | `year` | INTEGER | Год установки / капремонта (если есть) |
+| `present` | INTEGER | 1 — система на объекте есть («Наличие …» ≠ «НЕТ»); 0 — отсутствует |
 | `source_row` | INTEGER | Номер строки в xlsx |
 | `imported_at` | TEXT | UTC ISO |
 
-Импорт: `arsenal_import.import_arsenal_xlsx()` → `StateStore.replace_arsenal_data()` (DELETE обеих таблиц + batch INSERT). UI: `/arsenal`, partial `GET /arsenal/partials/dashboard?object_type=…`.
+Строки с `present = 0` сохраняются в БД, но **не участвуют** в графиках и детализации производителей на дашборде `/arsenal` (исключаются фантомные «Не указан» для объектов без системы).
+
+Импорт: `arsenal_import.import_arsenal_xlsx()` → `StateStore.replace_arsenal_data()` (DELETE обеих таблиц + batch INSERT). UI: `/arsenal`, partial `GET /arsenal/partials/dashboard?object_type=…`; экспорт HTML `GET /arsenal/export.html?object_type=…`; email `POST /arsenal/report/email?object_type=…`.
 
 ---
 

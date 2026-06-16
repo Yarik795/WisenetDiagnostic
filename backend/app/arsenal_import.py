@@ -100,6 +100,7 @@ class SystemSheetSpec:
     manufacturer_col: str
     manufacturer_other_col: Optional[str] = None
     year_col: Optional[str] = None
+    presence_col: Optional[str] = None
 
 
 SYSTEM_SHEETS: tuple[SystemSheetSpec, ...] = (
@@ -109,6 +110,7 @@ SYSTEM_SHEETS: tuple[SystemSheetSpec, ...] = (
         manufacturer_col="Производитель",
         manufacturer_other_col="Производитель (Иной)",
         year_col="Год установки / капитального ремонта САЗ",
+        presence_col="Наличие САЗ",
     ),
     SystemSheetSpec(
         sheet_name="СОУЭ",
@@ -116,6 +118,7 @@ SYSTEM_SHEETS: tuple[SystemSheetSpec, ...] = (
         manufacturer_col="Производитель блоков управления",
         manufacturer_other_col="Производитель блоков управления (Иной)",
         year_col="Год установки / капитального ремонта СОУЭ",
+        presence_col="Наличие СОУЭ",
     ),
     SystemSheetSpec(
         sheet_name="СОТС",
@@ -123,6 +126,7 @@ SYSTEM_SHEETS: tuple[SystemSheetSpec, ...] = (
         manufacturer_col="Производитель объектовой сигнализации",
         manufacturer_other_col="Производитель (Иной)",
         year_col="Год установки, капитального ремонта СOTC",
+        presence_col="Наличие СОТС",
     ),
     SystemSheetSpec(
         sheet_name="САПС",
@@ -130,12 +134,14 @@ SYSTEM_SHEETS: tuple[SystemSheetSpec, ...] = (
         manufacturer_col="Производитель",
         manufacturer_other_col="Производитель (Иной)",
         year_col="Год установки/капитального ремонта САПС",
+        presence_col="Наличие САПС",
     ),
     SystemSheetSpec(
         sheet_name="ТСВ",
         system_type="ТСВ",
         manufacturer_col="Вендоры IP оборудования на объекте",
         year_col="Год установки, капитального ремонта ТСВ",
+        presence_col="Наличие ТСВ",
     ),
     SystemSheetSpec(
         sheet_name="СКУД",
@@ -143,6 +149,7 @@ SYSTEM_SHEETS: tuple[SystemSheetSpec, ...] = (
         manufacturer_col="Производитель контроллера",
         manufacturer_other_col='Производитель (в случае если выбрано "Иное")',
         year_col="Год установки, капитального ремонта СКУД",
+        presence_col="Наличие СКУД",
     ),
 )
 
@@ -224,6 +231,14 @@ def build_col_index(
             "В заголовке отсутствуют колонки: " + ", ".join(missing)
         )
     return index
+
+
+def parse_presence(value: Any) -> bool:
+    """True, если система на объекте есть; «НЕТ»/«no» — отсутствует."""
+    text = _cell_str(value).lower()
+    if text in ("нет", "no"):
+        return False
+    return True
 
 
 def normalize_manufacturer(primary: str, other: str = "") -> str:
@@ -325,6 +340,10 @@ def _system_row_from_values(
     if spec.year_col and spec.year_col in col_index:
         year = parse_year(_value_at(values, col_index, spec.year_col))
 
+    present = True
+    if spec.presence_col and spec.presence_col in col_index:
+        present = parse_presence(_value_at(values, col_index, spec.presence_col))
+
     return ArsenalSystemRow(
         passport_number=passport,
         tb=_cell_str(_value_at(values, col_index, COL_TB)),
@@ -334,6 +353,7 @@ def _system_row_from_values(
         system_type=spec.system_type,
         manufacturer=manufacturer,
         year=year,
+        present=present,
         source_row=source_row,
     )
 

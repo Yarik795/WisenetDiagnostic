@@ -1273,6 +1273,46 @@ function initPaymentsExportActions(root) {
   });
 }
 
+function initArsenalExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-arsenal-export]").forEach((btn) => {
+    if (btn.dataset.arsenalExportBound === "1") return;
+    btn.dataset.arsenalExportBound = "1";
+    btn.addEventListener("click", () => {
+      const select = document.getElementById("arsenal-object-type");
+      const objectType = select ? select.value : "";
+      const params = new URLSearchParams();
+      if (objectType) params.set("object_type", objectType);
+      const qs = params.toString();
+      window.location.href = qs ? `/arsenal/export.html?${qs}` : "/arsenal/export.html";
+    });
+  });
+  scope.querySelectorAll("[data-arsenal-email]").forEach((btn) => {
+    if (btn.dataset.arsenalEmailBound === "1") return;
+    btn.dataset.arsenalEmailBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const select = document.getElementById("arsenal-object-type");
+        const objectType = select ? select.value : "";
+        const params = new URLSearchParams();
+        if (objectType) params.set("object_type", objectType);
+        const qs = params.toString();
+        const url = qs ? `/arsenal/report/email?${qs}` : "/arsenal/report/email";
+        const res = await fetch(url, { method: "POST" });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить отчёт на почту");
+        console.error("[wisenet] arsenal email error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function initPaymentsPage(root) {
   initPaymentsTabs(root);
   initPaymentsCollapsibles(root);
@@ -1285,6 +1325,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initServerToasts();
   initPaymentsPage();
   initArsenalCharts();
+  initArsenalExportActions();
   if (typeof htmx === "undefined") {
     showToast(
       "error",

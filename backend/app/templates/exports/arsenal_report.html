@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ export.title }} — Wisenet Диагностика</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #fff;
+      --text: #1a1d21;
+      --muted: #5c6370;
+      --border: #d8dce3;
+      --accent: #1a5fb4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .report {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 1.1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+    .meta p { margin: 4px 0; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 16px 0 8px;
+    }
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .summary-card .value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .summary-card .label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .chart-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: #fafbfc;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .chart-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--muted);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-bottom: 8px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef0f4; font-weight: 600; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    footer {
+      margin-top: 20px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .report { border: none; }
+      .chart-box { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <article class="report">
+    <h1>{{ export.title }}</h1>
+    <div class="meta">
+      <p><strong>Выборка:</strong> {{ export.filter_label }}</p>
+      <p><strong>Сформирован:</strong> {{ export.generated_at }}</p>
+      <p><strong>Последняя загрузка:</strong> {{ export.import_info }}</p>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.passport_count }}</div>
+        <div class="label">Паспортов</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.avg_fill_total }}%</div>
+        <div class="label">Среднее заполнение</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.total_errors }}</div>
+        <div class="label">Ошибок всего</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.passports_with_errors_pct }}%</div>
+        <div class="label">Паспортов с ошибками</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.avg_fill_project }}%</div>
+        <div class="label">Проектная документация</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.photos_pct }}%</div>
+        <div class="label">С фотографиями</div>
+      </div>
+    </div>
+
+    <h2>Распределение по типу объекта</h2>
+    <div class="chart-box">
+      {{ export.object_types.donut_svg | safe }}
+    </div>
+    <table>
+      <thead>
+        <tr><th>Тип объекта</th><th class="num">Количество</th><th class="num">Доля</th></tr>
+      </thead>
+      <tbody>
+        {% for row in export.object_types.table_rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="num">{{ row.count }}</td>
+          <td class="num">{{ row.pct }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" style="color:var(--muted);">Нет данных</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Среднее заполнение по разделам</h2>
+    <div class="chart-box">{{ export.fill_sections.bar_svg | safe }}</div>
+    <table>
+      <thead><tr><th>Раздел</th><th class="num">Заполнение</th></tr></thead>
+      <tbody>
+        {% for row in export.fill_sections.table_rows %}
+        <tr><td>{{ row.label }}</td><td class="num">{{ row.value }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Ошибки по разделам</h2>
+    <div class="chart-box">{{ export.errors.bar_svg | safe }}</div>
+    <table>
+      <thead><tr><th>Раздел</th><th class="num">Ошибок</th></tr></thead>
+      <tbody>
+        {% for row in export.errors.table_rows %}
+        <tr><td>{{ row.label }}</td><td class="num">{{ row.value }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Наличие документации по системам</h2>
+    <div class="chart-box">{{ export.docs.bar_svg | safe }}</div>
+    <table>
+      <thead>
+        <tr><th>Система</th><th class="num">Да</th><th class="num">Нет</th><th class="num">—</th></tr>
+      </thead>
+      <tbody>
+        {% for row in export.docs.table_rows %}
+        <tr>
+          <td>{{ row.system }}</td>
+          <td class="num">{{ row.yes }}</td>
+          <td class="num">{{ row.no }}</td>
+          <td class="num">{{ row.dash }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% for section in export.system_sections %}
+    <h2>{{ section.system_type }}: производители ({{ section.total }})</h2>
+    <div class="chart-box">{{ section.bar_svg | safe }}</div>
+    <table>
+      <thead>
+        <tr><th>Производитель</th><th class="num">Количество</th><th class="num">Доля</th></tr>
+      </thead>
+      <tbody>
+        {% for row in section.table_rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="num">{{ row.count }}</td>
+          <td class="num">{{ row.pct }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" style="color:var(--muted);">Нет объектов с этой системой</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+
+    <footer>
+      Wisenet Диагностика — отчёт АС Арсенал, экспорт HTML.
+      Графики производителей учитывают только объекты, где система указана как присутствующая.
+    </footer>
+  </article>
+</body>
+</html>
