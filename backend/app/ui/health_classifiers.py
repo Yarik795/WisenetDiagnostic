@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
+from ..device_kinds import recorder_device_kind
 from ..models import MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
 from .metrics_helpers import (
@@ -16,31 +17,45 @@ from .metrics_helpers import (
     parse_disks_json,
     parse_system_events_json,
     sync_type_label,
+    uncategorized_system_event_problems,
 )
 from .time_dashboard import TimeCategory, classify_time_health
 
 HealthCategory = Literal[
-    "time", "temperature", "storage", "fans", "channels", "archive"
+    "time",
+    "availability",
+    "temperature",
+    "storage",
+    "fans",
+    "hardware",
+    "channels",
+    "archive",
 ]
 HealthCategoryStatus = Literal["ok", "warn", "error", "unknown"]
 
 CATEGORY_LABELS: dict[HealthCategory, str] = {
     "time": "Время / NTP",
+    "availability": "Доступность (SUNAPI)",
     "temperature": "Температура HDD",
     "storage": "Накопители",
     "fans": "Вентиляторы",
+    "hardware": "Аппаратные события",
     "channels": "Каналы",
     "archive": "Глубина архива",
 }
 
 BADGE_CODES: dict[HealthCategory, str] = {
     "time": "NTP",
+    "availability": "AVAIL",
     "temperature": "TEMP",
     "storage": "HDD",
     "fans": "FAN",
+    "hardware": "HW",
     "channels": "CH",
     "archive": "ARCH",
 }
+
+_NVR_DEVICE_KINDS = frozenset({"tsv", "sots"})
 
 _DISK_ERROR_STATUSES = frozenset({"error", "fail", "failed"})
 
@@ -277,6 +292,38 @@ def classify_time_category(
     return "ok", "Время и NTP в норме"
 
 
+def classify_availability_health(
+    recorder: Recorder,
+    metrics: Optional[RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> tuple[HealthCategoryStatus, str]:
+    del settings
+    if recorder_device_kind(recorder) not in _NVR_DEVICE_KINDS:
+        return "ok", "Не применимо"
+    if metrics is None or metrics.last_polled_at is None:
+        return "unknown", "Нет данных опроса"
+    if not metrics.device_online:
+        reason = (metrics.health_reason or "").strip() or "NVR недоступен"
+        return "error", reason
+    return "ok", "SUNAPI доступен"
+
+
+def classify_hardware_health(
+    recorder: Recorder,
+    metrics: Optional[RecorderMetricsRow],
+    settings: MonitoringSettings,
+) -> tuple[HealthCategoryStatus, str]:
+    del settings
+    if not _recorder_has_poll_data(recorder, metrics):
+        return "unknown", "Нет данных опроса"
+    assert metrics is not None
+    events = parse_system_events_json(metrics.system_events_json)
+    severity, labels = uncategorized_system_event_problems(events)
+    if not labels:
+        return "ok", "Аппаратные события: норма"
+    return severity or "error", "; ".join(labels)
+
+
 def classify_category(
     category: HealthCategory,
     recorder: Recorder,
@@ -285,9 +332,11 @@ def classify_category(
 ) -> tuple[HealthCategoryStatus, str]:
     classifiers = {
         "time": classify_time_category,
+        "availability": classify_availability_health,
         "temperature": classify_temperature_health,
         "storage": classify_storage_health,
         "fans": classify_fans_health,
+        "hardware": classify_hardware_health,
         "channels": classify_channels_health,
         "archive": classify_archive_health,
     }

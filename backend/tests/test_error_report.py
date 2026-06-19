@@ -13,6 +13,7 @@ from app.ui.error_report import (
     format_problem_age_display,
     _problem_age_fields,
 )
+from app.ui.health_classifiers import CATEGORY_LABELS
 
 
 def _rec(**kwargs):
@@ -281,3 +282,84 @@ def test_error_report_skips_excluded() -> None:
     )
     assert ctx.problem_count == 0
     assert ctx.rows == []
+
+
+def test_build_error_report_includes_offline_nvr() -> None:
+    polled = datetime(2026, 6, 19, 6, 40, 29, tzinfo=timezone.utc)
+    rec = _rec(id="nvr-offline", name="NVR-offline")
+    metrics = RecorderMetricsRow(
+        recorder_id="nvr-offline",
+        model=None,
+        firmware_version=None,
+        device_online=False,
+        health_status="error",
+        health_reason="Ошибка сети: timeout",
+        ntp_status=None,
+        time_skew_seconds=None,
+        storage_used_percent=None,
+        storage_status=None,
+        archive_start=None,
+        archive_end=None,
+        archive_days=None,
+        channel_count=0,
+        channels_ok=0,
+        channels_warn=0,
+        channels_error=0,
+        channels_unknown=0,
+        last_polled_at=polled,
+    )
+    ctx = build_error_report_context(
+        [rec],
+        {"nvr-offline": metrics},
+        MonitoringSettings(),
+        report_at=polled,
+    )
+    avail_rows = [
+        r for r in ctx.rows if r.category_label == CATEGORY_LABELS["availability"]
+    ]
+    assert len(avail_rows) == 1
+    assert avail_rows[0].status == "error"
+    assert avail_rows[0].reason == "Ошибка сети: timeout"
+    assert avail_rows[0].system_kind == "tsv"
+
+
+def test_build_error_report_includes_battery_fail() -> None:
+    polled = datetime(2026, 6, 19, 6, 36, 41, tzinfo=timezone.utc)
+    rec = _rec(id="nvr-battery", name="NVR-battery")
+    metrics = RecorderMetricsRow(
+        recorder_id="nvr-battery",
+        model="XRN-3210B2",
+        firmware_version="5.34.52_250807163824",
+        device_online=True,
+        health_status="error",
+        health_reason="Сбой батареи",
+        ntp_status="Success",
+        time_skew_seconds=0.0,
+        storage_used_percent=40.0,
+        storage_status="Normal",
+        archive_start=None,
+        archive_end=None,
+        archive_days=30.0,
+        channel_count=2,
+        channels_ok=2,
+        channels_warn=0,
+        channels_error=0,
+        channels_unknown=0,
+        last_polled_at=polled,
+        disks_json="[]",
+        system_events_json=json.dumps({"BatteryFail": True}),
+        storageinfo_ok=True,
+        archive_min_days=30.0,
+        archive_max_days=30.0,
+    )
+    ctx = build_error_report_context(
+        [rec],
+        {"nvr-battery": metrics},
+        MonitoringSettings(),
+        report_at=polled,
+    )
+    hw_rows = [r for r in ctx.rows if r.category_label == CATEGORY_LABELS["hardware"]]
+    assert len(hw_rows) == 1
+    assert hw_rows[0].status == "error"
+    assert "Сбой батареи" in hw_rows[0].reason
+    assert hw_rows[0].system_kind == "tsv"

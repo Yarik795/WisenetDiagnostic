@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 
 def parse_disks_json(raw: Optional[str]) -> list[dict[str, Any]]:
@@ -512,6 +512,31 @@ def active_system_event_labels(
         if events.get(key):
             result.append(label)
     return result
+
+
+_COVERED_SYSTEM_EVENT_KEYS: frozenset[str] = frozenset(STORAGE_SYSTEM_EVENT_KEYS) | frozenset(
+    FAN_EVENT_LABELS
+)
+
+
+def uncategorized_system_event_problems(
+    events: dict[str, bool],
+) -> tuple[Optional[Literal["error", "warn"]], list[str]]:
+    """Активные системные события, не покрытые классификаторами накопителей и вентиляторов."""
+    error_labels: list[str] = []
+    warn_labels: list[str] = []
+    for key, label in SYSTEM_EVENT_ERROR_LABELS.items():
+        if key not in _COVERED_SYSTEM_EVENT_KEYS and events.get(key):
+            error_labels.append(label)
+    for key, label in SYSTEM_EVENT_WARN_LABELS.items():
+        if events.get(key):
+            warn_labels.append(label)
+    labels = error_labels + warn_labels
+    if error_labels:
+        return "error", labels
+    if warn_labels:
+        return "warn", labels
+    return None, []
 
 
 def system_events_display(system_events_json: Optional[str]) -> str:

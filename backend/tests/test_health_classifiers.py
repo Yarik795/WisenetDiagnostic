@@ -3,8 +3,11 @@ from types import SimpleNamespace
 
 from app.models import MonitoringSettings
 from app.ui.health_classifiers import (
+    CATEGORY_LABELS,
     classify_archive_health,
+    classify_availability_health,
     classify_category,
+    classify_hardware_health,
     classify_storage_health,
     classify_fans_health,
     classify_temperature_health,
@@ -228,3 +231,73 @@ def test_classify_channels_single_error_is_warn() -> None:
     status, reason = classify_category("channels", _rec(), metrics, settings)
     assert status == "warn"
     assert "1" in reason
+
+
+def test_classify_availability_offline_nvr() -> None:
+    metrics = _metrics(
+        device_online=False,
+        health_reason="Ошибка сети: timeout",
+    )
+    status, reason = classify_availability_health(_rec(), metrics, _settings())
+    assert status == "error"
+    assert reason == "Ошибка сети: timeout"
+
+
+def test_classify_availability_online_nvr() -> None:
+    status, reason = classify_availability_health(_rec(), _metrics(), _settings())
+    assert status == "ok"
+    assert "доступен" in reason.lower()
+
+
+def test_classify_availability_not_applicable_for_skud() -> None:
+    rec = SimpleNamespace(
+        id="skud-1",
+        object_name="Obj",
+        host="10.0.0.1",
+        name="СКУД",
+        device_kind="skud",
+    )
+    metrics = _metrics(device_online=False, health_reason="timeout")
+    status, reason = classify_availability_health(rec, metrics, _settings())
+    assert status == "ok"
+    assert "не применимо" in reason.lower()
+
+
+def test_classify_hardware_battery_fail() -> None:
+    events = json.dumps({"BatteryFail": True, "CPUFanError": False})
+    status, reason = classify_hardware_health(
+        _rec(), _metrics(system_events_json=events), _settings()
+    )
+    assert status == "error"
+    assert "Сбой батареи" in reason
+
+
+def test_classify_hardware_hdd_fail_not_duplicated() -> None:
+    events = json.dumps({"HDDFail": True, "BatteryFail": False})
+    storage_status, storage_reason = classify_storage_health(
+        _rec(), _metrics(system_events_json=events), _settings()
+    )
+    hardware_status, hardware_reason = classify_hardware_health(
+        _rec(), _metrics(system_events_json=events), _settings()
+    )
+    assert storage_status == "error"
+    assert "HDD" in storage_reason
+    assert hardware_status == "ok"
+
+
+def test_classify_hardware_fan_error_not_duplicated() -> None:
+    events = json.dumps({"CPUFanError": True, "BatteryFail": False})
+    fan_status, fan_reason = classify_fans_health(
+        _rec(), _metrics(system_events_json=events), _settings()
+    )
+    hardware_status, hardware_reason = classify_hardware_health(
+        _rec(), _metrics(system_events_json=events), _settings()
+    )
+    assert fan_status == "error"
+    assert "CPU" in fan_reason
+    assert hardware_status == "ok"
+
+
+def test_category_labels_include_new_categories() -> None:
+    assert "availability" in CATEGORY_LABELS
+    assert "hardware" in CATEGORY_LABELS

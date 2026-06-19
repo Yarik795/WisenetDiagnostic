@@ -53,10 +53,11 @@ def _metrics(**kwargs):
 def test_build_category_sections_count_and_order() -> None:
     settings = MonitoringSettings()
     sections = build_category_sections([_rec()], {"a": _metrics()}, settings)
-    assert len(sections) == 6
+    assert len(sections) == 8
     assert sections[0].category == "time"
     assert sections[0].is_time is True
-    assert sections[1].category == "temperature"
+    assert sections[1].category == "availability"
+    assert sections[2].category == "temperature"
 
 
 def test_temperature_section_rows_only_temperature() -> None:
@@ -173,7 +174,7 @@ def test_object_matrix_includes_kind_columns() -> None:
         include_kind_columns=True,
     )
     assert len(rows) == 1
-    assert len(rows[0].cells) == 9
+    assert len(rows[0].cells) == 11
     skud_cell = next(c for c in rows[0].cells if c.column == "skud")
     assert skud_cell.problem_count >= 1
     bio_cell = next(c for c in rows[0].cells if c.column == "bio")

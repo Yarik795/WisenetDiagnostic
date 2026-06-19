@@ -205,6 +205,14 @@ def _value_display(
         events = parse_system_events_json(metrics.system_events_json)
         labels = active_fan_event_labels(events)
         return "; ".join(labels) if labels else "норма"
+    if category == "availability":
+        return "недоступен" if not metrics.device_online else "доступен"
+    if category == "hardware":
+        from .metrics_helpers import parse_system_events_json, uncategorized_system_event_problems
+
+        events = parse_system_events_json(metrics.system_events_json)
+        _, labels = uncategorized_system_event_problems(events)
+        return "; ".join(labels) if labels else "норма"
     return "—"
 
 
@@ -230,6 +238,13 @@ def category_meta_text(category: HealthCategory, settings: MonitoringSettings) -
         return (
             f"Норматив: {settings.archive_days_required} сут."
             f" · критично < {settings.archive_days_error_threshold} сут."
+        )
+    if category == "availability":
+        return "Доступность HTTP/SUNAPI при последнем опросе"
+    if category == "hardware":
+        return (
+            "Системные события, не отнесённые к накопителям и вентиляторам "
+            "(BatteryFail, MemoryError и др.)"
         )
     return ""
 
@@ -416,9 +431,11 @@ class ObjectMatrixRow:
 _MATRIX_COLUMNS: list[tuple[str, Optional[HealthCategory]]] = [
     ("nvr", None),
     ("time", "time"),
+    ("availability", "availability"),
     ("storage", "storage"),
     ("temperature", "temperature"),
     ("fans", "fans"),
+    ("hardware", "hardware"),
     ("channels", "channels"),
     ("archive", "archive"),
 ]
@@ -426,9 +443,11 @@ _MATRIX_COLUMNS: list[tuple[str, Optional[HealthCategory]]] = [
 _MATRIX_HEADERS: dict[str, str] = {
     "nvr": "NVR",
     "time": "NTP",
+    "availability": "AVAIL",
     "storage": "HDD",
     "temperature": "TEMP",
     "fans": "FAN",
+    "hardware": "HW",
     "channels": "CH",
     "archive": "ARCH",
     "skud": "СКУД",
