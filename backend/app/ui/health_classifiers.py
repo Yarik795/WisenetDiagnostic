@@ -16,6 +16,7 @@ from .metrics_helpers import (
     max_disk_temperature_celsius,
     parse_disks_json,
     parse_system_events_json,
+    parse_system_event_times_json,
     sync_type_label,
     uncategorized_system_event_problems,
 )
@@ -318,7 +319,10 @@ def classify_hardware_health(
         return "unknown", "Нет данных опроса"
     assert metrics is not None
     events = parse_system_events_json(metrics.system_events_json)
-    severity, labels = uncategorized_system_event_problems(events)
+    times = parse_system_event_times_json(
+        getattr(metrics, "system_event_times_json", None)
+    )
+    severity, labels = uncategorized_system_event_problems(events, times=times)
     if not labels:
         return "ok", "Аппаратные события: норма"
     return severity or "error", "; ".join(labels)

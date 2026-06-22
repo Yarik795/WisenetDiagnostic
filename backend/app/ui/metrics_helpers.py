@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from typing import Any, Literal, Optional
+
+from ..sunapi_parsing import RECORD_FRAME_DROP_LOG_TYPE
 
 
 def parse_disks_json(raw: Optional[str]) -> list[dict[str, Any]]:
@@ -454,7 +457,6 @@ SYSTEM_EVENT_ERROR_LABELS: dict[str, str] = {
     "BatteryFail": "Сбой батареи",
     "MemoryError": "Ошибка памяти",
     "RecordingError": "Ошибка записи",
-    "RecordFrameDrop": "Потеря кадров записи",
     "iSCSIDisconnect": "Отключение iSCSI",
 }
 
@@ -476,6 +478,7 @@ SYSTEM_EVENT_WARN_LABELS: dict[str, str] = {
     "AMDLoadFail": "Сбой загрузки AMD",
     "HDDCountChanged": "Изменено число накопителей",
     "USBHDDConnect": "Подключён USB-накопитель",
+    "RecordFrameDrop": "Потеря кадров записи",
 }
 
 
@@ -489,6 +492,55 @@ def parse_system_events_json(raw: Optional[str]) -> dict[str, bool]:
     if not isinstance(data, dict):
         return {}
     return {k: bool(v) for k, v in data.items()}
+
+
+def parse_system_event_times_json(raw: Optional[str]) -> dict[str, str]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if v}
+
+
+def effective_system_events(
+    events: dict[str, bool],
+    times: Optional[dict[str, str]] = None,
+) -> dict[str, bool]:
+    """RecordFrameDrop учитывается только при подтверждённой дате в systemlog (не залипший флаг)."""
+    result = dict(events)
+    if result.get(RECORD_FRAME_DROP_LOG_TYPE) and not (times or {}).get(
+        RECORD_FRAME_DROP_LOG_TYPE
+    ):
+        result[RECORD_FRAME_DROP_LOG_TYPE] = False
+    return result
+
+
+def format_nvr_systemlog_timestamp(raw: str) -> str:
+    raw = raw.strip()
+    for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16)):
+        try:
+            dt = datetime.strptime(raw[:size], fmt)
+            return dt.strftime("%d.%m.%Y %H:%M")
+        except ValueError:
+            continue
+    return raw
+
+
+def format_system_event_label(
+    key: str,
+    base_label: str,
+    events: dict[str, bool],
+    times: dict[str, str],
+) -> str:
+    if key == RECORD_FRAME_DROP_LOG_TYPE and events.get(key):
+        timestamp = times.get(key)
+        if timestamp:
+            return f"{base_label} ({format_nvr_systemlog_timestamp(timestamp)})"
+    return base_label
 
 
 def active_storage_system_event_labels(events: dict[str, bool]) -> list[str]:
@@ -506,11 +558,15 @@ def active_system_event_labels(
     events: dict[str, bool],
     *,
     labels: dict[str, str],
+    times: Optional[dict[str, str]] = None,
 ) -> list[str]:
+    event_times = times or {}
     result: list[str] = []
     for key, label in labels.items():
         if events.get(key):
-            result.append(label)
+            result.append(
+                format_system_event_label(key, label, events, event_times)
+            )
     return result
 
 
@@ -521,16 +577,23 @@ _COVERED_SYSTEM_EVENT_KEYS: frozenset[str] = frozenset(STORAGE_SYSTEM_EVENT_KEYS
 
 def uncategorized_system_event_problems(
     events: dict[str, bool],
+    times: Optional[dict[str, str]] = None,
 ) -> tuple[Optional[Literal["error", "warn"]], list[str]]:
     """Активные системные события, не покрытые классификаторами накопителей и вентиляторов."""
+    event_times = times or {}
+    events = effective_system_events(events, event_times)
     error_labels: list[str] = []
     warn_labels: list[str] = []
     for key, label in SYSTEM_EVENT_ERROR_LABELS.items():
         if key not in _COVERED_SYSTEM_EVENT_KEYS and events.get(key):
-            error_labels.append(label)
+            error_labels.append(
+                format_system_event_label(key, label, events, event_times)
+            )
     for key, label in SYSTEM_EVENT_WARN_LABELS.items():
         if events.get(key):
-            warn_labels.append(label)
+            warn_labels.append(
+                format_system_event_label(key, label, events, event_times)
+            )
     labels = error_labels + warn_labels
     if error_labels:
         return "error", labels
@@ -539,12 +602,19 @@ def uncategorized_system_event_problems(
     return None, []
 
 
-def system_events_display(system_events_json: Optional[str]) -> str:
+def system_events_display(
+    system_events_json: Optional[str],
+    system_event_times_json: Optional[str] = None,
+) -> str:
     events = parse_system_events_json(system_events_json)
+    times = parse_system_event_times_json(system_event_times_json)
+    events = effective_system_events(events, times)
     if not events:
         return "Аппаратные события: нет данных"
     active = active_system_event_labels(
-        events, labels={**SYSTEM_EVENT_ERROR_LABELS, **SYSTEM_EVENT_WARN_LABELS}
+        events,
+        labels={**SYSTEM_EVENT_ERROR_LABELS, **SYSTEM_EVENT_WARN_LABELS},
+        times=times,
     )
     if not active:
         return "Аппаратные события: норма"

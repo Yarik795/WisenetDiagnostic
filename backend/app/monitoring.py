@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 from .config_store import ConfigStore, RecorderStatusUpdate
 from .device_kinds import recorder_device_kind
 from .health import HealthStatus, worst_status
-from .models import CheckStatus, MonitoringSettings, Recorder
+from .models import CheckStatus, Credentials, MonitoringSettings, Recorder
 from .state_store import ChannelRow, StateStore
 from .sunapi import check_recorder
 from .serial_manufacture_date import (
@@ -24,6 +24,7 @@ from .sunapi_extended import (
     ChannelInfo,
     EventChannelStatus,
     NvrApiProfile,
+    RECORD_FRAME_DROP_SCAN_DAYS,
     RecorderPollData,
     RecordingPeriodInfo,
     channel_is_active,
@@ -32,16 +33,21 @@ from .sunapi_extended import (
     is_analog_channel,
     is_stale_register_status_on_live_channel,
     normalize_register_status,
+    nvr_local_date_iso,
     poll_recorder,
+    scan_last_record_frame_drop_timestamp,
 )
+from .sunapi_parsing import RECORD_FRAME_DROP_LOG_TYPE
 from .ui.health_classifiers import CATEGORY_LABELS, classify_category
 from .ui.metrics_helpers import (
     SYSTEM_EVENT_ERROR_LABELS,
     SYSTEM_EVENT_WARN_LABELS,
     active_system_event_labels,
     any_disk_format_required,
+    effective_system_events,
     max_disk_drop_datarate_percent,
     max_disk_temperature_celsius_from_disks,
+    parse_system_event_times_json,
 )
 
 logger = logging.getLogger("monitoring")
@@ -137,18 +143,55 @@ def archive_bounds(
     return min(days), max(days)
 
 
+async def resolve_system_event_times(
+    recorder: Recorder,
+    credentials: Credentials,
+    poll: RecorderPollData,
+    cached_times: dict[str, str],
+    *,
+    timeout: float = 20.0,
+) -> dict[str, str]:
+    """Даты активных системных событий (v1: RecordFrameDrop через посуточный systemlog)."""
+    if not poll.online:
+        return dict(cached_times)
+
+    times = dict(cached_times)
+    if not poll.system_events.get(RECORD_FRAME_DROP_LOG_TYPE):
+        times.pop(RECORD_FRAME_DROP_LOG_TYPE, None)
+        return times
+
+    if times.get(RECORD_FRAME_DROP_LOG_TYPE):
+        return times
+
+    timestamp = await scan_last_record_frame_drop_timestamp(
+        recorder,
+        credentials,
+        end_date=nvr_local_date_iso(poll),
+        scan_days=RECORD_FRAME_DROP_SCAN_DAYS,
+        timeout=timeout,
+    )
+    if timestamp:
+        times[RECORD_FRAME_DROP_LOG_TYPE] = timestamp
+    else:
+        times.pop(RECORD_FRAME_DROP_LOG_TYPE, None)
+    return times
+
+
 def _apply_system_event_health(
     system_events: dict[str, bool],
     status: str,
     reasons: list[str],
+    system_event_times: Optional[dict[str, str]] = None,
 ) -> str:
+    times = system_event_times or {}
+    events = effective_system_events(system_events, times)
     for label in active_system_event_labels(
-        system_events, labels=SYSTEM_EVENT_ERROR_LABELS
+        events, labels=SYSTEM_EVENT_ERROR_LABELS, times=times
     ):
         status = HealthStatus.ERROR.value
         reasons.append(label)
     for label in active_system_event_labels(
-        system_events, labels=SYSTEM_EVENT_WARN_LABELS
+        events, labels=SYSTEM_EVENT_WARN_LABELS, times=times
     ):
         if status != HealthStatus.ERROR.value:
             status = HealthStatus.WARN.value
@@ -172,7 +215,12 @@ def evaluate_recorder_health(
     status = HealthStatus.OK.value
 
     if poll.system_events:
-        status = _apply_system_event_health(poll.system_events, status, reasons)
+        status = _apply_system_event_health(
+            poll.system_events,
+            status,
+            reasons,
+            poll.system_event_times,
+        )
 
     if poll.storage:
         if poll.storage.worst_status and str(poll.storage.worst_status).lower() in (
@@ -485,6 +533,14 @@ def apply_poll_result(
     )
 
     existing_metrics = state.get_recorder_metrics(recorder.id)
+    if poll.online:
+        system_event_times = poll.system_event_times or None
+    elif existing_metrics and existing_metrics.system_event_times_json:
+        cached = parse_system_event_times_json(existing_metrics.system_event_times_json)
+        system_event_times = cached or None
+    else:
+        system_event_times = None
+
     if poll.online and poll.device:
         raw_serial = poll.device.serial_number
         device_type = poll.device.device_type
@@ -527,6 +583,7 @@ def apply_poll_result(
         storage_total_mb=poll.storage.total_space_mb if poll.storage else None,
         disks=poll.storage.disks if poll.storage else None,
         system_events=poll.system_events or None,
+        system_event_times=system_event_times,
         storageinfo_ok=bool(poll.storage and poll.storage.storageinfo_ok),
         archive_poll_error=poll.recording_period_error,
         recording_storage_enable=poll.recording_storage_enable,
@@ -597,9 +654,10 @@ class PollCycleStats:
 
 async def _fetch_poll_for_recorder(
     recorder: Recorder,
-    credentials,
+    credentials: Credentials,
     *,
     include_inventory: bool,
+    cached_system_event_times: Optional[dict[str, str]] = None,
 ) -> _WavePollResult:
     start = time.perf_counter()
     kind = recorder_device_kind(recorder)
@@ -641,6 +699,13 @@ async def _fetch_poll_for_recorder(
             credentials,
             include_inventory=include_inventory,
         )
+        if poll.online:
+            poll.system_event_times = await resolve_system_event_times(
+                recorder,
+                credentials,
+                poll,
+                cached_system_event_times or {},
+            )
         duration_ms = round((time.perf_counter() - start) * 1000)
         if poll.online:
             return _WavePollResult(
@@ -685,10 +750,15 @@ async def poll_single_recorder(
     settings = config.monitoring
     polled_at = datetime.now(timezone.utc)
 
+    existing = state_store.get_recorder_metrics(recorder.id)
+    cached_times = parse_system_event_times_json(
+        existing.system_event_times_json if existing else None
+    )
     wave = await _fetch_poll_for_recorder(
         recorder,
         credentials,
         include_inventory=include_inventory,
+        cached_system_event_times=cached_times,
     )
     return apply_poll_result(
         config_store,
@@ -773,11 +843,16 @@ async def run_poll_cycle(
     async def _poll_wave_one(rec: Recorder) -> tuple[Recorder, _WavePollResult]:
         if tracker:
             await tracker.recorder_started(rec)
+        existing = state_store.get_recorder_metrics(rec.id)
+        cached_times = parse_system_event_times_json(
+            existing.system_event_times_json if existing else None
+        )
         async with sem:
             result = await _fetch_poll_for_recorder(
                 rec,
                 credentials,
                 include_inventory=include_inventory,
+                cached_system_event_times=cached_times,
             )
         if tracker:
             await tracker.recorder_attempt_finished(rec)

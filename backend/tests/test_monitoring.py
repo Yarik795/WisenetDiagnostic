@@ -416,6 +416,28 @@ def test_recorder_system_events_ok() -> None:
     assert status == "ok"
 
 
+def test_recorder_record_frame_drop_shows_timestamp() -> None:
+    poll = RecorderPollData(
+        online=True,
+        system_events={"RecordFrameDrop": True},
+        system_event_times={"RecordFrameDrop": "2026-04-25 09:56:34"},
+    )
+    status, reason = evaluate_recorder_health(poll, ["ok"], _settings())
+    assert status == "warn"
+    assert "Потеря кадров записи (25.04.2026 09:56)" in reason
+
+
+def test_recorder_record_frame_drop_without_timestamp_ignored() -> None:
+    poll = RecorderPollData(
+        online=True,
+        system_events={"RecordFrameDrop": True},
+        system_event_times={},
+    )
+    status, reason = evaluate_recorder_health(poll, ["ok"], _settings())
+    assert status == "ok"
+    assert "Потеря кадров" not in (reason or "")
+
+
 def test_recorder_hdd_temperature_warn() -> None:
     from app.sunapi_extended import StorageInfo
 

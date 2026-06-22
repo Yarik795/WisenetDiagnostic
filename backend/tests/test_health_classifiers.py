@@ -25,6 +25,7 @@ def _metrics(**kwargs):
         device_online=True,
         disks_json=None,
         system_events_json=None,
+        system_event_times_json=None,
         storage_used_percent=50.0,
         storage_status="Normal",
         channel_count=4,
@@ -270,6 +271,18 @@ def test_classify_hardware_battery_fail() -> None:
     )
     assert status == "error"
     assert "Сбой батареи" in reason
+
+
+def test_classify_hardware_record_frame_drop_with_timestamp() -> None:
+    events = json.dumps({"RecordFrameDrop": True})
+    times = json.dumps({"RecordFrameDrop": "2026-04-25 09:56:34"})
+    status, reason = classify_hardware_health(
+        _rec(),
+        _metrics(system_events_json=events, system_event_times_json=times),
+        _settings(),
+    )
+    assert status == "warn"
+    assert "Потеря кадров записи (25.04.2026 09:56)" in reason
 
 
 def test_classify_hardware_hdd_fail_not_duplicated() -> None:

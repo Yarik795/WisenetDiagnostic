@@ -1,4 +1,10 @@
+import json
+
 from app.sunapi import DeviceInfo
+from app.sunapi_parsing import (
+    RECORD_FRAME_DROP_LOG_TYPE,
+    parse_systemlog_latest_timestamp,
+)
 from app.sunapi_extended import (
     ChannelInfo,
     NvrApiProfile,
@@ -329,6 +335,52 @@ def test_parse_storage_no_disks_skips_root_status() -> None:
     info = parse_storage(body, model="HRX-1634")
     assert info.disks == []
     assert info.worst_status is None
+
+
+def test_parse_systemlog_record_frame_drop_bracket() -> None:
+    body = """
+Total=3
+[2026-03-16 05:08:04] [RecordFrameDrop] Recording buffer overflow
+[2026-03-10 12:00:00] [Network] link up
+"""
+    assert (
+        parse_systemlog_latest_timestamp(body, RECORD_FRAME_DROP_LOG_TYPE)
+        == "2026-03-16 05:08:04"
+    )
+
+
+def test_parse_systemlog_record_frame_drop_colon() -> None:
+    body = """
+2026-03-16 05:08:04 : Recording Frame Drop
+2026-03-15 23:45:33 : Login(Admin) (admin)
+"""
+    assert (
+        parse_systemlog_latest_timestamp(body, RECORD_FRAME_DROP_LOG_TYPE)
+        == "2026-03-16 05:08:04"
+    )
+
+
+def test_parse_systemlog_record_frame_drop_json() -> None:
+    body = json.dumps(
+        {
+            "SystemLog": [
+                {
+                    "Date": "2026-03-16 05:08:04",
+                    "Type": "RecordFrameDrop",
+                    "Description": "Recording Frame Drop",
+                },
+                {
+                    "Date": "2026-03-15 23:45:33",
+                    "Type": "AdminLogin",
+                    "Description": "Login",
+                },
+            ]
+        }
+    )
+    assert (
+        parse_systemlog_latest_timestamp(body, RECORD_FRAME_DROP_LOG_TYPE)
+        == "2026-03-16 05:08:04"
+    )
 
 
 def test_normalize_disk_combined_temp_xrn_2010a() -> None:

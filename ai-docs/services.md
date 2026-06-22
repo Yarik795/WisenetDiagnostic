@@ -49,11 +49,13 @@ poll_recorder(recorder, credentials, *, include_inventory=True, timeout=20.0) �
 | `date_time` | `DateTimeInfo`: local/utc, NTP, skew_seconds |
 | `recording_period`, `channel_recording_periods` | глубина архива (глобально и по каналам) |
 | `events`, `system_events` | `eventstatus.cgi` — VideoLoss, connected, системные флаги |
+| `system_event_times` | при `RecordFrameDrop=True` — посуточный `systemlog` (до 90 сут.), дата последнего события |
 
 **Запросы при опросе (после успешного deviceinfo):**
 
 - `include_inventory=True`: `media.cgi` — `cameraregister`, `videosource`; слияние каналов `merge_channels`.
 - Всегда: `storageinfo`, `date`, `searchrecordingperiod`, `eventstatus` (action=check); при наличии каналов — периоды записи по каналам (`fetch_channel_recording_periods`, детализация архива зависит от `include_inventory`).
+- Условно: при активном `RecordFrameDrop` и отсутствии кэша в БД — `system.cgi?msubmenu=systemlog` по одному дню (`scan_last_record_frame_drop_timestamp`, `resolve_system_event_times` в `monitoring.py`).
 
 **NTP:**
 
@@ -67,7 +69,7 @@ enable_recorder_ntp(recorder, credentials, ntp_server, *, posix_timezone, ...) �
 
 ### `sunapi_parsing.py` — разбор тел SUNAPI
 
-**Назначение:** общие парсеры без HTTP — key=value, индексированные поля (`Channel.0.Name`), JSON, даты. Используется `sunapi_extended` и тестами. Публичный API: `parse_key_value_body`, `parse_channel_indexed`, `parse_storage_indexed`, `try_parse_json`, `parse_datetime_local`.
+**Назначение:** общие парсеры без HTTP — key=value, индексированные поля (`Channel.0.Name`), JSON, даты, разбор `systemlog` (в т.ч. `RecordFrameDrop`). Используется `sunapi_extended` и тестами. Публичный API: `parse_key_value_body`, `parse_channel_indexed`, `parse_storage_indexed`, `try_parse_json`, `parse_datetime_local`, `parse_systemlog_latest_timestamp`.
 
 ---
 
@@ -142,7 +144,7 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 | `record_history` / `list_history` | история смены статуса (запись только при изменении status) |
 | `delete_recorder_data` | очистка при удалении регистратора из конфига |
 
-Типы строк: `ChannelRow`, `RecorderMetricsRow`, `HistoryRow` (dataclass). Диски и системные события в метриках — JSON в полях `disks_json`, `system_events_json`.
+Типы строк: `ChannelRow`, `RecorderMetricsRow`, `HistoryRow` (dataclass). Диски и системные события в метриках — JSON в полях `disks_json`, `system_events_json`, `system_event_times_json`.
 
 ---
 

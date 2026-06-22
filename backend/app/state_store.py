@@ -61,6 +61,7 @@ class RecorderMetricsRow:
     storage_total_mb: Optional[float] = None
     disks_json: Optional[str] = None
     system_events_json: Optional[str] = None
+    system_event_times_json: Optional[str] = None
     archive_min_days: Optional[float] = None
     archive_max_days: Optional[float] = None
     storageinfo_ok: bool = False
@@ -514,6 +515,7 @@ class StateStore:
             ("archive_min_days", "REAL"),            # минимальная глубина архива среди каналов, сут.
             ("archive_max_days", "REAL"),            # максимальная глубина архива среди каналов, сут.
             ("system_events_json", "TEXT"),          # JSON-объект "событие SUNAPI -> активно ли" (HDDFail, CPUFanError, ...)
+            ("system_event_times_json", "TEXT"),     # JSON-объект "событие SUNAPI -> время последней записи в systemlog"
             ("storageinfo_ok", "INTEGER NOT NULL DEFAULT 0"),  # 1, если CGI хранилища вернул валидные данные (метрикам дисков можно доверять)
             ("archive_poll_error", "TEXT"),          # текст ошибки при опросе периода записи (иначе NULL)
             ("recording_storage_enable", "INTEGER"), # 1=запись на накопитель включена, 0=выключена, NULL=неизвестно
@@ -966,6 +968,7 @@ class StateStore:
         storage_total_mb: Optional[float] = None,
         disks: Optional[list[dict[str, Any]]] = None,
         system_events: Optional[dict[str, bool]] = None,
+        system_event_times: Optional[dict[str, str]] = None,
         storageinfo_ok: bool = False,
         archive_poll_error: Optional[str] = None,
         recording_storage_enable: Optional[bool] = None,
@@ -982,6 +985,11 @@ class StateStore:
         system_events_json = (
             json.dumps(system_events, ensure_ascii=False) if system_events else None
         )
+        system_event_times_json = (
+            json.dumps(system_event_times, ensure_ascii=False)
+            if system_event_times
+            else None
+        )
         with self._connect() as conn:
             conn.execute(
                 """
@@ -994,12 +1002,13 @@ class StateStore:
                     channels_error, channels_unknown, last_polled_at,
                     local_time, utc_time, sync_type,
                     storage_used_mb, storage_total_mb, disks_json, system_events_json,
+                    system_event_times_json,
                     storageinfo_ok, archive_poll_error, recording_storage_enable,
                     recording_storage_overwrite, cpu_usage_max, cpu_usage_avg,
                     data_rate_total_mbps, channels_zero_bitrate, channels_poe_off,
                     serial_number, manufacture_date
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -1028,6 +1037,7 @@ class StateStore:
                     storage_total_mb=excluded.storage_total_mb,
                     disks_json=excluded.disks_json,
                     system_events_json=excluded.system_events_json,
+                    system_event_times_json=excluded.system_event_times_json,
                     storageinfo_ok=excluded.storageinfo_ok,
                     archive_poll_error=excluded.archive_poll_error,
                     recording_storage_enable=excluded.recording_storage_enable,
@@ -1069,6 +1079,7 @@ class StateStore:
                     storage_total_mb,
                     disks_json,
                     system_events_json,
+                    system_event_times_json,
                     int(storageinfo_ok),
                     archive_poll_error,
                     _bool_int(recording_storage_enable),
@@ -1448,6 +1459,11 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
         disks_json=row["disks_json"] if "disks_json" in row.keys() else None,
         system_events_json=(
             row["system_events_json"] if "system_events_json" in row.keys() else None
+        ),
+        system_event_times_json=(
+            row["system_event_times_json"]
+            if "system_event_times_json" in row.keys()
+            else None
         ),
         storageinfo_ok=bool(row["storageinfo_ok"]) if "storageinfo_ok" in row.keys() else False,
         archive_poll_error=(

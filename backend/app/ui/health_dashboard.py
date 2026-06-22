@@ -208,10 +208,17 @@ def _value_display(
     if category == "availability":
         return "недоступен" if not metrics.device_online else "доступен"
     if category == "hardware":
-        from .metrics_helpers import parse_system_events_json, uncategorized_system_event_problems
+        from .metrics_helpers import (
+            parse_system_events_json,
+            parse_system_event_times_json,
+            uncategorized_system_event_problems,
+        )
 
         events = parse_system_events_json(metrics.system_events_json)
-        _, labels = uncategorized_system_event_problems(events)
+        times = parse_system_event_times_json(
+            getattr(metrics, "system_event_times_json", None)
+        )
+        _, labels = uncategorized_system_event_problems(events, times=times)
         return "; ".join(labels) if labels else "норма"
     return "—"
 

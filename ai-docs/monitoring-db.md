@@ -86,7 +86,7 @@ erDiagram
 | Время | Колонки `*_at`, `recorded_at`, `last_polled_at` — **TEXT**, ISO 8601 с timezone, обычно UTC (`datetime.now(timezone.utc).isoformat()`) |
 | Логические | SQLite `INTEGER`: `0` = false, `1` = true, `NULL` = неизвестно |
 | Статус здоровья | Строки: `ok`, `warn`, `error`, `unknown` (enum `HealthStatus` в `health.py`) |
-| JSON | Поля `disks_json`, `system_events_json` — сериализованный JSON в TEXT (UTF-8, `ensure_ascii=False`) |
+| JSON | Поля `disks_json`, `system_events_json`, `system_event_times_json` — сериализованный JSON в TEXT (UTF-8, `ensure_ascii=False`) |
 | Upsert | `channels`: `ON CONFLICT(recorder_id, channel_no)`; `recorder_metrics`: `ON CONFLICT(recorder_id)` |
 
 ---
@@ -279,6 +279,7 @@ erDiagram
 | Поле | Тип SQLite | NULL | По умолчанию | Назначение |
 |------|------------|------|--------------|------------|
 | `system_events_json` | `TEXT` | YES | — | JSON-объект `{ "HDDFail": true, "CPUFanError": false, … }` (см. §3.6) |
+| `system_event_times_json` | `TEXT` | YES | — | JSON-объект `{ "RecordFrameDrop": "2026-04-25 09:56:34", … }` — время последней записи в systemlog (см. §3.6.1) |
 
 **Сводка последнего массового опроса (job):**
 
@@ -340,6 +341,16 @@ erDiagram
 - Предупреждения: `CpuOverload`, `NewFWAvailable`, `BeingUpdate`, …
 
 Полный список меток для UI — `SYSTEM_EVENT_ERROR_LABELS` / `SYSTEM_EVENT_WARN_LABELS` в `metrics_helpers.py`.
+
+### 3.6.1. Формат `system_event_times_json`
+
+Объект «имя события SUNAPI → время последней записи в `systemlog`» (строка времени NVR, как в ответе CGI). В v1 заполняется для `RecordFrameDrop` при активном флаге в `eventstatus`: посуточный скан `system.cgi?msubmenu=systemlog` до 90 сут. назад; результат кэшируется в БД до сброса флага (Alarm Reset).
+
+```json
+{ "RecordFrameDrop": "2026-04-25 09:56:34" }
+```
+
+UI: `Потеря кадров записи (25.04.2026 09:56)` — категория **Деградация** (`warn`). Если за 90 сут. в systemlog запись не найдена, событие **не показывается** (залипший флаг `eventstatus` игнорируется).
 
 ### 3.7. Пример записи
 

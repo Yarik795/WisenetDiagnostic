@@ -60,3 +60,76 @@ def parse_datetime_local(value: str) -> Optional[datetime]:
         except ValueError:
             continue
     return None
+
+
+RECORD_FRAME_DROP_LOG_TYPE = "RecordFrameDrop"
+
+_RECORD_FRAME_DROP_MARKERS = (
+    "recordframedrop",
+    "recording frame drop",
+)
+
+_SYSTEMLOG_BRACKET_LINE_RE = re.compile(
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[([^\]]+)\](?:\s+(.*))?$"
+)
+_SYSTEMLOG_COLON_LINE_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*:\s*(.+)$"
+)
+
+
+def log_entry_matches_type(log_type: str, entry_type: str, description: str) -> bool:
+    wanted = log_type.strip().lower()
+    if entry_type.strip().lower() == wanted:
+        return True
+    if wanted == RECORD_FRAME_DROP_LOG_TYPE.lower():
+        haystack = f"{entry_type} {description}".lower()
+        return any(marker in haystack for marker in _RECORD_FRAME_DROP_MARKERS)
+    return False
+
+
+def find_frame_drop_lines(body: str) -> list[str]:
+    lines: list[str] = []
+    for line in (body or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("Total="):
+            continue
+        lower = stripped.lower()
+        if any(marker in lower for marker in _RECORD_FRAME_DROP_MARKERS):
+            lines.append(stripped)
+    return lines
+
+
+def parse_systemlog_latest_timestamp(body: str, log_type: str) -> Optional[str]:
+    """Самая свежая запись systemlog указанного типа (первая в ответе NVR)."""
+    data = try_parse_json(body)
+    if isinstance(data, dict):
+        entries = data.get("SystemLog")
+        if isinstance(entries, list):
+            for item in entries:
+                if not isinstance(item, dict):
+                    continue
+                entry_type = str(item.get("Type") or "")
+                description = str(item.get("Description") or "")
+                if not log_entry_matches_type(log_type, entry_type, description):
+                    continue
+                date = str(item.get("Date") or "").strip()
+                if date:
+                    return date
+
+    for line in (body or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("Total="):
+            continue
+        bracket = _SYSTEMLOG_BRACKET_LINE_RE.match(stripped)
+        if bracket:
+            timestamp, entry_type, description = bracket.groups()
+            description = description or ""
+            if log_entry_matches_type(log_type, entry_type, description):
+                return timestamp
+            continue
+        colon = _SYSTEMLOG_COLON_LINE_RE.match(stripped)
+        if colon:
+            timestamp, description = colon.groups()
+            if log_entry_matches_type(log_type, "", description):
+                return timestamp
+    return None

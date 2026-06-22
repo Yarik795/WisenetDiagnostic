@@ -16,12 +16,17 @@ from .models import Credentials, Recorder
 from .sunapi import DeviceInfo, SunapiCheckOutcome, build_deviceinfo_url, parse_deviceinfo_response
 from .ui.metrics_helpers import aggregate_storage_from_disks
 from .sunapi_parsing import (
+    RECORD_FRAME_DROP_LOG_TYPE,
+    find_frame_drop_lines,
     parse_channel_indexed,
     parse_datetime_local,
     parse_key_value_body,
     parse_storage_indexed,
+    parse_systemlog_latest_timestamp,
     try_parse_json,
 )
+
+RECORD_FRAME_DROP_SCAN_DAYS = 90
 
 # Часовой пояс GMT+3 для NVR (SUNAPI POSIXTimeZone)
 DEFAULT_NTP_POSIX_TIMEZONE = "STWT-3STWST,M3.5.0/1:00:00,M10.5.0/1:00:00"
@@ -290,6 +295,7 @@ class RecorderPollData:
     data_rate_total_mbps: Optional[float] = None
     channels_zero_bitrate: int = 0
     channels_poe_off: int = 0
+    system_event_times: dict[str, str] = field(default_factory=dict)
 
 
 def build_base_url(recorder: Recorder, cgi: str) -> str:
@@ -1575,3 +1581,60 @@ async def poll_recorder(
         result.system_events = event_result.system_events
 
     return result
+
+
+async def fetch_systemlog_for_day(
+    recorder: Recorder,
+    credentials: Credentials,
+    day_iso: str,
+    *,
+    timeout: float = 20.0,
+) -> str:
+    """systemlog за один день (FromDate=ToDate=day_iso)."""
+    url = build_url(
+        recorder,
+        "system.cgi",
+        "systemlog",
+        action="view",
+        FromDate=day_iso,
+        ToDate=day_iso,
+    )
+    status, body, err = await _fetch(recorder, credentials, url, timeout)
+    if status != 200 or err:
+        return ""
+    if parse_sunapi_error_body(body):
+        return ""
+    return body
+
+
+def nvr_local_date_iso(poll: RecorderPollData) -> str:
+    """Локальная дата NVR YYYY-MM-DD для systemlog FromDate/ToDate."""
+    if poll.date_time and poll.date_time.local_time:
+        return poll.date_time.local_time.strip()[:10]
+    from .display_time import get_display_tz
+
+    return datetime.now(get_display_tz()).date().isoformat()
+
+
+async def scan_last_record_frame_drop_timestamp(
+    recorder: Recorder,
+    credentials: Credentials,
+    *,
+    end_date: str,
+    scan_days: int = RECORD_FRAME_DROP_SCAN_DAYS,
+    timeout: float = 20.0,
+) -> Optional[str]:
+    """Посуточный поиск последнего RecordFrameDrop, от end_date назад."""
+    if scan_days <= 0:
+        return None
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    for offset in range(scan_days + 1):
+        day_iso = (end - timedelta(days=offset)).isoformat()
+        body = await fetch_systemlog_for_day(
+            recorder, credentials, day_iso, timeout=timeout
+        )
+        if not body:
+            continue
+        if find_frame_drop_lines(body):
+            return parse_systemlog_latest_timestamp(body, RECORD_FRAME_DROP_LOG_TYPE)
+    return None
