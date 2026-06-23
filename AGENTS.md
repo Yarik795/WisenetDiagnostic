@@ -26,6 +26,7 @@
 | Планировщик, фоновые задачи опроса | `backend/app/scheduler.py`, `poll_jobs.py` | — |
 | Импорт из CMDB | `backend/app/cmdb_sync.py`, `scripts/sync_config_from_cmdb.py`, `scripts/cmdb_reader.py` | — |
 | Отчёт об ошибках (HTML-экспорт) | `backend/app/ui/error_report.py`, `error_report_render.py` | — |
+| Аналитика устранённых инцидентов (HTML-отчёт) | `scripts/resolved_incidents_report.py`, `scripts/episode_parser.py` | `ai-docs/monitoring-db.md` §4–§5 (`status_history`, `category_status_history`) |
 | Чат с AI, LLM, SQL-agent, история диалогов | `backend/app/llm/`, `chat_store.py`, `web/ai_chat.py` | `ai-docs/services.md` §Чат с AI |
 | Бизнес-смысл, термины, scope этапов | — | `ai-docs/business-logic.md` |
 | Структура проекта целиком | — | `ai-docs/basic-structure.md` |

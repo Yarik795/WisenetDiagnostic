@@ -1,0 +1,830 @@
+#!/usr/bin/env python3
+"""
+Отчёт по устранённым инцидентам мониторинга (warn/error → ok).
+
+Запуск (из корня репозитория):
+  python scripts/resolved_incidents_report.py
+  python scripts/resolved_incidents_report.py --db "D:/path/monitoring.db" --since 2026-01-01
+  python scripts/resolved_incidents_report.py --sources category --output data/reports/resolved.html
+
+Переменные окружения:
+  STATE_DB_PATH — путь к SQLite (monitoring.db)
+  CONFIG_PATH   — путь к config.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import os
+import sqlite3
+import statistics
+import sys
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Literal, Optional
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+BACKEND_DIR = REPO_ROOT / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from episode_parser import (  # noqa: E402
+    DEFAULT_PROBLEM_STATUSES,
+    DEFAULT_TRANSPARENT_STATUSES,
+    RECORDER_PROBLEM_STATUSES,
+    ResolvedEpisode,
+    count_active_episodes,
+    episode_duration_hours,
+    filter_episodes_by_resolved_at,
+    parse_resolved_episodes,
+)
+
+from app.display_time import format_for_display  # noqa: E402
+from app.ui.health_classifiers import CATEGORY_LABELS  # noqa: E402
+
+# --- Настройки подключения (можно менять здесь или через env / CLI) ---
+
+DEFAULT_DB_PATH = REPO_ROOT / "data" / "monitoring.db"
+STATE_DB_PATH = Path(os.environ.get("STATE_DB_PATH", str(DEFAULT_DB_PATH)))
+DEFAULT_CONFIG_PATH = Path(
+    os.environ.get("CONFIG_PATH", str(REPO_ROOT / "config.json"))
+)
+DEFAULT_OUTPUT = REPO_ROOT / "data" / "reports" / "resolved_incidents_report.html"
+
+SourceKind = Literal["category", "status"]
+
+
+@dataclass
+class HistoryRow:
+    status: str
+    recorded_at: datetime
+    reason: Optional[str]
+
+
+@dataclass
+class ResolvedIncident:
+    source: SourceKind
+    event_type: str
+    device_id: str
+    device_label: str
+    severity_peak: str
+    started_at: datetime
+    resolved_at: datetime
+    reason: Optional[str]
+
+    @property
+    def duration_hours(self) -> float:
+        return episode_duration_hours(
+            ResolvedEpisode(
+                severity_peak=self.severity_peak,
+                started_at=self.started_at,
+                resolved_at=self.resolved_at,
+                reason=self.reason,
+            )
+        )
+
+
+@dataclass
+class SummaryRow:
+    event_type: str
+    device_label: str
+    source: str
+    count: int
+    avg_duration_hours: float
+
+
+@dataclass
+class ReportContext:
+    incidents: list[ResolvedIncident]
+    summary_rows: list[SummaryRow]
+    totals_by_type: Counter[str]
+    totals_by_device: Counter[str]
+    totals_by_severity: Counter[str]
+    monthly_counts: list[tuple[str, int]]
+    active_problems: int
+    unique_devices: int
+    avg_mttr_hours: Optional[float]
+    median_mttr_hours: Optional[float]
+    top_types: list[tuple[str, int]]
+    top_devices: list[tuple[str, int]]
+    chronic_types: list[tuple[str, int]]
+    chronic_devices: list[tuple[str, int]]
+    since: Optional[datetime]
+    until: Optional[datetime]
+    db_path: Path
+    generated_at: datetime
+    sources: list[str]
+
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _connect(db_path: Path) -> sqlite3.Connection:
+    if not db_path.is_file():
+        raise FileNotFoundError(f"База не найдена: {db_path}")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def load_recorder_names(config_path: Path) -> dict[str, str]:
+    if not config_path.is_file():
+        return {}
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        out: dict[str, str] = {}
+        for rec in data.get("recorders", []):
+            rid = rec.get("id")
+            if not rid:
+                continue
+            name = rec.get("name") or rec.get("host") or rid
+            obj = rec.get("object_name") or ""
+            out[rid] = f"{obj} / {name}" if obj else str(name)
+        return out
+    except Exception as exc:
+        print(f"Предупреждение: не удалось прочитать {config_path}: {exc}", file=sys.stderr)
+        return {}
+
+
+def _channel_names(conn: sqlite3.Connection) -> dict[tuple[str, int], str]:
+    try:
+        rows = conn.execute(
+            "SELECT recorder_id, channel_no, name FROM channels WHERE name IS NOT NULL"
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    return {(r["recorder_id"], r["channel_no"]): r["name"] for r in rows}
+
+
+def _recorder_label(recorder_id: str, names: dict[str, str]) -> str:
+    return names.get(recorder_id, recorder_id)
+
+
+def _channel_label(
+    entity_id: str,
+    names: dict[str, str],
+    channel_names: dict[tuple[str, int], str],
+) -> tuple[str, str]:
+    if ":" not in entity_id:
+        return entity_id, _recorder_label(entity_id, names)
+    recorder_id, ch_str = entity_id.rsplit(":", 1)
+    try:
+        channel_no = int(ch_str)
+    except ValueError:
+        return entity_id, entity_id
+    base = _recorder_label(recorder_id, names)
+    ch_name = channel_names.get((recorder_id, channel_no))
+    if ch_name:
+        return entity_id, f"{base} — канал {channel_no} ({ch_name})"
+    return entity_id, f"{base} — канал {channel_no}"
+
+
+def _fetch_category_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], list[HistoryRow]]:
+    rows = conn.execute(
+        """
+        SELECT recorder_id, category, status, reason, recorded_at
+        FROM category_status_history
+        ORDER BY recorder_id, category, recorded_at ASC
+        """
+    ).fetchall()
+    streams: dict[tuple[str, str], list[HistoryRow]] = defaultdict(list)
+    for row in rows:
+        key = (row["recorder_id"], row["category"])
+        streams[key].append(
+            HistoryRow(
+                status=row["status"],
+                recorded_at=_parse_iso(row["recorded_at"])
+                or datetime.now(timezone.utc),
+                reason=row["reason"],
+            )
+        )
+    return streams
+
+
+def _fetch_status_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], list[HistoryRow]]:
+    rows = conn.execute(
+        """
+        SELECT entity_type, entity_id, status, reason, recorded_at
+        FROM status_history
+        ORDER BY entity_type, entity_id, recorded_at ASC
+        """
+    ).fetchall()
+    streams: dict[tuple[str, str], list[HistoryRow]] = defaultdict(list)
+    for row in rows:
+        key = (row["entity_type"], row["entity_id"])
+        streams[key].append(
+            HistoryRow(
+                status=row["status"],
+                recorded_at=_parse_iso(row["recorded_at"])
+                or datetime.now(timezone.utc),
+                reason=row["reason"],
+            )
+        )
+    return streams
+
+
+def load_category_incidents(
+    conn: sqlite3.Connection,
+    names: dict[str, str],
+    *,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+) -> tuple[list[ResolvedIncident], int]:
+    incidents: list[ResolvedIncident] = []
+    active = 0
+    for (recorder_id, category), rows in _fetch_category_streams(conn).items():
+        active += count_active_episodes(
+            rows,
+            problem_statuses=DEFAULT_PROBLEM_STATUSES,
+            transparent_statuses=DEFAULT_TRANSPARENT_STATUSES,
+        )
+        label = CATEGORY_LABELS.get(category, category)  # type: ignore[arg-type]
+        event_type = f"[Категория] {label}"
+        device_label = _recorder_label(recorder_id, names)
+        for ep in parse_resolved_episodes(rows):
+            for filtered in filter_episodes_by_resolved_at([ep], since=since, until=until):
+                incidents.append(
+                    ResolvedIncident(
+                        source="category",
+                        event_type=event_type,
+                        device_id=recorder_id,
+                        device_label=device_label,
+                        severity_peak=filtered.severity_peak,
+                        started_at=filtered.started_at,
+                        resolved_at=filtered.resolved_at,
+                        reason=filtered.reason,
+                    )
+                )
+    return incidents, active
+
+
+def load_status_incidents(
+    conn: sqlite3.Connection,
+    names: dict[str, str],
+    channel_names: dict[tuple[str, int], str],
+    *,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+) -> tuple[list[ResolvedIncident], int]:
+    incidents: list[ResolvedIncident] = []
+    active = 0
+    for (entity_type, entity_id), rows in _fetch_status_streams(conn).items():
+        problem_statuses = (
+            RECORDER_PROBLEM_STATUSES
+            if entity_type == "recorder"
+            else DEFAULT_PROBLEM_STATUSES
+        )
+        active += count_active_episodes(
+            rows,
+            problem_statuses=problem_statuses,
+            transparent_statuses=DEFAULT_TRANSPARENT_STATUSES,
+        )
+        if entity_type == "channel":
+            device_id, device_label = _channel_label(entity_id, names, channel_names)
+            prefix = "[Канал]"
+        else:
+            device_id = entity_id
+            device_label = _recorder_label(entity_id, names)
+            prefix = "[Регистратор]"
+        for ep in parse_resolved_episodes(
+            rows,
+            problem_statuses=problem_statuses,
+        ):
+            reason_text = ep.reason or "Без указания причины"
+            event_type = f"{prefix} {reason_text}"
+            for filtered in filter_episodes_by_resolved_at([ep], since=since, until=until):
+                incidents.append(
+                    ResolvedIncident(
+                        source="status",
+                        event_type=event_type,
+                        device_id=device_id,
+                        device_label=device_label,
+                        severity_peak=filtered.severity_peak,
+                        started_at=filtered.started_at,
+                        resolved_at=filtered.resolved_at,
+                        reason=filtered.reason,
+                    )
+                )
+    return incidents, active
+
+
+def build_summary_rows(incidents: list[ResolvedIncident]) -> list[SummaryRow]:
+    groups: dict[tuple[str, str, str], list[float]] = defaultdict(list)
+    for inc in incidents:
+        source_label = "Категория" if inc.source == "category" else "Статус"
+        groups[(inc.event_type, inc.device_label, source_label)].append(inc.duration_hours)
+    rows: list[SummaryRow] = []
+    for (event_type, device_label, source_label), durations in groups.items():
+        rows.append(
+            SummaryRow(
+                event_type=event_type,
+                device_label=device_label,
+                source=source_label,
+                count=len(durations),
+                avg_duration_hours=sum(durations) / len(durations),
+            )
+        )
+    rows.sort(key=lambda r: (-r.count, r.event_type, r.device_label))
+    return rows
+
+
+def build_report_context(
+    incidents: list[ResolvedIncident],
+    *,
+    active_problems: int,
+    since: Optional[datetime],
+    until: Optional[datetime],
+    db_path: Path,
+    sources: list[str],
+) -> ReportContext:
+    summary_rows = build_summary_rows(incidents)
+    totals_by_type: Counter[str] = Counter()
+    totals_by_device: Counter[str] = Counter()
+    totals_by_severity: Counter[str] = Counter()
+    monthly: Counter[str] = Counter()
+    durations: list[float] = []
+
+    for inc in incidents:
+        totals_by_type[inc.event_type] += 1
+        totals_by_device[inc.device_label] += 1
+        totals_by_severity[inc.severity_peak] += 1
+        durations.append(inc.duration_hours)
+        month_key = format_for_display(inc.resolved_at, "%Y-%m")
+        monthly[month_key] += 1
+
+    chronic_types = [(t, c) for t, c in totals_by_type.most_common() if c >= 2]
+    chronic_devices = [(d, c) for d, c in totals_by_device.most_common() if c >= 2]
+
+    avg_mttr = statistics.mean(durations) if durations else None
+    median_mttr = statistics.median(durations) if durations else None
+
+    return ReportContext(
+        incidents=sorted(incidents, key=lambda i: i.resolved_at, reverse=True),
+        summary_rows=summary_rows,
+        totals_by_type=totals_by_type,
+        totals_by_device=totals_by_device,
+        totals_by_severity=totals_by_severity,
+        monthly_counts=sorted(monthly.items()),
+        active_problems=active_problems,
+        unique_devices=len({i.device_label for i in incidents}),
+        avg_mttr_hours=avg_mttr,
+        median_mttr_hours=median_mttr,
+        top_types=totals_by_type.most_common(10),
+        top_devices=totals_by_device.most_common(10),
+        chronic_types=chronic_types[:5],
+        chronic_devices=chronic_devices[:5],
+        since=since,
+        until=until,
+        db_path=db_path,
+        generated_at=datetime.now(timezone.utc),
+        sources=sources,
+    )
+
+
+def _format_duration_hours(hours: float) -> str:
+    if hours < 1:
+        return "менее 1 ч."
+    if hours < 24:
+        return f"{hours:.1f} ч."
+    days = int(hours // 24)
+    rem = int(hours % 24)
+    if rem > 0:
+        return f"{days} сут. {rem} ч."
+    return f"{days} сут."
+
+
+def _top_n_with_other(
+    items: list[tuple[str, int]], top_n: int
+) -> tuple[list[str], list[int]]:
+    if not items:
+        return [], []
+    head = items[:top_n]
+    tail = items[top_n:]
+    labels = [x[0] for x in head]
+    values = [x[1] for x in head]
+    if tail:
+        labels.append("Прочие")
+        values.append(sum(v for _, v in tail))
+    return labels, values
+
+
+def _period_label(ctx: ReportContext) -> str:
+    if ctx.since and ctx.until:
+        return (
+            f"{format_for_display(ctx.since, '%d.%m.%Y')} — "
+            f"{format_for_display(ctx.until, '%d.%m.%Y')}"
+        )
+    if ctx.since:
+        return f"с {format_for_display(ctx.since, '%d.%m.%Y')}"
+    if ctx.until:
+        return f"по {format_for_display(ctx.until, '%d.%m.%Y')}"
+    return "за всё время наблюдения"
+
+
+def build_effectiveness_text(ctx: ReportContext) -> str:
+    total = len(ctx.incidents)
+    if total == 0:
+        return (
+            "За выбранный период устранённых инцидентов не зафиксировано. "
+            "Это может означать стабильную работу оборудования либо недостаточную "
+            "глубину истории в базе данных."
+        )
+
+    parts: list[str] = []
+    parts.append(
+        f"За период {_period_label(ctx).lower()} система мониторинга зафиксировала "
+        f"<strong>{total}</strong> устранённых эпизодов деградации или неисправности "
+        f"на <strong>{ctx.unique_devices}</strong> устройствах."
+    )
+
+    if ctx.avg_mttr_hours is not None:
+        parts.append(
+            f"Среднее время устранения (MTTR): <strong>{_format_duration_hours(ctx.avg_mttr_hours)}</strong> "
+            f"(медиана: {_format_duration_hours(ctx.median_mttr_hours or 0)})."
+        )
+
+    if ctx.top_types:
+        t0, c0 = ctx.top_types[0]
+        parts.append(
+            f"Наиболее частый тип: <strong>{html.escape(t0)}</strong> ({c0} случ.)."
+        )
+
+    chronic_type_count = sum(1 for _, c in ctx.totals_by_type.items() if c >= 2)
+    chronic_ratio = chronic_type_count / max(len(ctx.totals_by_type), 1) * 100
+    parts.append(
+        f"Повторяющиеся типы (≥2 инцидента): <strong>{chronic_type_count}</strong> "
+        f"из {len(ctx.totals_by_type)} ({chronic_ratio:.0f}%) — "
+        + (
+            "есть признаки хронических проблем, требующих профилактики."
+            if chronic_ratio >= 30
+            else "большинство сбоев носят разовый характер."
+        )
+    )
+
+    if ctx.active_problems > 0:
+        parts.append(
+            f"На момент отчёта ещё <strong>{ctx.active_problems}</strong> активных "
+            f"эпизодов warn/error не завершены переходом в ok."
+        )
+    else:
+        parts.append(
+            "На момент отчёта активных незакрытых эпизодов в истории не обнаружено."
+        )
+
+    parts.append(
+        "<em>Ограничения:</em> данные восстановлены из журналов смены статуса; "
+        "одна физическая проблема может отражаться и в категории NVR, и в статусе канала. "
+        "Глубина истории ограничена сроком работы мониторинга и не удаляется при очистке "
+        "регистратора из конфигурации."
+    )
+    return " ".join(parts)
+
+
+def _html_css() -> str:
+    return """
+<style>
+:root {
+  --bg: #ffffff; --card-bg: #f8fafc; --text: #1f2937; --muted: #6b7280;
+  --primary: #0ea5e9; --success: #10b981; --warn: #f59e0b; --danger: #ef4444; --border: #e5e7eb;
+}
+html, body { background: var(--bg); color: var(--text); margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+.container { max-width: 1320px; margin: 0 auto; padding: 18px 18px 28px; }
+h1 { font-size: 22px; margin: 12px 0 10px; }
+h2 { font-size: 18px; margin: 18px 0 8px; }
+.muted { color: var(--muted); font-size: 13px; }
+.section { margin: 18px 0 26px; padding: 14px; background: #fff;
+  border: 1px solid var(--border); border-radius: 12px; }
+.section h2 { margin-top: 0; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
+.kpi-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.kpi-card .value { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.kpi-card .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.chart-box { background: #fff; border: 1px dashed var(--border); border-radius: 8px; padding: 10px; min-height: 280px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+th { text-align: left; background: #fafafa; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:hover { background: #f9fafb; }
+.narrative { line-height: 1.55; font-size: 14px; }
+.narrative p { margin: 0 0 10px; }
+.collapsible { margin-top: 16px; }
+.collapsible-trigger {
+  display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  padding: 10px 14px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+}
+.collapsible-content { display: none; padding: 12px; border: 1px solid var(--border); border-top: none;
+  border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+.collapsible.is-open .collapsible-content { display: block; }
+.collapsible.is-open .collapsible-trigger { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+"""
+
+
+def render_html_report(ctx: ReportContext, *, top_n: int = 12, static_charts: bool = False) -> str:
+    type_labels, type_values = _top_n_with_other(ctx.top_types, top_n)
+    device_labels, device_values = _top_n_with_other(ctx.top_devices, top_n)
+    severity_labels = list(ctx.totals_by_severity.keys()) or ["нет данных"]
+    severity_values = [ctx.totals_by_severity.get(k, 0) for k in severity_labels]
+    month_labels = [m for m, _ in ctx.monthly_counts]
+    month_values = [c for _, c in ctx.monthly_counts]
+    show_monthly = len(month_labels) > 1
+
+    chart_data = {
+        "types": {"labels": type_labels, "values": type_values},
+        "devices": {"labels": device_labels, "values": device_values},
+        "severity": {"labels": severity_labels, "values": severity_values},
+        "monthly": {"labels": month_labels, "values": month_values, "show": show_monthly},
+    }
+
+    summary_html = []
+    for row in ctx.summary_rows:
+        summary_html.append(
+            "<tr>"
+            f"<td>{html.escape(row.event_type)}</td>"
+            f"<td>{html.escape(row.device_label)}</td>"
+            f"<td>{html.escape(row.source)}</td>"
+            f"<td class='num'>{row.count}</td>"
+            f"<td class='num'>{_format_duration_hours(row.avg_duration_hours)}</td>"
+            "</tr>"
+        )
+
+    detail_html = []
+    for inc in ctx.incidents:
+        detail_html.append(
+            "<tr>"
+            f"<td>{html.escape(inc.event_type)}</td>"
+            f"<td>{html.escape(inc.device_label)}</td>"
+            f"<td>{html.escape(inc.severity_peak)}</td>"
+            f"<td>{format_for_display(inc.started_at, '%d.%m.%Y %H:%M')}</td>"
+            f"<td>{format_for_display(inc.resolved_at, '%d.%m.%Y %H:%M')}</td>"
+            f"<td class='num'>{_format_duration_hours(inc.duration_hours)}</td>"
+            "</tr>"
+        )
+
+    avg_mttr = (
+        _format_duration_hours(ctx.avg_mttr_hours)
+        if ctx.avg_mttr_hours is not None
+        else "—"
+    )
+    sources_text = ", ".join(ctx.sources)
+
+    static_charts_block = ""
+    if static_charts:
+        try:
+            static_charts_block = _render_static_charts(ctx, top_n=top_n)
+        except Exception as exc:
+            static_charts_block = (
+                f"<p class='muted'>Статические графики недоступны: {html.escape(str(exc))}</p>"
+            )
+
+    chart_section = static_charts_block or """
+<div class="grid-2">
+  <div class="chart-box"><canvas id="chartTypes"></canvas></div>
+  <div class="chart-box"><canvas id="chartDevices"></canvas></div>
+  <div class="chart-box"><canvas id="chartSeverity"></canvas></div>
+  <div class="chart-box" id="monthlyChartBox"><canvas id="chartMonthly"></canvas></div>
+</div>
+"""
+
+    chart_js = ""
+    if not static_charts:
+        chart_js = f"""
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const chartData = {json.dumps(chart_data, ensure_ascii=False)};
+function horizBar(canvasId, title, labels, values, color) {{
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  new Chart(el, {{
+    type: 'bar',
+    data: {{ labels, datasets: [{{ label: title, data: values, backgroundColor: color }}] }},
+    options: {{
+      indexAxis: 'y', responsive: true, plugins: {{ legend: {{ display: false }}, title: {{ display: true, text: title }} }},
+      scales: {{ x: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }}
+    }}
+  }});
+}}
+horizBar('chartTypes', 'По типам событий', chartData.types.labels, chartData.types.values, '#0ea5e9');
+horizBar('chartDevices', 'По устройствам', chartData.devices.labels, chartData.devices.values, '#10b981');
+new Chart(document.getElementById('chartSeverity'), {{
+  type: 'doughnut',
+  data: {{
+    labels: chartData.severity.labels,
+    datasets: [{{ data: chartData.severity.values, backgroundColor: ['#f59e0b', '#ef4444', '#6b7280', '#0ea5e9'] }}]
+  }},
+  options: {{ responsive: true, plugins: {{ title: {{ display: true, text: 'По тяжести (peak)' }} }} }}
+}});
+if (chartData.monthly.show) {{
+  new Chart(document.getElementById('chartMonthly'), {{
+    type: 'line',
+    data: {{
+      labels: chartData.monthly.labels,
+      datasets: [{{ label: 'Устранено', data: chartData.monthly.values, borderColor: '#0ea5e9', tension: 0.2, fill: false }}]
+    }},
+    options: {{ responsive: true, plugins: {{ title: {{ display: true, text: 'Устранения по месяцам' }} }},
+      scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }} }}
+  }});
+}} else {{
+  const box = document.getElementById('monthlyChartBox');
+  if (box) box.innerHTML = '<p class="muted" style="padding:20px">Недостаточно данных для помесячного графика</p>';
+}}
+document.querySelectorAll('.collapsible-trigger').forEach(trigger => {{
+  trigger.addEventListener('click', () => trigger.closest('.collapsible')?.classList.toggle('is-open'));
+}});
+</script>
+"""
+
+    return f"""<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Устранённые инциденты мониторинга</title>
+{_html_css()}
+</head><body>
+<div class="container">
+<h1>Отчёт по устранённым инцидентам мониторинга</h1>
+<p class="muted">Период: {_period_label(ctx)} · Источники: {html.escape(sources_text)} ·
+  БД: {html.escape(str(ctx.db_path))} · Сформирован:
+  {format_for_display(ctx.generated_at, '%d.%m.%Y %H:%M')}</p>
+
+<div class="kpi-grid">
+  <div class="kpi-card"><div class="value">{len(ctx.incidents)}</div><div class="label">Устранено инцидентов</div></div>
+  <div class="kpi-card"><div class="value">{avg_mttr}</div><div class="label">Средний MTTR</div></div>
+  <div class="kpi-card"><div class="value">{ctx.active_problems}</div><div class="label">Активных эпизодов сейчас</div></div>
+  <div class="kpi-card"><div class="value">{ctx.unique_devices}</div><div class="label">Уникальных устройств</div></div>
+</div>
+
+<div class="section narrative">
+  <h2>Эффективность мониторинга</h2>
+  <p>{build_effectiveness_text(ctx)}</p>
+</div>
+
+<div class="section">
+  <h2>Визуализация</h2>
+  {chart_section}
+</div>
+
+<div class="section">
+  <h2>Сводка: тип × устройство</h2>
+  <table>
+    <thead><tr>
+      <th>Тип события</th><th>Устройство</th><th>Источник</th>
+      <th>Кол-во</th><th>Ср. длительность</th>
+    </tr></thead>
+    <tbody>{''.join(summary_html) if summary_html else '<tr><td colspan="5" class="muted">Нет данных</td></tr>'}</tbody>
+  </table>
+</div>
+
+<div class="section collapsible">
+  <div class="collapsible-trigger">
+    <h2>Детальный список эпизодов ({len(ctx.incidents)})</h2>
+    <span>+</span>
+  </div>
+  <div class="collapsible-content">
+    <table>
+      <thead><tr>
+        <th>Тип</th><th>Устройство</th><th>Тяжесть</th>
+        <th>Начало</th><th>Устранено</th><th>Длительность</th>
+      </tr></thead>
+      <tbody>{''.join(detail_html) if detail_html else '<tr><td colspan="6" class="muted">Нет данных</td></tr>'}</tbody>
+    </table>
+  </div>
+</div>
+
+<p class="footer">Wisenet Диагностика · отчёт сгенерирован автоматически из monitoring.db</p>
+</div>
+{chart_js}
+</body></html>
+"""
+
+
+def _render_static_charts(ctx: ReportContext, *, top_n: int) -> str:
+    import base64
+    from io import BytesIO
+
+    import matplotlib.pyplot as plt
+
+    type_labels, type_values = _top_n_with_other(ctx.top_types, top_n)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].barh(type_labels[::-1], type_values[::-1], color="#0ea5e9")
+    axes[0].set_title("По типам событий")
+    dev_labels, dev_values = _top_n_with_other(ctx.top_devices, top_n)
+    axes[1].barh(dev_labels[::-1], dev_values[::-1], color="#10b981")
+    axes[1].set_title("По устройствам")
+    fig.tight_layout()
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=120)
+    plt.close(fig)
+    uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return f'<div class="chart-box"><img src="{uri}" alt="charts" style="max-width:100%"/></div>'
+
+
+def parse_sources_arg(raw: str) -> list[str]:
+    value = raw.strip().lower()
+    if value in ("all", ""):
+        return ["category", "status"]
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    valid = {"category", "status"}
+    unknown = set(parts) - valid
+    if unknown:
+        raise ValueError(f"Неизвестные источники: {', '.join(sorted(unknown))}")
+    return parts or ["category", "status"]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="HTML-отчёт по устранённым инцидентам мониторинга"
+    )
+    parser.add_argument("--db", type=Path, default=STATE_DB_PATH, help="Путь к monitoring.db")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="config.json")
+    parser.add_argument("--since", help="Начало периода (ISO), фильтр по дате устранения")
+    parser.add_argument("--until", help="Конец периода (ISO), фильтр по дате устранения")
+    parser.add_argument(
+        "--sources",
+        default="all",
+        help="Источники: all | category | status | category,status",
+    )
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Путь к HTML-файлу")
+    parser.add_argument("--top-n", type=int, default=12, help="Топ N на графиках")
+    parser.add_argument(
+        "--static-charts",
+        action="store_true",
+        help="Встроить PNG-графики (matplotlib) вместо Chart.js",
+    )
+    args = parser.parse_args()
+
+    since = _parse_iso(args.since) if args.since else None
+    until = _parse_iso(args.until) if args.until else None
+
+    try:
+        sources = parse_sources_arg(args.sources)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    try:
+        conn = _connect(args.db)
+    except (FileNotFoundError, RuntimeError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    names = load_recorder_names(args.config)
+    channel_names = _channel_names(conn)
+
+    incidents: list[ResolvedIncident] = []
+    active_total = 0
+
+    if "category" in sources:
+        cat_inc, cat_active = load_category_incidents(
+            conn, names, since=since, until=until
+        )
+        incidents.extend(cat_inc)
+        active_total += cat_active
+
+    if "status" in sources:
+        st_inc, st_active = load_status_incidents(
+            conn, names, channel_names, since=since, until=until
+        )
+        incidents.extend(st_inc)
+        active_total += st_active
+
+    conn.close()
+
+    ctx = build_report_context(
+        incidents,
+        active_problems=active_total,
+        since=since,
+        until=until,
+        db_path=args.db.resolve(),
+        sources=sources,
+    )
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    html_content = render_html_report(
+        ctx, top_n=args.top_n, static_charts=args.static_charts
+    )
+    args.output.write_text(html_content, encoding="utf-8")
+
+    print(f"Отчёт записан: {args.output.resolve()}")
+    print(f"Устранённых инцидентов: {len(incidents)}")
+    print(f"Активных эпизодов: {active_total}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
