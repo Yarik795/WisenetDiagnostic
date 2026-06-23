@@ -171,6 +171,7 @@
 | `event_type_groups.py` | Нормализация длинных причин в группы для фильтра HTML-отчёта |
 | `resolved_incidents_report.py` | HTML-отчёт по устранённым инцидентам: выборка из `status_history` и `category_status_history`, Chart.js-графики |
 | `export_recorders_serial.py` | Выгрузка серийных номеров регистраторов |
+| `db_profile_export.py` | Профилирование `monitoring.db`: статистика столбцов, распределения, примеры строк (JSON/CSV для генерации тестовой БД) |
 | `probe_nvr_manufacture_date.py` | Проверка определения даты производства по серийнику |
 
 Запуск из корня проекта; скрипты добавляют `backend` и `scripts` в `sys.path` и используют `app.config_store` / `app.models`.
