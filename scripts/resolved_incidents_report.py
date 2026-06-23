@@ -51,6 +51,7 @@ from episode_parser import (  # noqa: E402
 
 from app.display_time import format_for_display  # noqa: E402
 from app.ui.health_classifiers import CATEGORY_LABELS  # noqa: E402
+from event_type_groups import group_sort_key, normalize_event_group  # noqa: E402
 
 # --- Настройки подключения (можно менять здесь или через env / CLI) ---
 
@@ -64,7 +65,7 @@ DEFAULT_OUTPUT = REPO_ROOT / "data" / "reports" / "resolved_incidents_report.htm
 # Типы событий, исключаемые из отчёта по умолчанию (подстрока, без учёта регистра)
 DEFAULT_EXCLUDED_PATTERNS: tuple[str, ...] = (
     "AuthFail",
-    "PoE выключен на канале",
+    "PoE",
 )
 
 SourceKind = Literal["category", "status"]
@@ -232,9 +233,11 @@ def serialize_incidents_for_js(incidents: list[ResolvedIncident]) -> list[dict]:
     rows: list[dict] = []
     for inc in incidents:
         source_label = "Категория" if inc.source == "category" else "Статус"
+        event_group = normalize_event_group(inc.event_type)
         rows.append(
             {
                 "eventType": inc.event_type,
+                "eventGroup": event_group,
                 "deviceLabel": inc.device_label,
                 "source": source_label,
                 "severity": inc.severity_peak,
@@ -245,6 +248,18 @@ def serialize_incidents_for_js(incidents: list[ResolvedIncident]) -> list[dict]:
             }
         )
     return rows
+
+
+def build_group_catalog(incidents: list[ResolvedIncident]) -> list[dict]:
+    counts: Counter[str] = Counter()
+    for inc in incidents:
+        counts[normalize_event_group(inc.event_type)] += 1
+    items = [
+        {"group": group, "count": count}
+        for group, count in counts.items()
+    ]
+    items.sort(key=lambda x: (-x["count"], group_sort_key(x["group"])))
+    return items
 
 
 @dataclass
@@ -570,7 +585,7 @@ def build_summary_rows(incidents: list[ResolvedIncident]) -> list[SummaryRow]:
     groups: dict[tuple[str, str, str], list[float]] = defaultdict(list)
     for inc in incidents:
         source_label = "Категория" if inc.source == "category" else "Статус"
-        groups[(inc.event_type, inc.device_label, source_label)].append(inc.duration_hours)
+        groups[(normalize_event_group(inc.event_type), inc.device_label, source_label)].append(inc.duration_hours)
     rows: list[SummaryRow] = []
     for (event_type, device_label, source_label), durations in groups.items():
         rows.append(
@@ -603,7 +618,8 @@ def build_report_context(
     durations: list[float] = []
 
     for inc in incidents:
-        totals_by_type[inc.event_type] += 1
+        group = normalize_event_group(inc.event_type)
+        totals_by_type[group] += 1
         totals_by_device[inc.device_label] += 1
         totals_by_severity[inc.severity_peak] += 1
         durations.append(inc.duration_hours)
@@ -788,8 +804,13 @@ tr:hover { background: #f9fafb; }
 }
 .filter-tools button:hover { border-color: var(--primary); color: var(--primary); }
 .type-filters {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 12px;
-  max-height: 220px; overflow: auto; padding: 4px 2px;
+  max-height: 360px; overflow: auto; padding: 4px 2px;
+}
+.filter-section { margin-bottom: 12px; }
+.filter-section h3 { font-size: 14px; margin: 0 0 6px; color: var(--muted); }
+.filter-section .type-filters {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 12px;
+  max-height: none; overflow: visible;
 }
 .type-filters label {
   display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer;
@@ -816,33 +837,34 @@ function formatDurationHours(hours) {
   return days + ' сут.';
 }
 
-function selectedTypes() {
+function selectedGroups() {
   return new Set(
-    Array.from(document.querySelectorAll('.type-filter-cb:checked')).map(el => el.value)
+    Array.from(document.querySelectorAll('.group-filter-cb:checked')).map(el => el.value)
   );
 }
 
 function visibleIncidents() {
-  const allowed = selectedTypes();
-  return reportData.incidents.filter(row => allowed.has(row.eventType));
+  const allowed = selectedGroups();
+  if (allowed.size === 0) return [];
+  return reportData.incidents.filter(row => allowed.has(row.eventGroup));
 }
 
 function aggregateSummary(rows) {
   const map = new Map();
   for (const row of rows) {
-    const key = row.eventType + '\0' + row.deviceLabel + '\0' + row.source;
+    const key = row.eventGroup + '\0' + row.deviceLabel + '\0' + row.source;
     if (!map.has(key)) {
-      map.set(key, { eventType: row.eventType, deviceLabel: row.deviceLabel, source: row.source, durations: [] });
+      map.set(key, { eventGroup: row.eventGroup, deviceLabel: row.deviceLabel, source: row.source, durations: [] });
     }
     map.get(key).durations.push(row.durationHours);
   }
   return Array.from(map.values()).map(item => ({
-    eventType: item.eventType,
+    eventGroup: item.eventGroup,
     deviceLabel: item.deviceLabel,
     source: item.source,
     count: item.durations.length,
     avgHours: item.durations.reduce((a, b) => a + b, 0) / item.durations.length,
-  })).sort((a, b) => b.count - a.count || a.eventType.localeCompare(b.eventType));
+  })).sort((a, b) => b.count - a.count || a.eventGroup.localeCompare(b.eventGroup));
 }
 
 function topNWithOther(items, n) {
@@ -871,7 +893,7 @@ function renderCharts(rows) {
   const bySeverity = new Map();
   const byMonth = new Map();
   for (const row of rows) {
-    byType.set(row.eventType, (byType.get(row.eventType) || 0) + 1);
+    byType.set(row.eventGroup, (byType.get(row.eventGroup) || 0) + 1);
     byDevice.set(row.deviceLabel, (byDevice.get(row.deviceLabel) || 0) + 1);
     bySeverity.set(row.severity, (bySeverity.get(row.severity) || 0) + 1);
     byMonth.set(row.month, (byMonth.get(row.month) || 0) + 1);
@@ -895,7 +917,7 @@ function renderCharts(rows) {
       },
     });
   }
-  horizBar('chartTypes', 'По типам событий', types.labels, types.values, '#0ea5e9');
+  horizBar('chartTypes', 'По группам событий', types.labels, types.values, '#0ea5e9');
   horizBar('chartDevices', 'По устройствам', devices.labels, devices.values, '#10b981');
   const sevEl = document.getElementById('chartSeverity');
   if (sevEl) {
@@ -957,12 +979,12 @@ function updateSummaryTable(rows) {
   if (!tbody) return;
   const summary = aggregateSummary(rows);
   if (!summary.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">Нет данных для выбранных типов</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">Нет данных для выбранных групп</td></tr>';
     return;
   }
   tbody.innerHTML = summary.map(row => (
     '<tr>'
-    + '<td>' + escapeHtml(row.eventType) + '</td>'
+    + '<td>' + escapeHtml(row.eventGroup) + '</td>'
     + '<td>' + escapeHtml(row.deviceLabel) + '</td>'
     + '<td>' + escapeHtml(row.source) + '</td>'
     + '<td class="num">' + row.count + '</td>'
@@ -976,12 +998,12 @@ function updateDetailTable(rows) {
   if (!tbody) return;
   const sorted = rows.slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
   if (!sorted.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="muted">Нет данных для выбранных типов</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Нет данных для выбранных групп</td></tr>';
     return;
   }
   tbody.innerHTML = sorted.map(row => (
     '<tr>'
-    + '<td>' + escapeHtml(row.eventType) + '</td>'
+    + '<td title="' + escapeHtml(row.eventType) + '">' + escapeHtml(row.eventGroup) + '</td>'
     + '<td>' + escapeHtml(row.deviceLabel) + '</td>'
     + '<td>' + escapeHtml(row.severity) + '</td>'
     + '<td>' + escapeHtml(row.startedAt) + '</td>'
@@ -1007,37 +1029,59 @@ function refreshReport() {
   renderCharts(rows);
   const status = document.getElementById('filterStatus');
   if (status) {
-    const totalTypes = new Set(reportData.incidents.map(r => r.eventType)).size;
-    const selected = selectedTypes().size;
+    const catalog = reportData.groupCatalog || [];
+    const selected = selectedGroups().size;
     status.textContent = 'Показано ' + rows.length + ' из ' + reportData.incidents.length
-      + ' эпизодов · выбрано типов: ' + selected + ' / ' + totalTypes;
+      + ' эпизодов · выбрано групп: ' + selected + ' / ' + catalog.length;
   }
+}
+
+function sectionForGroup(group) {
+  if (group.startsWith('[Канал]')) return 'Каналы';
+  if (group.startsWith('[Категория]')) return 'Категории NVR';
+  if (group.startsWith('[Регистратор]')) return 'Регистраторы';
+  return 'Прочее';
 }
 
 function initTypeFilters() {
   const container = document.getElementById('typeFilters');
   if (!container) return;
-  const types = Array.from(new Set(reportData.incidents.map(r => r.eventType))).sort();
-  container.innerHTML = types.map(t => (
-    '<label data-type="' + escapeHtml(t) + '">'
-    + '<input type="checkbox" class="type-filter-cb" value="' + escapeHtml(t) + '" checked>'
-    + '<span>' + escapeHtml(t) + '</span></label>'
-  )).join('');
-  container.querySelectorAll('.type-filter-cb').forEach(cb => {
+  const catalog = reportData.groupCatalog || [];
+  const bySection = new Map();
+  for (const item of catalog) {
+    const section = sectionForGroup(item.group);
+    if (!bySection.has(section)) bySection.set(section, []);
+    bySection.get(section).push(item);
+  }
+  const sectionOrder = ['Каналы', 'Категории NVR', 'Регистраторы', 'Прочее'];
+  let html = '';
+  for (const section of sectionOrder) {
+    const items = bySection.get(section);
+    if (!items || !items.length) continue;
+    html += '<div class="filter-section"><h3>' + escapeHtml(section) + '</h3><div class="type-filters">';
+    for (const item of items) {
+      html += '<label data-group="' + escapeHtml(item.group) + '">'
+        + '<input type="checkbox" class="group-filter-cb" value="' + escapeHtml(item.group) + '" checked>'
+        + '<span>' + escapeHtml(item.group) + ' <span class="muted">(' + item.count + ')</span></span></label>';
+    }
+    html += '</div></div>';
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.group-filter-cb').forEach(cb => {
     cb.addEventListener('change', refreshReport);
   });
 }
 
 function filterTypeList(query) {
   const q = query.trim().toLowerCase();
-  document.querySelectorAll('#typeFilters label').forEach(label => {
-    const text = label.getAttribute('data-type') || '';
+  document.querySelectorAll('#typeFilters label[data-group]').forEach(label => {
+    const text = label.getAttribute('data-group') || '';
     label.style.display = !q || text.toLowerCase().includes(q) ? '' : 'none';
   });
 }
 
 function setAllTypes(checked) {
-  document.querySelectorAll('.type-filter-cb').forEach(cb => { cb.checked = checked; });
+  document.querySelectorAll('.group-filter-cb').forEach(cb => { cb.checked = checked; });
   refreshReport();
 }
 
@@ -1070,6 +1114,7 @@ def render_html_report(
     excluded_patterns = excluded_patterns or []
     report_payload = {
         "incidents": serialize_incidents_for_js(ctx.incidents),
+        "groupCatalog": build_group_catalog(ctx.incidents),
         "meta": {
             "topN": top_n,
             "activeProblems": ctx.active_problems,
@@ -1129,10 +1174,11 @@ def render_html_report(
 {excluded_note}
 
 <div class="section">
-  <h2>Фильтр типов событий</h2>
+  <h2>Фильтр групп событий</h2>
+  <p class="muted">Похожие причины сведены в группы (без точных секунд и диапазонов архива). Детальная таблица показывает полный текст при наведении на группу.</p>
   <div class="filter-panel">
     <div class="filter-tools">
-      <input type="text" id="typeSearch" placeholder="Поиск типа события..."/>
+      <input type="text" id="typeSearch" placeholder="Поиск группы..."/>
       <button type="button" id="btnSelectAll">Выбрать все</button>
       <button type="button" id="btnSelectNone">Снять все</button>
     </div>
@@ -1151,7 +1197,7 @@ def render_html_report(
 <div class="section narrative">
   <h2>Эффективность мониторинга</h2>
   <p>{build_effectiveness_text(ctx)}</p>
-  <p class="muted">Используйте фильтр типов выше — таблицы и графики обновляются без перезагрузки страницы.</p>
+  <p class="muted">Используйте фильтр групп выше — таблицы и графики обновляются без перезагрузки страницы.</p>
 </div>
 
 <div class="section">
@@ -1163,7 +1209,7 @@ def render_html_report(
   <h2>Сводка: тип × устройство</h2>
   <table>
     <thead><tr>
-      <th>Тип события</th><th>Устройство</th><th>Источник</th>
+      <th>Группа события</th><th>Устройство</th><th>Источник</th>
       <th>Кол-во</th><th>Ср. длительность</th>
     </tr></thead>
     <tbody id="summaryBody"><tr><td colspan="5" class="muted">Загрузка...</td></tr></tbody>
@@ -1178,7 +1224,7 @@ def render_html_report(
   <div class="collapsible-content">
     <table>
       <thead><tr>
-        <th>Тип</th><th>Устройство</th><th>Тяжесть</th>
+        <th>Группа</th><th>Устройство</th><th>Тяжесть</th>
         <th>Начало</th><th>Устранено</th><th>Длительность</th>
       </tr></thead>
       <tbody id="detailBody"><tr><td colspan="6" class="muted">Загрузка...</td></tr></tbody>

@@ -168,6 +168,7 @@
 | `dump_authfail_comparison.py` | Диагностика ошибок аутентификации на устройствах |
 | `diagnose_problem_duration.py` | Диагностика длительности проблем по истории БД |
 | `episode_parser.py` | Парсинг завершённых эпизодов warn/error → ok (общая логика для отчётов) |
+| `event_type_groups.py` | Нормализация длинных причин в группы для фильтра HTML-отчёта |
 | `resolved_incidents_report.py` | HTML-отчёт по устранённым инцидентам: выборка из `status_history` и `category_status_history`, Chart.js-графики |
 | `export_recorders_serial.py` | Выгрузка серийных номеров регистраторов |
 | `probe_nvr_manufacture_date.py` | Проверка определения даты производства по серийнику |

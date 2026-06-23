@@ -135,6 +135,9 @@ def test_unknown_does_not_start_episode() -> None:
 def test_text_matches_any_pattern() -> None:
     assert text_matches_any_pattern("Статус регистрации: AuthFail", ["AuthFail"])
     assert text_matches_any_pattern(
-        "[Канал] PoE выключен на канале 3", ["PoE выключен на канале"]
+        "[Канал] PoE выключен на канале 3", ["PoE"]
+    )
+    assert text_matches_any_pattern(
+        "[Регистратор] Каналов с выкл. PoE: 10", ["PoE"]
     )
     assert not text_matches_any_pattern("Потеря видео (VideoLoss)", ["AuthFail"])
