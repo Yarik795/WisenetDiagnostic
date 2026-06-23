@@ -6,6 +6,7 @@
   python scripts/resolved_incidents_report.py
   python scripts/resolved_incidents_report.py --db "D:/path/monitoring.db" --since 2026-01-01
   python scripts/resolved_incidents_report.py --sources category --output data/reports/resolved.html
+  python scripts/resolved_incidents_report.py --exclude "ConnectFail" --no-default-excludes
 
 Переменные окружения:
   STATE_DB_PATH — путь к SQLite (monitoring.db)
@@ -45,6 +46,7 @@ from episode_parser import (  # noqa: E402
     episode_duration_hours,
     filter_episodes_by_resolved_at,
     parse_resolved_episodes,
+    text_matches_any_pattern,
 )
 
 from app.display_time import format_for_display  # noqa: E402
@@ -58,6 +60,12 @@ DEFAULT_CONFIG_PATH = Path(
     os.environ.get("CONFIG_PATH", str(REPO_ROOT / "config.json"))
 )
 DEFAULT_OUTPUT = REPO_ROOT / "data" / "reports" / "resolved_incidents_report.html"
+
+# Типы событий, исключаемые из отчёта по умолчанию (подстрока, без учёта регистра)
+DEFAULT_EXCLUDED_PATTERNS: tuple[str, ...] = (
+    "AuthFail",
+    "PoE выключен на канале",
+)
 
 SourceKind = Literal["category", "status"]
 
@@ -180,6 +188,63 @@ class ResolvedIncident:
                 reason=self.reason,
             )
         )
+
+
+def incident_excluded(inc: ResolvedIncident, patterns: list[str]) -> bool:
+    blob = f"{inc.event_type} {inc.reason or ''}"
+    return text_matches_any_pattern(blob, patterns)
+
+
+def parse_exclude_patterns(
+    cli_values: Optional[list[str]],
+    *,
+    use_defaults: bool,
+) -> list[str]:
+    patterns: list[str] = []
+    if use_defaults:
+        patterns.extend(DEFAULT_EXCLUDED_PATTERNS)
+    if cli_values:
+        for raw in cli_values:
+            for part in raw.split(","):
+                p = part.strip()
+                if p and p not in patterns:
+                    patterns.append(p)
+    return patterns
+
+
+def apply_incident_exclusions(
+    incidents: list[ResolvedIncident],
+    patterns: list[str],
+) -> tuple[list[ResolvedIncident], int]:
+    if not patterns:
+        return incidents, 0
+    kept: list[ResolvedIncident] = []
+    excluded = 0
+    for inc in incidents:
+        if incident_excluded(inc, patterns):
+            excluded += 1
+        else:
+            kept.append(inc)
+    return kept, excluded
+
+
+def serialize_incidents_for_js(incidents: list[ResolvedIncident]) -> list[dict]:
+    rows: list[dict] = []
+    for inc in incidents:
+        source_label = "Категория" if inc.source == "category" else "Статус"
+        rows.append(
+            {
+                "eventType": inc.event_type,
+                "deviceLabel": inc.device_label,
+                "source": source_label,
+                "severity": inc.severity_peak,
+                "startedAt": format_for_display(inc.started_at, "%d.%m.%Y %H:%M"),
+                "resolvedAt": format_for_display(inc.resolved_at, "%d.%m.%Y %H:%M"),
+                "durationHours": inc.duration_hours,
+                "month": format_for_display(inc.resolved_at, "%Y-%m"),
+            }
+        )
+    return rows
 
 
 @dataclass
@@ -712,62 +777,324 @@ tr:hover { background: #f9fafb; }
 .collapsible.is-open .collapsible-content { display: block; }
 .collapsible.is-open .collapsible-trigger { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .footer { color: var(--muted); font-size: 12px; margin-top: 16px; }
+.filter-panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.filter-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.filter-tools input[type="text"] {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; min-width: 220px;
+}
+.filter-tools button {
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  font-size: 13px; cursor: pointer;
+}
+.filter-tools button:hover { border-color: var(--primary); color: var(--primary); }
+.type-filters {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 12px;
+  max-height: 220px; overflow: auto; padding: 4px 2px;
+}
+.type-filters label {
+  display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer;
+}
+.type-filters input { margin-top: 3px; }
+.excluded-note { margin-top: 8px; font-size: 12px; color: var(--muted); }
 </style>
 """
 
 
-def render_html_report(ctx: ReportContext, *, top_n: int = 12, static_charts: bool = False) -> str:
-    type_labels, type_values = _top_n_with_other(ctx.top_types, top_n)
-    device_labels, device_values = _top_n_with_other(ctx.top_devices, top_n)
-    severity_labels = list(ctx.totals_by_severity.keys()) or ["нет данных"]
-    severity_values = [ctx.totals_by_severity.get(k, 0) for k in severity_labels]
-    month_labels = [m for m, _ in ctx.monthly_counts]
-    month_values = [c for _, c in ctx.monthly_counts]
-    show_monthly = len(month_labels) > 1
+def _interactive_report_js() -> str:
+    return r"""
+const reportState = {
+  charts: {},
+  topN: 12,
+};
 
-    chart_data = {
-        "types": {"labels": type_labels, "values": type_values},
-        "devices": {"labels": device_labels, "values": device_values},
-        "severity": {"labels": severity_labels, "values": severity_values},
-        "monthly": {"labels": month_labels, "values": month_values, "show": show_monthly},
+function formatDurationHours(hours) {
+  if (hours < 1) return 'менее 1 ч.';
+  if (hours < 24) return hours.toFixed(1) + ' ч.';
+  const days = Math.floor(hours / 24);
+  const rem = Math.floor(hours % 24);
+  if (rem > 0) return days + ' сут. ' + rem + ' ч.';
+  return days + ' сут.';
+}
+
+function selectedTypes() {
+  return new Set(
+    Array.from(document.querySelectorAll('.type-filter-cb:checked')).map(el => el.value)
+  );
+}
+
+function visibleIncidents() {
+  const allowed = selectedTypes();
+  return reportData.incidents.filter(row => allowed.has(row.eventType));
+}
+
+function aggregateSummary(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = row.eventType + '\0' + row.deviceLabel + '\0' + row.source;
+    if (!map.has(key)) {
+      map.set(key, { eventType: row.eventType, deviceLabel: row.deviceLabel, source: row.source, durations: [] });
     }
+    map.get(key).durations.push(row.durationHours);
+  }
+  return Array.from(map.values()).map(item => ({
+    eventType: item.eventType,
+    deviceLabel: item.deviceLabel,
+    source: item.source,
+    count: item.durations.length,
+    avgHours: item.durations.reduce((a, b) => a + b, 0) / item.durations.length,
+  })).sort((a, b) => b.count - a.count || a.eventType.localeCompare(b.eventType));
+}
 
-    summary_html = []
-    for row in ctx.summary_rows:
-        summary_html.append(
-            "<tr>"
-            f"<td>{html.escape(row.event_type)}</td>"
-            f"<td>{html.escape(row.device_label)}</td>"
-            f"<td>{html.escape(row.source)}</td>"
-            f"<td class='num'>{row.count}</td>"
-            f"<td class='num'>{_format_duration_hours(row.avg_duration_hours)}</td>"
-            "</tr>"
-        )
+function topNWithOther(items, n) {
+  if (!items.length) return { labels: [], values: [] };
+  const head = items.slice(0, n);
+  const tail = items.slice(n);
+  const labels = head.map(x => x.label);
+  const values = head.map(x => x.value);
+  if (tail.length) {
+    labels.push('Прочие');
+    values.push(tail.reduce((s, x) => s + x.value, 0));
+  }
+  return { labels, values };
+}
 
-    detail_html = []
-    for inc in ctx.incidents:
-        detail_html.append(
-            "<tr>"
-            f"<td>{html.escape(inc.event_type)}</td>"
-            f"<td>{html.escape(inc.device_label)}</td>"
-            f"<td>{html.escape(inc.severity_peak)}</td>"
-            f"<td>{format_for_display(inc.started_at, '%d.%m.%Y %H:%M')}</td>"
-            f"<td>{format_for_display(inc.resolved_at, '%d.%m.%Y %H:%M')}</td>"
-            f"<td class='num'>{_format_duration_hours(inc.duration_hours)}</td>"
-            "</tr>"
-        )
+function destroyCharts() {
+  Object.values(reportState.charts).forEach(ch => { try { ch.destroy(); } catch (e) {} });
+  reportState.charts = {};
+}
 
-    avg_mttr = (
-        _format_duration_hours(ctx.avg_mttr_hours)
-        if ctx.avg_mttr_hours is not None
-        else "—"
-    )
+function renderCharts(rows) {
+  if (!window.Chart || document.getElementById('chartTypes') == null) return;
+  destroyCharts();
+  const byType = new Map();
+  const byDevice = new Map();
+  const bySeverity = new Map();
+  const byMonth = new Map();
+  for (const row of rows) {
+    byType.set(row.eventType, (byType.get(row.eventType) || 0) + 1);
+    byDevice.set(row.deviceLabel, (byDevice.get(row.deviceLabel) || 0) + 1);
+    bySeverity.set(row.severity, (bySeverity.get(row.severity) || 0) + 1);
+    byMonth.set(row.month, (byMonth.get(row.month) || 0) + 1);
+  }
+  const typeItems = Array.from(byType.entries()).map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const deviceItems = Array.from(byDevice.entries()).map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const types = topNWithOther(typeItems, reportState.topN);
+  const devices = topNWithOther(deviceItems, reportState.topN);
+  function horizBar(id, title, labels, values, color) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    reportState.charts[id] = new Chart(el, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: title, data: values, backgroundColor: color }] },
+      options: {
+        indexAxis: 'y', responsive: true,
+        plugins: { legend: { display: false }, title: { display: true, text: title } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+      },
+    });
+  }
+  horizBar('chartTypes', 'По типам событий', types.labels, types.values, '#0ea5e9');
+  horizBar('chartDevices', 'По устройствам', devices.labels, devices.values, '#10b981');
+  const sevEl = document.getElementById('chartSeverity');
+  if (sevEl) {
+    const sevLabels = Array.from(bySeverity.keys());
+    const sevValues = sevLabels.map(k => bySeverity.get(k));
+    reportState.charts.chartSeverity = new Chart(sevEl, {
+      type: 'doughnut',
+      data: {
+        labels: sevLabels,
+        datasets: [{ data: sevValues, backgroundColor: ['#f59e0b', '#ef4444', '#6b7280', '#0ea5e9'] }],
+      },
+      options: { responsive: true, plugins: { title: { display: true, text: 'По тяжести (peak)' } } },
+    });
+  }
+  const monthBox = document.getElementById('monthlyChartBox');
+  const monthEl = document.getElementById('chartMonthly');
+  const monthLabels = Array.from(byMonth.keys()).sort();
+  if (monthBox && monthEl && monthLabels.length > 1) {
+    monthBox.style.display = '';
+    const monthValues = monthLabels.map(m => byMonth.get(m));
+    reportState.charts.chartMonthly = new Chart(monthEl, {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [{ label: 'Устранено', data: monthValues, borderColor: '#0ea5e9', tension: 0.2, fill: false }],
+      },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: 'Устранения по месяцам' } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      },
+    });
+  } else if (monthBox) {
+    monthBox.innerHTML = '<p class="muted" style="padding:20px">Недостаточно данных для помесячного графика</p>';
+  }
+}
+
+function updateKpis(rows) {
+  const totalEl = document.getElementById('kpiTotal');
+  const mttrEl = document.getElementById('kpiMttr');
+  const devEl = document.getElementById('kpiDevices');
+  const detailTitle = document.getElementById('detailCount');
+  if (!totalEl) return;
+  totalEl.textContent = String(rows.length);
+  if (detailTitle) detailTitle.textContent = String(rows.length);
+  if (rows.length === 0) {
+    mttrEl.textContent = '—';
+    devEl.textContent = '0';
+    return;
+  }
+  const durations = rows.map(r => r.durationHours);
+  const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
+  mttrEl.textContent = formatDurationHours(avg);
+  devEl.textContent = String(new Set(rows.map(r => r.deviceLabel)).size);
+}
+
+function updateSummaryTable(rows) {
+  const tbody = document.getElementById('summaryBody');
+  if (!tbody) return;
+  const summary = aggregateSummary(rows);
+  if (!summary.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">Нет данных для выбранных типов</td></tr>';
+    return;
+  }
+  tbody.innerHTML = summary.map(row => (
+    '<tr>'
+    + '<td>' + escapeHtml(row.eventType) + '</td>'
+    + '<td>' + escapeHtml(row.deviceLabel) + '</td>'
+    + '<td>' + escapeHtml(row.source) + '</td>'
+    + '<td class="num">' + row.count + '</td>'
+    + '<td class="num">' + formatDurationHours(row.avgHours) + '</td>'
+    + '</tr>'
+  )).join('');
+}
+
+function updateDetailTable(rows) {
+  const tbody = document.getElementById('detailBody');
+  if (!tbody) return;
+  const sorted = rows.slice().sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Нет данных для выбранных типов</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map(row => (
+    '<tr>'
+    + '<td>' + escapeHtml(row.eventType) + '</td>'
+    + '<td>' + escapeHtml(row.deviceLabel) + '</td>'
+    + '<td>' + escapeHtml(row.severity) + '</td>'
+    + '<td>' + escapeHtml(row.startedAt) + '</td>'
+    + '<td>' + escapeHtml(row.resolvedAt) + '</td>'
+    + '<td class="num">' + formatDurationHours(row.durationHours) + '</td>'
+    + '</tr>'
+  )).join('');
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function refreshReport() {
+  const rows = visibleIncidents();
+  updateKpis(rows);
+  updateSummaryTable(rows);
+  updateDetailTable(rows);
+  renderCharts(rows);
+  const status = document.getElementById('filterStatus');
+  if (status) {
+    const totalTypes = new Set(reportData.incidents.map(r => r.eventType)).size;
+    const selected = selectedTypes().size;
+    status.textContent = 'Показано ' + rows.length + ' из ' + reportData.incidents.length
+      + ' эпизодов · выбрано типов: ' + selected + ' / ' + totalTypes;
+  }
+}
+
+function initTypeFilters() {
+  const container = document.getElementById('typeFilters');
+  if (!container) return;
+  const types = Array.from(new Set(reportData.incidents.map(r => r.eventType))).sort();
+  container.innerHTML = types.map(t => (
+    '<label data-type="' + escapeHtml(t) + '">'
+    + '<input type="checkbox" class="type-filter-cb" value="' + escapeHtml(t) + '" checked>'
+    + '<span>' + escapeHtml(t) + '</span></label>'
+  )).join('');
+  container.querySelectorAll('.type-filter-cb').forEach(cb => {
+    cb.addEventListener('change', refreshReport);
+  });
+}
+
+function filterTypeList(query) {
+  const q = query.trim().toLowerCase();
+  document.querySelectorAll('#typeFilters label').forEach(label => {
+    const text = label.getAttribute('data-type') || '';
+    label.style.display = !q || text.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function setAllTypes(checked) {
+  document.querySelectorAll('.type-filter-cb').forEach(cb => { cb.checked = checked; });
+  refreshReport();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  reportState.topN = reportData.meta.topN || 12;
+  initTypeFilters();
+  const search = document.getElementById('typeSearch');
+  if (search) search.addEventListener('input', () => filterTypeList(search.value));
+  const btnAll = document.getElementById('btnSelectAll');
+  const btnNone = document.getElementById('btnSelectNone');
+  if (btnAll) btnAll.addEventListener('click', () => setAllTypes(true));
+  if (btnNone) btnNone.addEventListener('click', () => setAllTypes(false));
+  document.querySelectorAll('.collapsible-trigger').forEach(trigger => {
+    trigger.addEventListener('click', () => trigger.closest('.collapsible')?.classList.toggle('is-open'));
+  });
+  refreshReport();
+});
+"""
+
+
+def render_html_report(
+    ctx: ReportContext,
+    *,
+    top_n: int = 12,
+    static_charts: bool = False,
+    excluded_patterns: Optional[list[str]] = None,
+    excluded_count: int = 0,
+) -> str:
     sources_text = ", ".join(ctx.sources)
+    excluded_patterns = excluded_patterns or []
+    report_payload = {
+        "incidents": serialize_incidents_for_js(ctx.incidents),
+        "meta": {
+            "topN": top_n,
+            "activeProblems": ctx.active_problems,
+            "excludedPatterns": excluded_patterns,
+            "excludedCount": excluded_count,
+        },
+    }
+    payload_json = json.dumps(report_payload, ensure_ascii=False)
+
+    excluded_note = ""
+    if excluded_patterns:
+        patterns_text = html.escape(", ".join(excluded_patterns))
+        excluded_note = (
+            f'<p class="excluded-note">Исключено при формировании отчёта: '
+            f"<strong>{excluded_count}</strong> эпизодов по шаблонам: {patterns_text}</p>"
+        )
 
     static_charts_block = ""
     if static_charts:
         try:
             static_charts_block = _render_static_charts(ctx, top_n=top_n)
+            static_charts_block += (
+                '<p class="muted">Статические графики отражают все данные отчёта; '
+                "таблицы и KPI обновляются по фильтру типов.</p>"
+            )
         except Exception as exc:
             static_charts_block = (
                 f"<p class='muted'>Статические графики недоступны: {html.escape(str(exc))}</p>"
@@ -784,50 +1111,8 @@ def render_html_report(ctx: ReportContext, *, top_n: int = 12, static_charts: bo
 
     chart_js = ""
     if not static_charts:
-        chart_js = f"""
+        chart_js = """
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-const chartData = {json.dumps(chart_data, ensure_ascii=False)};
-function horizBar(canvasId, title, labels, values, color) {{
-  const el = document.getElementById(canvasId);
-  if (!el) return;
-  new Chart(el, {{
-    type: 'bar',
-    data: {{ labels, datasets: [{{ label: title, data: values, backgroundColor: color }}] }},
-    options: {{
-      indexAxis: 'y', responsive: true, plugins: {{ legend: {{ display: false }}, title: {{ display: true, text: title }} }},
-      scales: {{ x: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }}
-    }}
-  }});
-}}
-horizBar('chartTypes', 'По типам событий', chartData.types.labels, chartData.types.values, '#0ea5e9');
-horizBar('chartDevices', 'По устройствам', chartData.devices.labels, chartData.devices.values, '#10b981');
-new Chart(document.getElementById('chartSeverity'), {{
-  type: 'doughnut',
-  data: {{
-    labels: chartData.severity.labels,
-    datasets: [{{ data: chartData.severity.values, backgroundColor: ['#f59e0b', '#ef4444', '#6b7280', '#0ea5e9'] }}]
-  }},
-  options: {{ responsive: true, plugins: {{ title: {{ display: true, text: 'По тяжести (peak)' }} }} }}
-}});
-if (chartData.monthly.show) {{
-  new Chart(document.getElementById('chartMonthly'), {{
-    type: 'line',
-    data: {{
-      labels: chartData.monthly.labels,
-      datasets: [{{ label: 'Устранено', data: chartData.monthly.values, borderColor: '#0ea5e9', tension: 0.2, fill: false }}]
-    }},
-    options: {{ responsive: true, plugins: {{ title: {{ display: true, text: 'Устранения по месяцам' }} }},
-      scales: {{ y: {{ beginAtZero: true, ticks: {{ precision: 0 }} }} }} }}
-  }});
-}} else {{
-  const box = document.getElementById('monthlyChartBox');
-  if (box) box.innerHTML = '<p class="muted" style="padding:20px">Недостаточно данных для помесячного графика</p>';
-}}
-document.querySelectorAll('.collapsible-trigger').forEach(trigger => {{
-  trigger.addEventListener('click', () => trigger.closest('.collapsible')?.classList.toggle('is-open'));
-}});
-</script>
 """
 
     return f"""<!doctype html>
@@ -841,17 +1126,32 @@ document.querySelectorAll('.collapsible-trigger').forEach(trigger => {{
 <p class="muted">Период: {_period_label(ctx)} · Источники: {html.escape(sources_text)} ·
   БД: {html.escape(str(ctx.db_path))} · Сформирован:
   {format_for_display(ctx.generated_at, '%d.%m.%Y %H:%M')}</p>
+{excluded_note}
+
+<div class="section">
+  <h2>Фильтр типов событий</h2>
+  <div class="filter-panel">
+    <div class="filter-tools">
+      <input type="text" id="typeSearch" placeholder="Поиск типа события..."/>
+      <button type="button" id="btnSelectAll">Выбрать все</button>
+      <button type="button" id="btnSelectNone">Снять все</button>
+    </div>
+    <div class="type-filters" id="typeFilters"></div>
+    <p class="excluded-note" id="filterStatus"></p>
+  </div>
+</div>
 
 <div class="kpi-grid">
-  <div class="kpi-card"><div class="value">{len(ctx.incidents)}</div><div class="label">Устранено инцидентов</div></div>
-  <div class="kpi-card"><div class="value">{avg_mttr}</div><div class="label">Средний MTTR</div></div>
+  <div class="kpi-card"><div class="value" id="kpiTotal">0</div><div class="label">Устранено инцидентов</div></div>
+  <div class="kpi-card"><div class="value" id="kpiMttr">—</div><div class="label">Средний MTTR</div></div>
   <div class="kpi-card"><div class="value">{ctx.active_problems}</div><div class="label">Активных эпизодов сейчас</div></div>
-  <div class="kpi-card"><div class="value">{ctx.unique_devices}</div><div class="label">Уникальных устройств</div></div>
+  <div class="kpi-card"><div class="value" id="kpiDevices">0</div><div class="label">Уникальных устройств</div></div>
 </div>
 
 <div class="section narrative">
   <h2>Эффективность мониторинга</h2>
   <p>{build_effectiveness_text(ctx)}</p>
+  <p class="muted">Используйте фильтр типов выше — таблицы и графики обновляются без перезагрузки страницы.</p>
 </div>
 
 <div class="section">
@@ -866,13 +1166,13 @@ document.querySelectorAll('.collapsible-trigger').forEach(trigger => {{
       <th>Тип события</th><th>Устройство</th><th>Источник</th>
       <th>Кол-во</th><th>Ср. длительность</th>
     </tr></thead>
-    <tbody>{''.join(summary_html) if summary_html else '<tr><td colspan="5" class="muted">Нет данных</td></tr>'}</tbody>
+    <tbody id="summaryBody"><tr><td colspan="5" class="muted">Загрузка...</td></tr></tbody>
   </table>
 </div>
 
 <div class="section collapsible">
   <div class="collapsible-trigger">
-    <h2>Детальный список эпизодов ({len(ctx.incidents)})</h2>
+    <h2>Детальный список эпизодов (<span id="detailCount">0</span>)</h2>
     <span>+</span>
   </div>
   <div class="collapsible-content">
@@ -881,14 +1181,16 @@ document.querySelectorAll('.collapsible-trigger').forEach(trigger => {{
         <th>Тип</th><th>Устройство</th><th>Тяжесть</th>
         <th>Начало</th><th>Устранено</th><th>Длительность</th>
       </tr></thead>
-      <tbody>{''.join(detail_html) if detail_html else '<tr><td colspan="6" class="muted">Нет данных</td></tr>'}</tbody>
+      <tbody id="detailBody"><tr><td colspan="6" class="muted">Загрузка...</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <p class="footer">Wisenet Диагностика · отчёт сгенерирован автоматически из monitoring.db</p>
 </div>
+<script>const reportData = {payload_json};</script>
 {chart_js}
+<script>{_interactive_report_js()}</script>
 </body></html>
 """
 
@@ -951,6 +1253,18 @@ def main() -> int:
         action="store_true",
         help="Минимальный вывод (только итоговая строка)",
     )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="Доп. шаблон исключения (подстрока в типе/причине); можно указать несколько раз",
+    )
+    parser.add_argument(
+        "--no-default-excludes",
+        action="store_true",
+        help="Не исключать AuthFail и PoE выключен на канале по умолчанию",
+    )
     args = parser.parse_args()
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -1012,6 +1326,22 @@ def main() -> int:
     conn.close()
     reporter.info("Соединение с базой данных закрыто", indent=1)
 
+    exclude_patterns = parse_exclude_patterns(
+        args.exclude,
+        use_defaults=not args.no_default_excludes,
+    )
+    if exclude_patterns:
+        reporter.stage_start(
+            "Фильтрация исключённых типов",
+            detail=", ".join(exclude_patterns),
+        )
+        incidents, excluded_count = apply_incident_exclusions(incidents, exclude_patterns)
+        reporter.stage_done(
+            f"в отчёт: {len(incidents)}, исключено: {excluded_count}"
+        )
+    else:
+        excluded_count = 0
+
     reporter.stage_start("Агрегация и расчёт показателей")
     ctx = build_report_context(
         incidents,
@@ -1030,7 +1360,11 @@ def main() -> int:
         detail="Chart.js" if not args.static_charts else "matplotlib PNG",
     )
     html_content = render_html_report(
-        ctx, top_n=args.top_n, static_charts=args.static_charts
+        ctx,
+        top_n=args.top_n,
+        static_charts=args.static_charts,
+        excluded_patterns=exclude_patterns,
+        excluded_count=excluded_count,
     )
     reporter.stage_done(f"{len(html_content):,} символов".replace(",", " "))
 

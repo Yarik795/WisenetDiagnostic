@@ -19,6 +19,7 @@ from episode_parser import (  # noqa: E402
     RECORDER_PROBLEM_STATUSES,
     filter_episodes_by_resolved_at,
     parse_resolved_episodes,
+    text_matches_any_pattern,
 )
 
 
@@ -129,3 +130,11 @@ def test_unknown_does_not_start_episode() -> None:
     )
     assert len(eps) == 1
     assert eps[0].started_at == _t(1)
+
+
+def test_text_matches_any_pattern() -> None:
+    assert text_matches_any_pattern("Статус регистрации: AuthFail", ["AuthFail"])
+    assert text_matches_any_pattern(
+        "[Канал] PoE выключен на канале 3", ["PoE выключен на канале"]
+    )
+    assert not text_matches_any_pattern("Потеря видео (VideoLoss)", ["AuthFail"])

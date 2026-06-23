@@ -126,3 +126,11 @@ def filter_episodes_by_resolved_at(
 
 def episode_duration_hours(ep: ResolvedEpisode) -> float:
     return max(0.0, (ep.resolved_at - ep.started_at).total_seconds() / 3600.0)
+
+
+def text_matches_any_pattern(text: str, patterns: Sequence[str]) -> bool:
+    """Проверка вхождения любого шаблона (без учёта регистра)."""
+    if not patterns:
+        return False
+    haystack = text.lower()
+    return any(p.lower() in haystack for p in patterns if p.strip())
