@@ -21,6 +21,7 @@ import os
 import sqlite3
 import statistics
 import sys
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -59,6 +60,96 @@ DEFAULT_CONFIG_PATH = Path(
 DEFAULT_OUTPUT = REPO_ROOT / "data" / "reports" / "resolved_incidents_report.html"
 
 SourceKind = Literal["category", "status"]
+
+# Как часто выводить промежуточный прогресс при обходе потоков истории
+PROGRESS_EVERY_STREAMS = 25
+
+
+class ProgressReporter:
+    """Подробный вывод этапов и прогресса в терминал."""
+
+    def __init__(self, *, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self._run_start = time.perf_counter()
+        self._stage_start = self._run_start
+        self._stage_name = ""
+        self._completed_stages = 0
+        self._stage_durations: list[float] = []
+
+    def _ts(self) -> str:
+        return datetime.now().strftime("%H:%M:%S")
+
+    def info(self, message: str, *, indent: int = 0) -> None:
+        if not self.enabled:
+            return
+        prefix = "  " * indent
+        print(f"[{self._ts()}] {prefix}{message}", flush=True)
+
+    def stage_start(self, name: str, *, detail: str = "") -> None:
+        self._stage_name = name
+        self._stage_start = time.perf_counter()
+        suffix = f" — {detail}" if detail else ""
+        self.info(f">> {name}{suffix}")
+
+    def stage_done(self, detail: str = "") -> float:
+        elapsed = time.perf_counter() - self._stage_start
+        self._stage_durations.append(elapsed)
+        self._completed_stages += 1
+        suffix = f": {detail}" if detail else ""
+        self.info(f"OK {self._stage_name} завершён за {elapsed:.2f} с{suffix}")
+        return elapsed
+
+    def warn(self, message: str) -> None:
+        if not self.enabled:
+            return
+        print(f"[{self._ts()}] ! {message}", file=sys.stderr, flush=True)
+
+    def progress(
+        self,
+        current: int,
+        total: int,
+        *,
+        label: str = "",
+        every: int = PROGRESS_EVERY_STREAMS,
+    ) -> None:
+        if not self.enabled or total <= 0:
+            return
+        if current != total and (current % every != 0):
+            return
+        pct = current / total * 100
+        elapsed = time.perf_counter() - self._stage_start
+        eta_text = ""
+        if 0 < current < total:
+            eta_sec = elapsed / current * (total - current)
+            eta_text = f", ~осталось {_format_eta(eta_sec)}"
+        label_part = f"{label}: " if label else ""
+        self.info(
+            f".. {label_part}{current}/{total} ({pct:.0f}%){eta_text}",
+            indent=1,
+        )
+
+    def run_summary(self, *, output_path: Path, incident_count: int, active_count: int) -> None:
+        total_elapsed = time.perf_counter() - self._run_start
+        self.info(
+            f"Готово за {total_elapsed:.2f} с | отчёт: {output_path} | "
+            f"инцидентов: {incident_count} · активных эпизодов: {active_count}"
+        )
+
+
+def _format_eta(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.0f} с"
+    if seconds < 3600:
+        return f"{seconds / 60:.1f} мин"
+    return f"{seconds / 3600:.1f} ч"
+
+
+def _format_bytes(size: int) -> str:
+    if size < 1024:
+        return f"{size} Б"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} КБ"
+    return f"{size / (1024 * 1024):.1f} МБ"
 
 
 @dataclass
@@ -132,18 +223,40 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
     return dt
 
 
-def _connect(db_path: Path) -> sqlite3.Connection:
+def _connect(db_path: Path, reporter: ProgressReporter) -> sqlite3.Connection:
+    reporter.stage_start("Подключение к базе данных", detail=str(db_path.resolve()))
     if not db_path.is_file():
         raise FileNotFoundError(f"База не найдена: {db_path}")
+    size = db_path.stat().st_size
+    reporter.info(f"Размер файла БД: {_format_bytes(size)}", indent=1)
+    t0 = time.perf_counter()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    elapsed = time.perf_counter() - t0
+    reporter.info(f"Соединение установлено за {elapsed:.3f} с", indent=1)
+    for required in ("category_status_history", "status_history"):
+        if required in tables:
+            reporter.info(f"Таблица {required}: найдена", indent=1)
+        else:
+            reporter.warn(f"Таблица {required} отсутствует — часть данных будет пропущена")
+    reporter.stage_done(f"{len(tables)} таблиц в схеме")
     return conn
 
 
-def load_recorder_names(config_path: Path) -> dict[str, str]:
+def load_recorder_names(config_path: Path, reporter: ProgressReporter) -> dict[str, str]:
+    reporter.stage_start("Загрузка имён устройств", detail=str(config_path))
     if not config_path.is_file():
+        reporter.warn(f"config.json не найден: {config_path}")
+        reporter.stage_done("0 регистраторов (файл отсутствует)")
         return {}
     try:
+        t0 = time.perf_counter()
         data = json.loads(config_path.read_text(encoding="utf-8"))
         out: dict[str, str] = {}
         for rec in data.get("recorders", []):
@@ -153,20 +266,35 @@ def load_recorder_names(config_path: Path) -> dict[str, str]:
             name = rec.get("name") or rec.get("host") or rid
             obj = rec.get("object_name") or ""
             out[rid] = f"{obj} / {name}" if obj else str(name)
+        elapsed = time.perf_counter() - t0
+        reporter.info(f"Прочитано имён регистраторов: {len(out)} за {elapsed:.3f} с", indent=1)
+        reporter.stage_done(f"{len(out)} регистраторов")
         return out
     except Exception as exc:
-        print(f"Предупреждение: не удалось прочитать {config_path}: {exc}", file=sys.stderr)
+        reporter.warn(f"Не удалось прочитать {config_path}: {exc}")
+        reporter.stage_done("ошибка чтения")
         return {}
 
 
-def _channel_names(conn: sqlite3.Connection) -> dict[tuple[str, int], str]:
+def _channel_names(conn: sqlite3.Connection, reporter: ProgressReporter) -> dict[tuple[str, int], str]:
+    reporter.stage_start("Загрузка имён каналов", detail="таблица channels")
     try:
+        t0 = time.perf_counter()
         rows = conn.execute(
             "SELECT recorder_id, channel_no, name FROM channels WHERE name IS NOT NULL"
         ).fetchall()
-    except sqlite3.Error:
+        elapsed = time.perf_counter() - t0
+        result = {(r["recorder_id"], r["channel_no"]): r["name"] for r in rows}
+        reporter.info(
+            f"Получено имён каналов: {len(result)} из {len(rows)} строк за {elapsed:.3f} с",
+            indent=1,
+        )
+        reporter.stage_done(f"{len(result)} каналов с именами")
+        return result
+    except sqlite3.Error as exc:
+        reporter.warn(f"Не удалось прочитать channels: {exc}")
+        reporter.stage_done("0 каналов")
         return {}
-    return {(r["recorder_id"], r["channel_no"]): r["name"] for r in rows}
 
 
 def _recorder_label(recorder_id: str, names: dict[str, str]) -> str:
@@ -192,7 +320,12 @@ def _channel_label(
     return entity_id, f"{base} — канал {channel_no}"
 
 
-def _fetch_category_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], list[HistoryRow]]:
+def _fetch_category_streams(
+    conn: sqlite3.Connection,
+    reporter: ProgressReporter,
+) -> dict[tuple[str, str], list[HistoryRow]]:
+    reporter.stage_start("Получение данных", detail="category_status_history")
+    t0 = time.perf_counter()
     rows = conn.execute(
         """
         SELECT recorder_id, category, status, reason, recorded_at
@@ -200,8 +333,15 @@ def _fetch_category_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], l
         ORDER BY recorder_id, category, recorded_at ASC
         """
     ).fetchall()
+    fetch_elapsed = time.perf_counter() - t0
+    reporter.info(
+        f"SQL: {len(rows)} записей за {fetch_elapsed:.3f} с",
+        indent=1,
+    )
+
+    reporter.stage_start("Группировка потоков", detail="category_status_history")
     streams: dict[tuple[str, str], list[HistoryRow]] = defaultdict(list)
-    for row in rows:
+    for idx, row in enumerate(rows, start=1):
         key = (row["recorder_id"], row["category"])
         streams[key].append(
             HistoryRow(
@@ -211,10 +351,18 @@ def _fetch_category_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], l
                 reason=row["reason"],
             )
         )
+        if idx % 5000 == 0:
+            reporter.info(f".. сгруппировано {idx}/{len(rows)} записей", indent=1)
+    reporter.stage_done(f"{len(streams)} потоков из {len(rows)} записей")
     return streams
 
 
-def _fetch_status_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], list[HistoryRow]]:
+def _fetch_status_streams(
+    conn: sqlite3.Connection,
+    reporter: ProgressReporter,
+) -> dict[tuple[str, str], list[HistoryRow]]:
+    reporter.stage_start("Получение данных", detail="status_history")
+    t0 = time.perf_counter()
     rows = conn.execute(
         """
         SELECT entity_type, entity_id, status, reason, recorded_at
@@ -222,8 +370,15 @@ def _fetch_status_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], lis
         ORDER BY entity_type, entity_id, recorded_at ASC
         """
     ).fetchall()
+    fetch_elapsed = time.perf_counter() - t0
+    reporter.info(
+        f"SQL: {len(rows)} записей за {fetch_elapsed:.3f} с",
+        indent=1,
+    )
+
+    reporter.stage_start("Группировка потоков", detail="status_history")
     streams: dict[tuple[str, str], list[HistoryRow]] = defaultdict(list)
-    for row in rows:
+    for idx, row in enumerate(rows, start=1):
         key = (row["entity_type"], row["entity_id"])
         streams[key].append(
             HistoryRow(
@@ -233,19 +388,29 @@ def _fetch_status_streams(conn: sqlite3.Connection) -> dict[tuple[str, str], lis
                 reason=row["reason"],
             )
         )
+        if idx % 5000 == 0:
+            reporter.info(f".. сгруппировано {idx}/{len(rows)} записей", indent=1)
+    reporter.stage_done(f"{len(streams)} потоков из {len(rows)} записей")
     return streams
 
 
 def load_category_incidents(
     conn: sqlite3.Connection,
     names: dict[str, str],
+    reporter: ProgressReporter,
     *,
     since: Optional[datetime] = None,
     until: Optional[datetime] = None,
 ) -> tuple[list[ResolvedIncident], int]:
+    streams = _fetch_category_streams(conn, reporter)
+    reporter.stage_start(
+        "Обработка данных",
+        detail="поиск устранённых эпизодов в category_status_history",
+    )
     incidents: list[ResolvedIncident] = []
     active = 0
-    for (recorder_id, category), rows in _fetch_category_streams(conn).items():
+    total = len(streams)
+    for idx, ((recorder_id, category), rows) in enumerate(streams.items(), start=1):
         active += count_active_episodes(
             rows,
             problem_statuses=DEFAULT_PROBLEM_STATUSES,
@@ -268,6 +433,10 @@ def load_category_incidents(
                         reason=filtered.reason,
                     )
                 )
+        reporter.progress(idx, total, label="потоки категорий")
+    reporter.stage_done(
+        f"{len(incidents)} устранённых, {active} активных эпизодов"
+    )
     return incidents, active
 
 
@@ -275,13 +444,20 @@ def load_status_incidents(
     conn: sqlite3.Connection,
     names: dict[str, str],
     channel_names: dict[tuple[str, int], str],
+    reporter: ProgressReporter,
     *,
     since: Optional[datetime] = None,
     until: Optional[datetime] = None,
 ) -> tuple[list[ResolvedIncident], int]:
+    streams = _fetch_status_streams(conn, reporter)
+    reporter.stage_start(
+        "Обработка данных",
+        detail="поиск устранённых эпизодов в status_history",
+    )
     incidents: list[ResolvedIncident] = []
     active = 0
-    for (entity_type, entity_id), rows in _fetch_status_streams(conn).items():
+    total = len(streams)
+    for idx, ((entity_type, entity_id), rows) in enumerate(streams.items(), start=1):
         problem_statuses = (
             RECORDER_PROBLEM_STATUSES
             if entity_type == "recorder"
@@ -318,6 +494,10 @@ def load_status_incidents(
                         reason=filtered.reason,
                     )
                 )
+        reporter.progress(idx, total, label="потоки статусов")
+    reporter.stage_done(
+        f"{len(incidents)} устранённых, {active} активных эпизодов"
+    )
     return incidents, active
 
 
@@ -766,7 +946,22 @@ def main() -> int:
         action="store_true",
         help="Встроить PNG-графики (matplotlib) вместо Chart.js",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Минимальный вывод (только итоговая строка)",
+    )
     args = parser.parse_args()
+
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
+    reporter = ProgressReporter(enabled=not args.quiet)
+    reporter.info("Запуск формирования отчёта по устранённым инцидентам")
 
     since = _parse_iso(args.since) if args.since else None
     until = _parse_iso(args.until) if args.until else None
@@ -777,34 +972,47 @@ def main() -> int:
         print(exc, file=sys.stderr)
         return 1
 
+    period_parts: list[str] = []
+    if since:
+        period_parts.append(f"с {format_for_display(since, '%d.%m.%Y')}")
+    if until:
+        period_parts.append(f"по {format_for_display(until, '%d.%m.%Y')}")
+    period_text = ", ".join(period_parts) if period_parts else "за всё время"
+    reporter.info(
+        f"Параметры: БД={args.db.resolve()}, источники={','.join(sources)}, "
+        f"период={period_text}, выход={args.output.resolve()}"
+    )
+
     try:
-        conn = _connect(args.db)
+        conn = _connect(args.db, reporter)
     except (FileNotFoundError, RuntimeError) as exc:
-        print(exc, file=sys.stderr)
+        reporter.warn(str(exc))
         return 1
 
-    names = load_recorder_names(args.config)
-    channel_names = _channel_names(conn)
+    names = load_recorder_names(args.config, reporter)
+    channel_names = _channel_names(conn, reporter)
 
     incidents: list[ResolvedIncident] = []
     active_total = 0
 
     if "category" in sources:
         cat_inc, cat_active = load_category_incidents(
-            conn, names, since=since, until=until
+            conn, names, reporter, since=since, until=until
         )
         incidents.extend(cat_inc)
         active_total += cat_active
 
     if "status" in sources:
         st_inc, st_active = load_status_incidents(
-            conn, names, channel_names, since=since, until=until
+            conn, names, channel_names, reporter, since=since, until=until
         )
         incidents.extend(st_inc)
         active_total += st_active
 
     conn.close()
+    reporter.info("Соединение с базой данных закрыто", indent=1)
 
+    reporter.stage_start("Агрегация и расчёт показателей")
     ctx = build_report_context(
         incidents,
         active_problems=active_total,
@@ -813,16 +1021,30 @@ def main() -> int:
         db_path=args.db.resolve(),
         sources=sources,
     )
+    reporter.stage_done(
+        f"{len(ctx.summary_rows)} строк сводки, {len(ctx.incidents)} эпизодов"
+    )
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    reporter.stage_start(
+        "Генерация HTML",
+        detail="Chart.js" if not args.static_charts else "matplotlib PNG",
+    )
     html_content = render_html_report(
         ctx, top_n=args.top_n, static_charts=args.static_charts
     )
-    args.output.write_text(html_content, encoding="utf-8")
+    reporter.stage_done(f"{len(html_content):,} символов".replace(",", " "))
 
-    print(f"Отчёт записан: {args.output.resolve()}")
-    print(f"Устранённых инцидентов: {len(incidents)}")
-    print(f"Активных эпизодов: {active_total}")
+    reporter.stage_start("Запись файла", detail=str(args.output))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(html_content, encoding="utf-8")
+    out_size = args.output.stat().st_size
+    reporter.stage_done(_format_bytes(out_size))
+
+    reporter.run_summary(
+        output_path=args.output.resolve(),
+        incident_count=len(incidents),
+        active_count=active_total,
+    )
     return 0
 
 
