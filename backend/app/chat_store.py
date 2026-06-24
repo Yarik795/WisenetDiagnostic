@@ -96,6 +96,71 @@ class ChatStore:
             for row in rows
         ]
 
+    def list_sessions_with_messages(self, limit: int = 50) -> list[ChatSessionRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.id, s.title, s.created_at
+                FROM chat_sessions s
+                WHERE EXISTS (
+                    SELECT 1 FROM chat_messages m WHERE m.session_id = s.id
+                )
+                ORDER BY (
+                    SELECT MAX(m.created_at) FROM chat_messages m WHERE m.session_id = s.id
+                ) DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            ChatSessionRow(
+                id=row["id"],
+                title=row["title"],
+                created_at=_parse_dt(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    def get_latest_session(self) -> Optional[ChatSessionRow]:
+        sessions = self.list_sessions_with_messages(limit=1)
+        return sessions[0] if sessions else None
+
+    def delete_empty_sessions(self) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                DELETE FROM chat_sessions
+                WHERE id NOT IN (
+                    SELECT DISTINCT session_id FROM chat_messages
+                )
+                """
+            )
+            return cur.rowcount
+
+    def get_message(self, message_id: int) -> Optional[ChatMessageRow]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, session_id, role, content, sql, chart_json, table_json, created_at
+                FROM chat_messages WHERE id = ?
+                """,
+                (message_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _row_to_message(row)
+
+    def has_assistant_reply_after(self, session_id: str, user_message_id: int) -> bool:
+        messages = self.list_messages(session_id)
+        found = False
+        for msg in messages:
+            if msg.id == user_message_id:
+                found = True
+                continue
+            if found and msg.role == "assistant":
+                return True
+        return False
+
     def get_session(self, session_id: str) -> Optional[ChatSessionRow]:
         with self._connect() as conn:
             row = conn.execute(

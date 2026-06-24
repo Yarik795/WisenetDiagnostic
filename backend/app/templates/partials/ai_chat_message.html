@@ -3,8 +3,9 @@
     {% if message.role == 'user' %}Вы{% else %}AI{% endif %}
   </div>
   <div class="chat-msg-body">
-    <div class="chat-msg-text{% if message.pending %} chat-msg-text--pending{% endif %}"
-         {% if message.pending %}data-pending="1"{% endif %}>
+    <div class="chat-msg-text{% if message.pending %} chat-msg-text--pending{% endif %}{% if message.role == 'assistant' and not message.pending %} chat-msg-text--markdown{% endif %}"
+         {% if message.pending %}data-pending="1"{% endif %}
+         {% if message.role == 'assistant' and not message.pending %}data-markdown="0"{% endif %}>
       {{ message.content }}
     </div>
 

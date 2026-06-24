@@ -10,10 +10,12 @@ from ..device_kinds import ALL_DEVICE_KINDS, SYSTEM_KIND_LABELS, recorder_device
 from ..exclusions import excluded_ids_set
 from ..models import LLMSettings
 from ..state_store import DEFAULT_DB_PATH, StateStore
-from .client import LLMClient
+from .client import LLMClient, StreamedToolCall
 from .schema_context import build_system_prompt
 from .sql_guard import run_readonly
-from .tools import TOOLS, build_echarts_option, table_for_llm
+from .tools import TOOLS, _table_columns, _validate_chart_args, build_echarts_option, table_for_llm
+
+_CHART_KEYWORDS = ("график", "chart", "диаграмм", "pie", "bar", "line", "построй")
 
 
 @dataclass
@@ -23,10 +25,6 @@ class ChatResult:
     table: Optional[dict[str, Any]] = None
     chart_option: Optional[dict[str, Any]] = None
     tool_calls_log: list[str] = field(default_factory=list)
-
-
-def _chunk_text(text: str, size: int = 24) -> list[str]:
-    return [text[i : i + size] for i in range(0, len(text), size)] or [""]
 
 
 class ChatOrchestrator:
@@ -84,10 +82,21 @@ class ChatOrchestrator:
                     None,
                     None,
                 )
+            err = _validate_chart_args(args, last_table)
+            if err:
+                cols = ", ".join(_table_columns(last_table))
+                return (
+                    f"Не удалось построить график: {err}. Доступные колонки: {cols}",
+                    None,
+                    None,
+                    None,
+                )
             option = build_echarts_option(args, last_table)
             if not option:
+                cols = ", ".join(_table_columns(last_table))
                 return (
-                    "Не удалось построить график: проверь имена колонок.",
+                    f"Не удалось построить график: проверь имена колонок. "
+                    f"Доступные колонки: {cols}",
                     None,
                     None,
                     None,
@@ -192,31 +201,111 @@ class ChatOrchestrator:
             )
         return None
 
-    def _run_loop(
+    def _iteration_limit_message(
+        self,
+        result: ChatResult,
+        user_text: str,
+    ) -> str:
+        lower = user_text.lower()
+        wants_chart = any(k in lower for k in _CHART_KEYWORDS)
+        if (
+            wants_chart
+            and "run_sql" in result.tool_calls_log
+            and "make_chart" not in result.tool_calls_log
+        ):
+            return (
+                "Для графика нужен ещё один шаг (make_chart). "
+                "Увеличьте llm.max_iterations в config.json или повторите запрос."
+            )
+        return "Не удалось завершить запрос за отведённое число шагов."
+
+    def _iter_loop(
         self,
         messages: list[dict[str, Any]],
         *,
-        on_tool: Optional[Any] = None,
-    ) -> ChatResult:
+        stream_final: bool = False,
+    ) -> Iterator[dict[str, Any]]:
         result = ChatResult()
         last_table: Optional[dict[str, Any]] = None
+        user_text = messages[-1]["content"] if messages else ""
 
         for _ in range(self.settings.max_iterations):
+            if stream_final:
+                content_parts: list[str] = []
+                streamed_tools: list[StreamedToolCall] = []
+                for item in self.llm.iter_completion(messages, tools=TOOLS):
+                    if isinstance(item, str):
+                        content_parts.append(item)
+                        yield {"type": "delta", "data": item}
+                    else:
+                        streamed_tools.append(item)
+
+                if streamed_tools:
+                    msg_dump: dict[str, Any] = {
+                        "role": "assistant",
+                        "content": "".join(content_parts) or None,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                },
+                            }
+                            for tc in streamed_tools
+                        ],
+                    }
+                    messages.append(msg_dump)
+                    for call in streamed_tools:
+                        tool_name = call.name
+                        yield {"type": "tool", "data": {"name": tool_name}}
+                        result.tool_calls_log.append(tool_name)
+                        try:
+                            tool_args = json.loads(call.arguments or "{}")
+                        except json.JSONDecodeError:
+                            tool_args = {}
+                        tool_result, table, chart, sql = self._execute_tool(
+                            tool_name,
+                            tool_args,
+                            last_table=last_table,
+                        )
+                        if table is not None:
+                            last_table = table
+                            result.table = table
+                        if chart is not None:
+                            result.chart_option = chart
+                        if sql:
+                            result.sql = sql
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call.id,
+                                "content": tool_result,
+                            }
+                        )
+                    continue
+
+                result.text = "".join(content_parts)
+                result.table = last_table
+                yield {"type": "_result", "data": result}
+                return
+
             response = self.llm.chat(messages, tools=TOOLS, stream=False)
             msg = response.choices[0].message
 
             if not msg.tool_calls:
                 result.text = msg.content or ""
                 result.table = last_table
-                return result
+                yield {"type": "_result", "data": result}
+                return
 
             messages.append(msg.model_dump(exclude_none=True))
 
             for call in msg.tool_calls:
                 fn = call.function
                 tool_name = fn.name
-                if on_tool:
-                    on_tool(tool_name)
+                yield {"type": "tool", "data": {"name": tool_name}}
                 result.tool_calls_log.append(tool_name)
                 try:
                     tool_args = json.loads(fn.arguments or "{}")
@@ -244,8 +333,20 @@ class ChatOrchestrator:
                     }
                 )
 
-        result.text = "Не удалось завершить запрос за отведённое число шагов."
+        result.text = self._iteration_limit_message(result, user_text)
         result.table = last_table
+        yield {"type": "_result", "data": result}
+
+    def _run_loop(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> ChatResult:
+        result = ChatResult()
+        for event in self._iter_loop(messages, stream_final=False):
+            if event["type"] == "_result":
+                data = event.get("data")
+                if isinstance(data, ChatResult):
+                    return data
         return result
 
     def run(self, history: list[dict[str, str]], user_text: str) -> ChatResult:
@@ -266,22 +367,18 @@ class ChatOrchestrator:
             return
 
         messages = self._build_messages(history, user_text)
+        result: Optional[ChatResult] = None
 
-        def on_tool(name: str) -> None:
-            pass
-
-        tool_events: list[dict[str, Any]] = []
-
-        def capture_tool(name: str) -> None:
-            tool_events.append({"type": "tool", "data": {"name": name}})
-
-        result = self._run_loop(messages, on_tool=capture_tool)
-
-        for event in tool_events:
+        for event in self._iter_loop(messages, stream_final=True):
+            if event["type"] == "_result":
+                data = event.get("data")
+                if isinstance(data, ChatResult):
+                    result = data
+                continue
             yield event
 
-        for chunk in _chunk_text(result.text):
-            yield {"type": "delta", "data": chunk}
+        if result is None:
+            result = ChatResult(text="Не удалось получить ответ.")
 
         yield {
             "type": "done",

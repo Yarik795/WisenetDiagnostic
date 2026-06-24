@@ -24,9 +24,14 @@
 </div>
 {% endif %}
 
+<div id="ai-chat-error-banner" class="banner-error ai-chat-error-banner" hidden></div>
+
 <div class="ai-chat-layout">
   <aside class="ai-chat-sessions" aria-label="Сессии чата">
-    <div class="ai-chat-sessions-title">История</div>
+    <div class="ai-chat-sessions-header">
+      <div class="ai-chat-sessions-title">История</div>
+      <button type="button" id="ai-chat-history-toggle" class="btn btn-ghost btn-sm ai-chat-history-toggle" aria-label="Свернуть историю">&#9664;</button>
+    </div>
     <nav class="ai-chat-sessions-list">
       {% for s in sessions %}
       <a href="/ai-chat?session_id={{ s.id }}"
@@ -48,10 +53,16 @@
       {% endfor %}
     </div>
 
+    <div id="ai-chat-loading" class="ai-chat-loading htmx-indicator">
+      <span class="ai-chat-loading-spinner" aria-hidden="true"></span>
+      AI обрабатывает запрос…
+    </div>
+
     <form id="ai-chat-form" class="ai-chat-form"
           hx-post="/ai-chat/message"
           hx-target="#ai-chat-messages"
           hx-swap="beforeend"
+          hx-indicator="#ai-chat-loading"
           hx-disabled-elt="find button, find textarea">
       <input type="hidden" name="session_id" value="{{ session_id }}">
       <textarea name="text" rows="2" placeholder="Например: сколько регистраторов в статусе error?"
@@ -67,6 +78,6 @@
 
 {% block scripts %}
 <script src="/static/js/echarts.min.js?v=5.5.1"></script>
-<script src="/static/js/ai_chat.js?v=20260615-1"></script>
+<script src="/static/js/ai_chat.js?v=20260623-1"></script>
 {{ super() }}
 {% endblock %}

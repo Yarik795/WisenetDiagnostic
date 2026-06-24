@@ -90,8 +90,8 @@
 | `llm/schema_context.py` | Системный промпт и динамическое описание схемы БД (`PRAGMA table_info`) |
 | `llm/tools.py` | Function-calling: `run_sql`, `make_chart`, typed-инструменты; сборка ECharts option |
 | `llm/orchestrator.py` | Цикл tool calling, SSE-стриминг финального текста |
-| `chat_store.py` | История чата: таблицы `chat_sessions`, `chat_messages` в SQLite |
-| `web/ai_chat.py` | Маршруты `/ai-chat`, `/ai-chat/message`, `/ai-chat/stream`, `/ai-chat/session` |
+| `chat_store.py` | История чата: `chat_sessions`, `chat_messages`; `list_sessions_with_messages`, `get_latest_session`, `delete_empty_sessions` |
+| `web/ai_chat.py` | `/ai-chat` (redirect на последнюю сессию), `/ai-chat/message`, `/ai-chat/stream?message_id=…`, `/ai-chat/session` |
 
 #### Источники данных и CMDB
 
@@ -151,8 +151,7 @@
 
 - `css/app.css` — стили
 - `js/app.js` — сворачивание групп, обновление дашбордов, взаимодействие с HTMX
-- `js/ai_chat.js` — SSE-стриминг ответов LLM, рендер ECharts в сообщениях чата
-- `js/ai_chat.js` — SSE-стриминг ответа LLM, рендер ECharts в сообщениях чата
+- `js/ai_chat.js` — SSE по `message_id`, markdown, ECharts, retry, адаптивная вёрстка
 
 ---
 
@@ -172,6 +171,8 @@
 | `resolved_incidents_report.py` | HTML-отчёт по устранённым инцидентам: выборка из `status_history` и `category_status_history`, Chart.js-графики |
 | `export_recorders_serial.py` | Выгрузка серийных номеров регистраторов |
 | `db_profile_export.py` | Профилирование `monitoring.db`: статистика столбцов, распределения, примеры строк (JSON/CSV для генерации тестовой БД) |
+| `db_profile_import.py` | Создание тестовой `monitoring.db` из JSON-профиля; опционально `--sync-config` |
+| `cleanup_empty_chat_sessions.py` | Удаление пустых сессий чата AI из `chat_sessions` |
 | `probe_nvr_manufacture_date.py` | Проверка определения даты производства по серийнику |
 
 Запуск из корня проекта; скрипты добавляют `backend` и `scripts` в `sys.path` и используют `app.config_store` / `app.models`.

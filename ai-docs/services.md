@@ -233,7 +233,7 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 | `get_recorder_health` | Метрики регистратора по `recorder_id` из `StateStore` |
 | `count_problems_by_kind` | Проблемы по видам систем (tsv/skud/bio/sots) из конфига + метрик |
 
-**Поток UI:** `POST /ai-chat/message` сохраняет реплику пользователя → `GET /ai-chat/stream` (SSE) запускает оркестратор → дельты текста и финальное событие `done` (текст, SQL, таблица, график) → `ChatStore.append_message` для ответа ассистента. Графики рисует ECharts на клиенте (`static/js/ai_chat.js`).
+**Поток UI:** `POST /ai-chat/message` сохраняет реплику пользователя → `GET /ai-chat/stream?session_id=…&message_id=…` (SSE, один stream на сообщение) запускает оркестратор → события `tool` (в реальном времени), `delta` (текст LLM), `done` (текст, SQL, таблица, график) → `ChatStore.append_message` для ответа ассистента. Заголовок сессии обновляется после успешного ответа. `GET /ai-chat` без `session_id` перенаправляет на последнюю непустую сессию. В сайдбаре — только сессии с сообщениями. Графики: `make_chart` валидирует колонки и строит ECharts `option` (dataZoom при многих категориях). Клиент: `static/js/ai_chat.js`.
 
 **Инварианты:** credentials и `config.json` в инструменты LLM не передаются; запись в БД мониторинга через чат невозможна.
 

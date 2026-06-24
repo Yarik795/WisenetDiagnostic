@@ -42,36 +42,44 @@ def _message_view(msg: ChatMessageRow) -> dict[str, Any]:
     }
 
 
-def _ensure_session(
-    chat_store: ChatStore,
-    session_id: Optional[str],
-) -> str:
-    if session_id:
-        session = chat_store.get_session(session_id)
-        if session:
-            return session.id
-    session = chat_store.create_session()
-    return session.id
+def _sse_error(text: str) -> str:
+    payload = json.dumps({"text": text}, ensure_ascii=False)
+    return f"event: error\ndata: {payload}\n\n"
 
 
-@router.get("/ai-chat", response_class=HTMLResponse)
+@router.get("/ai-chat", response_class=HTMLResponse, response_model=None)
 def ai_chat_page(
     request: Request,
     session_id: Optional[str] = None,
     chat_store: ChatStore = Depends(get_chat_store),
     store: ConfigStore = Depends(get_store),
-) -> HTMLResponse:
-    active_session_id = _ensure_session(chat_store, session_id)
-    sessions = chat_store.list_sessions()
-    messages = chat_store.list_messages(active_session_id)
+) -> HTMLResponse | RedirectResponse:
+    if session_id is None:
+        latest = chat_store.get_latest_session()
+        if latest:
+            return RedirectResponse(
+                url=f"/ai-chat?session_id={latest.id}",
+                status_code=303,
+            )
+        session = chat_store.create_session()
+        return RedirectResponse(
+            url=f"/ai-chat?session_id={session.id}",
+            status_code=303,
+        )
+
+    session = chat_store.get_session(session_id)
+    if session is None:
+        return RedirectResponse(url="/ai-chat", status_code=303)
+
+    messages = chat_store.list_messages(session_id)
     llm_cfg = store.load().llm
     return templates.TemplateResponse(
         request,
         "ai_chat.html",
         {
             "active_nav": "ai_chat",
-            "session_id": active_session_id,
-            "sessions": sessions,
+            "session_id": session_id,
+            "sessions": chat_store.list_sessions_with_messages(),
             "messages": [_message_view(m) for m in messages],
             "llm_enabled": llm_cfg.enabled,
             "llm_configured": bool(llm_cfg.api_key),
@@ -103,9 +111,6 @@ def ai_chat_message(
         return HTMLResponse("Сессия не найдена", status_code=404)
 
     user_msg = chat_store.append_message(session_id, "user", text)
-    if session.title == "Новый чат":
-        title = text[:60] + ("…" if len(text) > 60 else "")
-        chat_store.update_session_title(session_id, title)
 
     return templates.TemplateResponse(
         request,
@@ -113,7 +118,9 @@ def ai_chat_message(
         {
             "session_id": session_id,
             "user_message": _message_view(user_msg),
-            "stream_url": f"/ai-chat/stream?session_id={session_id}",
+            "stream_url": (
+                f"/ai-chat/stream?session_id={session_id}&message_id={user_msg.id}"
+            ),
         },
     )
 
@@ -121,23 +128,35 @@ def ai_chat_message(
 @router.get("/ai-chat/stream")
 def ai_chat_stream(
     session_id: str,
+    message_id: int,
     chat_store: ChatStore = Depends(get_chat_store),
     state: StateStore = Depends(get_state_store),
     store: ConfigStore = Depends(get_store),
 ) -> StreamingResponse:
-    messages = chat_store.list_messages(session_id)
-    if not messages or messages[-1].role != "user":
+    user_msg = chat_store.get_message(message_id)
+    if user_msg is None or user_msg.session_id != session_id:
         return StreamingResponse(
-            iter(["event: error\ndata: no pending user message\n\n"]),
+            iter([_sse_error("Сообщение не найдено")]),
+            media_type="text/event-stream",
+        )
+    if user_msg.role != "user":
+        return StreamingResponse(
+            iter([_sse_error("Ожидалось сообщение пользователя")]),
+            media_type="text/event-stream",
+        )
+    if chat_store.has_assistant_reply_after(session_id, message_id):
+        return StreamingResponse(
+            iter([_sse_error("На это сообщение уже есть ответ")]),
             media_type="text/event-stream",
         )
 
-    user_text = messages[-1].content
+    messages = chat_store.list_messages(session_id)
     history = [
         {"role": m.role, "content": m.content}
-        for m in messages[:-1]
-        if m.role in ("user", "assistant")
+        for m in messages
+        if m.id < message_id and m.role in ("user", "assistant")
     ]
+    user_text = user_msg.content
     config = store.load()
     orchestrator = ChatOrchestrator(
         state_store=state,
@@ -175,9 +194,12 @@ def ai_chat_stream(
                     chart_json=chart_json,
                     table_json=table_json,
                 )
+                session = chat_store.get_session(session_id)
+                if session and session.title == "Новый чат":
+                    title = user_text[:60] + ("…" if len(user_text) > 60 else "")
+                    chat_store.update_session_title(session_id, title)
         except Exception as exc:
-            err = json.dumps({"text": f"Ошибка: {exc}"}, ensure_ascii=False)
-            yield f"event: error\ndata: {err}\n\n"
+            yield _sse_error(f"Ошибка: {exc}")
 
     return StreamingResponse(
         event_generator(),

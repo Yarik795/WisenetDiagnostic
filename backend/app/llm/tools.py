@@ -83,6 +83,94 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+_PIE_MAX_SLICES = 10
+_DATAZOOM_THRESHOLD = 12
+
+
+def _table_columns(table: dict[str, Any]) -> list[str]:
+    if table.get("columns"):
+        return list(table["columns"])
+    rows = table.get("rows") or []
+    if rows:
+        return list(rows[0].keys())
+    return []
+
+
+def _is_numeric(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    try:
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _validate_chart_args(
+    args: dict[str, Any],
+    table: dict[str, Any],
+) -> Optional[str]:
+    columns = _table_columns(table)
+    if not columns:
+        return "нет колонок в таблице"
+
+    x_field = args.get("x", "")
+    y_fields: list[str] = args.get("y") or []
+    if x_field not in columns:
+        return f"колонка x={x_field!r} не найдена; доступны: {', '.join(columns)}"
+    for y in y_fields:
+        if y not in columns:
+            return f"колонка y={y!r} не найдена; доступны: {', '.join(columns)}"
+
+    rows = table.get("rows") or []
+    has_value = False
+    for row in rows:
+        for y in y_fields:
+            val = _to_float(row.get(y))
+            if val is not None and val != 0:
+                has_value = True
+                break
+        if has_value:
+            break
+    if not has_value:
+        return "нет числовых значений в выбранных колонках y"
+    return None
+
+
+def _aggregate_pie_rows(
+    rows: list[dict[str, Any]],
+    x_field: str,
+    value_field: str,
+) -> list[dict[str, Any]]:
+    if len(rows) <= _PIE_MAX_SLICES:
+        return rows
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: _to_float(r.get(value_field)) or 0,
+        reverse=True,
+    )
+    head = sorted_rows[: _PIE_MAX_SLICES - 1]
+    tail = sorted_rows[_PIE_MAX_SLICES - 1 :]
+    other_sum = sum(_to_float(r.get(value_field)) or 0 for r in tail)
+    return head + [{"__pie_other__": True, x_field: "Прочие", value_field: other_sum}]
+
 
 def build_echarts_option(
     args: dict[str, Any],
@@ -91,7 +179,11 @@ def build_echarts_option(
     if not table or not table.get("rows"):
         return {}
 
-    rows = table["rows"]
+    err = _validate_chart_args(args, table)
+    if err:
+        return {}
+
+    rows = list(table["rows"])
     x_field = args.get("x", "")
     y_fields: list[str] = args.get("y") or []
     chart_type = args.get("chart_type", "bar")
@@ -99,9 +191,15 @@ def build_echarts_option(
 
     if chart_type == "pie" and y_fields:
         value_field = y_fields[0]
+        pie_rows = _aggregate_pie_rows(rows, x_field, value_field)
         data = [
-            {"name": str(row.get(x_field, "")), "value": row.get(value_field)}
-            for row in rows
+            {
+                "name": str(
+                    row.get(x_field, "") if not row.get("__pie_other__") else "Прочие"
+                ),
+                "value": row.get(value_field),
+            }
+            for row in pie_rows
         ]
         return {
             "title": {"text": title, "left": "center"},
@@ -125,14 +223,24 @@ def build_echarts_option(
         }
         for y in y_fields
     ]
-    return {
+    option: dict[str, Any] = {
         "title": {"text": title},
         "tooltip": {"trigger": "axis"},
         "legend": {"data": y_fields},
-        "xAxis": {"type": "category", "data": categories},
+        "xAxis": {
+            "type": "category",
+            "data": categories,
+            "axisLabel": {"rotate": 35 if len(categories) > 6 else 0},
+        },
         "yAxis": {"type": "value"},
         "series": series,
     }
+    if len(categories) > _DATAZOOM_THRESHOLD:
+        option["dataZoom"] = [
+            {"type": "inside", "start": 0, "end": min(100, 100 * 12 / len(categories))},
+            {"type": "slider", "start": 0, "end": min(100, 100 * 12 / len(categories))},
+        ]
+    return option
 
 
 def table_for_llm(
