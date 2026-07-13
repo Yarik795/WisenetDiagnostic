@@ -74,6 +74,20 @@
   </div>
 
   {% if rvr_pp_count > 0 %}
+  <button
+    type="button"
+    class="btn btn-primary btn-sm"
+    id="rvr-ai-check-btn"
+    data-rvr-ai-check
+    {% if not rvr_llm_enabled %}disabled title="Настройте llm.enabled и api_key в config.json"{% endif %}
+    hx-post="/rvr-repeat/ai-check"
+    hx-include="#rvr-repeat-filters"
+    hx-target="#rvr-repeat-report-root"
+    hx-swap="outerHTML"
+    hx-indicator="#rvr-ai-check-indicator"
+    title="Проверить текущую выборку через AI"
+  >Проверить через AI</button>
+  <span id="rvr-ai-check-indicator" class="htmx-indicator text-secondary" style="margin-left:6px;">Анализ…</span>
   <a
     id="rvr-export-link"
     class="btn btn-ghost btn-sm"

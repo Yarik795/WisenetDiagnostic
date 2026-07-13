@@ -14,6 +14,7 @@ from ..display_time import format_for_display
 from ..rvr_repeat_report import format_kind_cell
 
 ANALYSIS_COLUMN = "Анализ заявок / подозрение на повтор"
+DESCRIPTION_COLUMN = "Описание проблем на объекте"
 XLSX_MIME = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
@@ -49,6 +50,7 @@ def _write_summary_sheet(
     header = ["Адрес", "Тип объекта", "Количество повторов"] + kinds
     if include_analysis_column:
         header.append(ANALYSIS_COLUMN)
+        header.append(DESCRIPTION_COLUMN)
     ws.append(header)
     for group in groups:
         row: list[Any] = [
@@ -62,6 +64,7 @@ def _write_summary_sheet(
             row.append(format_kind_cell(entries))
         if include_analysis_column:
             row.append(group.get("analysis") or "")
+            row.append(group.get("description") or "")
         ws.append(row)
     for row_cells in ws.iter_rows(
         min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column
@@ -135,6 +138,11 @@ def render_rvr_repeat_email_body(report: dict[str, Any]) -> str:
         except ValueError:
             gen_display = generated
 
+    repeat_suspect_count = 0
+    for group in report.get("groups_ge2") or []:
+        if group.get("ai_verdict") == "repeat":
+            repeat_suspect_count += 1
+
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head><meta charset="utf-8"></head>
@@ -147,6 +155,7 @@ def render_rvr_repeat_email_body(report: dict[str, Any]) -> str:
     <li>Всего повторов: {kpi.get("repeats_total", 0)}</li>
     <li>Заявок в выборке: {kpi.get("requests_total", 0)}</li>
     <li>Топ-объект: {kpi.get("top_object") or "—"}</li>
+    <li>Объектов с подозрением на повтор (AI): {repeat_suspect_count}</li>
   </ul>
   <p>Во вложении — файл Excel с листами «Данные», «Сводка» и «Сводка 3».</p>
 </body>

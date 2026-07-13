@@ -209,7 +209,9 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 Отчёт **«Статус оплаты»** (`/payments`): «Экспорт в HTML» передаёт активную вкладку (Модернизация/РВР) и метрику графиков по разделам (`kind`, `m_<section>`). `GET /payments/export.html` — standalone HTML со встроенным CSS и inline-SVG. «Отправить на почту» (`POST /payments/report/email`) — одно письмо с **двумя** HTML-вложениями (Модернизация и РВР); метрики Модернизации берутся из UI (`m_<section>`), для РВР всегда **Количество**. Отправка через `send_report_email` на `email_report.to_emails` (в `report_delivery_history` не пишется).
 
-Отчёт **«Анализ повторных РВР»** (`/rvr-repeat`): данные из SQLite (`pp_requests` + описания `naumen_records`), период задаётся query `from`/`to` (по умолчанию текущий квартал), порог `threshold` (2 — «Сводка», 3 — «Сводка 3»). `GET /rvr-repeat/export.xlsx` — XLSX с листами «Данные», «Сводка», «Сводка 3» (в сводках зарезервирована колонка «Анализ заявок / подозрение на повтор» для будущего LLM-анализа). `POST /rvr-repeat/report/email` — письмо с XLSX-вложением через `send_report_email(..., binary_attachments=...)`.
+Отчёт **«Анализ повторных РВР»** (`/rvr-repeat`): данные из SQLite (`pp_requests` + описания `naumen_records`), период задаётся query `from`/`to` (по умолчанию текущий квартал), порог `threshold` (2 — «Сводка», 3 — «Сводка 3»). `GET /rvr-repeat/export.xlsx` — XLSX с листами «Данные», «Сводка», «Сводка 3»; в сводках колонки «Анализ заявок / подозрение на повтор» и «Описание проблем на объекте» (заполняются из кэша `rvr_ai_analysis`). `POST /rvr-repeat/report/email` — письмо с XLSX-вложением через `send_report_email(..., binary_attachments=...)`.
+
+**AI-проверка повторов:** кнопка «Проверить через AI» → `POST /rvr-repeat/ai-check` (HTMX, те же query `from`/`to`/`threshold`/`object_type`). Модуль `rvr_ai_analysis.py` отправляет текущую выборку объектов в VseLLM пакетами (`analysis_batch_size`, по умолчанию 20) с параллельными чанками (`analysis_max_concurrency`). Модель — `llm.analysis_model` (по умолчанию `google/gemini-2.5-flash`), отдельно от модели чата. LLM возвращает JSON с полями `verdict` (`repeat`/`possible`/`none`), `analysis`, `description`; результат кэшируется в SQLite (`rvr_ai_analysis`) по `row_id` + fingerprint заявок. UI показывает цветной бейдж вердикта; экспорт и email читают кэш.
 
 Тест SMTP без UI: `python scripts/send_test_email.py`.
 
@@ -217,11 +219,11 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 ## Чат с AI (`llm/`, `chat_store.py`, `web/ai_chat.py`)
 
-Интерактивный чат с LLM (OpenAI-совместимый API, по умолчанию `api.vsellm.ru`) для вопросов по данным `monitoring.db`. Настройки — секция `llm` в `config.json` (`LLMSettings`).
+Интерактивный чат с LLM (OpenAI-совместимый API, по умолчанию `api.vsellm.ru`) для вопросов по данным `monitoring.db`. Настройки — секция `llm` в `config.json` (`LLMSettings`). Для отчёта «Повторные РВР» используется отдельная модель `analysis_model` (см. §Email выше).
 
 | Компонент | Роль |
 |-----------|------|
-| `LLMClient` | HTTP-клиент OpenAI SDK (`base_url`, `api_key`, `verify_ssl`) |
+| `LLMClient` | HTTP-клиент OpenAI SDK (`base_url`, `api_key`, `verify_ssl`); `chat(..., model=...)` позволяет переопределить модель (для AI-проверки РВР) |
 | `ChatOrchestrator` | Цикл function-calling: LLM вызывает инструменты, формирует ответ |
 | `sql_guard` | Только `SELECT`/`WITH`, read-only подключение, `LIMIT`, без DDL/DML |
 | `ChatStore` | Сессии и сообщения в SQLite (`chat_sessions`, `chat_messages`) |

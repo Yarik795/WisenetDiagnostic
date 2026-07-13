@@ -590,6 +590,19 @@ class StateStore:
 
                 CREATE INDEX IF NOT EXISTS idx_arsenal_systems_type_object
                     ON arsenal_systems(system_type, object_type);
+
+                -- rvr_ai_analysis: кэш AI-проверки повторных РВР по объекту (адрес + тип).
+                CREATE TABLE IF NOT EXISTS rvr_ai_analysis (
+                    row_id TEXT PRIMARY KEY,
+                    address TEXT NOT NULL,
+                    object_type TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    verdict TEXT NOT NULL,
+                    analysis TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    model TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             self._migrate_schema(conn)
@@ -815,6 +828,23 @@ class StateStore:
                     "ALTER TABLE arsenal_systems ADD COLUMN present INTEGER NOT NULL DEFAULT 1"
                 )
 
+        if "rvr_ai_analysis" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE rvr_ai_analysis (
+                    row_id TEXT PRIMARY KEY,
+                    address TEXT NOT NULL,
+                    object_type TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    verdict TEXT NOT NULL,
+                    analysis TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    model TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+
     @contextmanager
     def replace_naumen_records(
         self, imported_at: Optional[datetime] = None
@@ -870,6 +900,57 @@ class StateStore:
         with self._connect() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
+
+    def upsert_rvr_ai_analysis(self, records: list[dict[str, str]]) -> None:
+        if not records:
+            return
+        with self._connect() as conn:
+            conn.executemany(
+                """
+                INSERT INTO rvr_ai_analysis (
+                    row_id, address, object_type, fingerprint, verdict,
+                    analysis, description, model, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(row_id) DO UPDATE SET
+                    address = excluded.address,
+                    object_type = excluded.object_type,
+                    fingerprint = excluded.fingerprint,
+                    verdict = excluded.verdict,
+                    analysis = excluded.analysis,
+                    description = excluded.description,
+                    model = excluded.model,
+                    created_at = excluded.created_at
+                """,
+                [
+                    (
+                        r["row_id"],
+                        r["address"],
+                        r["object_type"],
+                        r["fingerprint"],
+                        r["verdict"],
+                        r.get("analysis", ""),
+                        r.get("description", ""),
+                        r.get("model", ""),
+                        r["created_at"],
+                    )
+                    for r in records
+                ],
+            )
+
+    def get_rvr_ai_analysis(
+        self, row_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        if not row_ids:
+            return {}
+        placeholders = ",".join("?" * len(row_ids))
+        sql = (
+            "SELECT row_id, address, object_type, fingerprint, verdict, "
+            "analysis, description, model, created_at "
+            f"FROM rvr_ai_analysis WHERE row_id IN ({placeholders})"
+        )
+        with self._connect() as conn:
+            rows = conn.execute(sql, row_ids).fetchall()
+        return {str(row["row_id"]): dict(row) for row in rows}
 
     def naumen_description_by_sberdrug(self) -> dict[str, str]:
         """Карта «Номер Сбердруг» -> первая непустая «Описание» (по source_row)."""

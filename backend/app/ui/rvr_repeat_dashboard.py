@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 from urllib.parse import urlencode
 
+from ..config_store import ConfigStore
 from ..rvr_repeat_report import (
     OBJECT_TYPE_ADZ,
     OBJECT_TYPE_VSP,
     build_rvr_repeat_report,
 )
+from ..rvr_ai_analysis import group_fingerprint, matrix_row_id
 from ..state_store import StateStore
 
 KindCellStatus = Literal["na", "neutral", "warn", "error"]
@@ -224,8 +225,51 @@ def _kind_cell_title(kind: str, entries: list[dict[str, str]]) -> str:
 
 
 def _matrix_row_id(address: str, object_type: str) -> str:
-    raw = f"{address}\0{object_type}".encode("utf-8")
-    return "rvr-" + hashlib.sha256(raw).hexdigest()[:12]
+    return matrix_row_id(address, object_type)
+
+
+def _enrich_groups_with_ai_cache(
+    groups: list[dict[str, Any]],
+    state: StateStore,
+) -> None:
+    if not groups:
+        return
+    row_ids = [
+        _matrix_row_id(group["address"], group["object_type"]) for group in groups
+    ]
+    cached = state.get_rvr_ai_analysis(row_ids)
+    for group, row_id in zip(groups, row_ids):
+        fingerprint = group_fingerprint(group)
+        group["row_id"] = row_id
+        group["fingerprint"] = fingerprint
+        entry = cached.get(row_id)
+        if not entry:
+            group["analysis"] = None
+            group["description"] = None
+            group["ai_verdict"] = None
+            group["ai_stale"] = False
+            group["ai_checked"] = False
+            continue
+        group["ai_checked"] = True
+        group["ai_stale"] = entry.get("fingerprint") != fingerprint
+        if group["ai_stale"]:
+            group["analysis"] = None
+            group["description"] = None
+            group["ai_verdict"] = None
+        else:
+            group["analysis"] = entry.get("analysis") or None
+            group["description"] = entry.get("description") or None
+            group["ai_verdict"] = entry.get("verdict") or None
+
+
+def _enrich_report_groups_with_ai_cache(
+    report: dict[str, Any],
+    state: StateStore,
+) -> None:
+    for key in ("groups_ge2", "groups_ge3"):
+        groups = report.get(key)
+        if groups:
+            _enrich_groups_with_ai_cache(groups, state)
 
 
 def build_kind_cells(
@@ -272,6 +316,10 @@ def build_rvr_matrix_rows(
                 "aggregate_status": row_aggregate_status(group["repeat_count"]),
                 "cells": cells,
                 "analysis": group.get("analysis"),
+                "description": group.get("description"),
+                "ai_verdict": group.get("ai_verdict"),
+                "ai_stale": group.get("ai_stale", False),
+                "ai_checked": group.get("ai_checked", False),
             }
         )
     return rows
@@ -301,6 +349,7 @@ def rvr_repeat_page_context(
     pp_count = state.count_pp_requests()
     latest_import = state.get_latest_source_import("requests")
     latest_naumen = state.get_latest_source_import("naumen")
+    llm_cfg = ConfigStore().load().llm
 
     base_ctx = {
         "rvr_pp_count": pp_count,
@@ -314,6 +363,7 @@ def rvr_repeat_page_context(
         "rvr_latest_naumen_import": latest_naumen,
         "rvr_query_string": query_string,
         "rvr_export_url": f"/rvr-repeat/export.xlsx?{query_string}",
+        "rvr_llm_enabled": llm_cfg.enabled and bool(llm_cfg.api_key),
     }
 
     if pp_count == 0:
@@ -338,6 +388,7 @@ def rvr_repeat_page_context(
     desc_map = state.naumen_description_by_sberdrug()
     report = build_rvr_repeat_report(rows, desc_map, date_from=d_from, date_to=d_to)
     report = filter_report_by_object_type(report, object_type_filter)
+    _enrich_report_groups_with_ai_cache(report, state)
 
     groups = report["groups_ge3"] if threshold == 3 else report["groups_ge2"]
     kinds = report.get("kinds") or []

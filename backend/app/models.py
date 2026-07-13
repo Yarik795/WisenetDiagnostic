@@ -129,6 +129,9 @@ class LLMSettings(BaseModel):
     base_url: str = "https://api.vsellm.ru/v1"
     api_key: str = ""
     model: str = "anthropic/claude-haiku-4.5"
+    analysis_model: str = "google/gemini-2.5-flash"
+    analysis_batch_size: int = Field(default=20, ge=1, le=100)
+    analysis_max_concurrency: int = Field(default=4, ge=1, le=16)
     verify_ssl: bool = False
     max_iterations: int = Field(default=5, ge=1, le=20)
     max_rows: int = Field(default=1000, ge=1, le=10000)

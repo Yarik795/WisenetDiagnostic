@@ -35,9 +35,10 @@ class LLMClient:
         *,
         tools: Optional[list[dict[str, Any]]] = None,
         stream: bool = False,
+        model: Optional[str] = None,
     ) -> Any:
         kwargs: dict[str, Any] = {
-            "model": self.settings.model,
+            "model": model or self.settings.model,
             "messages": messages,
             "stream": stream,
         }

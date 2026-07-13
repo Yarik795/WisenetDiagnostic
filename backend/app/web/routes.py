@@ -81,6 +81,8 @@ from ..ui.rvr_repeat_export import (
     rvr_repeat_email_subject,
     rvr_repeat_export_filename,
 )
+from ..rvr_ai_analysis import analyze_groups
+from ..llm.client import LLMClient
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
 from .validation import parse_recorder_form
@@ -693,6 +695,98 @@ def rvr_repeat_report_partial(
             object_type=object_type or None,
         ),
     )
+
+
+@router.post("/rvr-repeat/ai-check", response_class=HTMLResponse)
+def rvr_repeat_ai_check(
+    request: Request,
+    date_from: str = Form("", alias="from"),
+    date_to: str = Form("", alias="to"),
+    threshold: int = Form(2),
+    object_type: str = Form(""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    llm_cfg = store.load().llm
+    page_ctx = rvr_repeat_page_context(
+        state,
+        date_from=date_from or None,
+        date_to=date_to or None,
+        threshold=threshold,
+        object_type=object_type or None,
+    )
+
+    def _render_partial(
+        toast: Optional[dict[str, str]] = None,
+    ) -> HTMLResponse:
+        response = templates.TemplateResponse(
+            request,
+            "partials/rvr_repeat_report.html",
+            page_ctx,
+        )
+        if toast:
+            response.headers["HX-Trigger"] = json.dumps(
+                {"showToast": toast},
+                ensure_ascii=True,
+            )
+        return response
+
+    if not llm_cfg.enabled or not llm_cfg.api_key:
+        return _render_partial(
+            {"type": "error", "message": "LLM не настроен: включите llm.enabled и api_key в config.json"},
+        )
+
+    report = page_ctx.get("rvr_report")
+    if not report or not page_ctx.get("rvr_has_data"):
+        return _render_partial(
+            {"type": "error", "message": "Нет данных для AI-проверки за выбранный период"},
+        )
+
+    groups = (
+        report.get("groups_ge3")
+        if threshold == 3
+        else report.get("groups_ge2")
+    ) or []
+    if not groups:
+        return _render_partial(
+            {"type": "error", "message": "Нет объектов для AI-проверки"},
+        )
+
+    try:
+        client = LLMClient(llm_cfg)
+        results = analyze_groups(groups, client, llm_cfg)
+        state.upsert_rvr_ai_analysis(
+            [record.as_store_dict() for record in results.values()]
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return _render_partial(
+            {"type": "error", "message": f"Ошибка AI-проверки: {short}"},
+        )
+
+    page_ctx = rvr_repeat_page_context(
+        state,
+        date_from=date_from or None,
+        date_to=date_to or None,
+        threshold=threshold,
+        object_type=object_type or None,
+    )
+    response = templates.TemplateResponse(
+        request,
+        "partials/rvr_repeat_report.html",
+        page_ctx,
+    )
+    count = len(results)
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "showToast": {
+                "type": "success",
+                "message": f"AI-проверка завершена: {count} объект(ов)",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response
 
 
 def _rvr_repeat_query_params(request: Request) -> dict[str, str | int]:

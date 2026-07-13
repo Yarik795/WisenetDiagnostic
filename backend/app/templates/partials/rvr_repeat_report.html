@@ -32,7 +32,7 @@
   </div>
 
   {% if rvr_matrix_rows %}
-  {% set matrix_colspan = 3 + rvr_kinds|length + 1 %}
+  {% set matrix_colspan = 3 + rvr_kinds|length + 2 %}
   <section class="object-health-matrix rvr-repeat-matrix card" aria-label="Проблемные объекты">
     <div class="object-health-matrix-header">
       <h2 class="object-health-matrix-title">Проблемные объекты</h2>
@@ -48,11 +48,12 @@
             <th scope="col" class="matrix-col-narrow" title="{{ kind }}">{{ kind }}</th>
             {% endfor %}
             <th scope="col">Анализ</th>
+            <th scope="col">Описание проблем</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rvr_matrix_rows %}
-          <tr class="object-matrix-row object-matrix-row--{{ row.aggregate_status }}" data-rvr-matrix-row="{{ row.row_id }}">
+          <tr class="object-matrix-row object-matrix-row--{{ row.aggregate_status }}" data-rvr-matrix-row="{{ row.row_id }}"{% if row.ai_verdict %} data-ai-verdict="{{ row.ai_verdict }}"{% endif %}>
             <th scope="row" class="object-matrix-object rvr-matrix-object">
               <span class="rvr-matrix-address">{{ row.address }}</span>
               <span class="rvr-matrix-type text-secondary">{{ row.object_type }}</span>
@@ -76,8 +77,28 @@
               {% endif %}
             </td>
             {% endfor %}
-            <td class="rvr-matrix-analysis text-secondary">
-              {% if row.analysis %}{{ row.analysis }}{% else %}—{% endif %}
+            <td class="rvr-matrix-analysis">
+              {% if row.ai_stale %}
+              <span class="rvr-ai-badge rvr-ai-badge--stale">Устарело</span>
+              {% elif row.ai_verdict == 'repeat' %}
+              <span class="rvr-ai-badge rvr-ai-badge--repeat">Подозрение на повтор</span>
+              {% elif row.ai_verdict == 'possible' %}
+              <span class="rvr-ai-badge rvr-ai-badge--possible">Возможен повтор</span>
+              {% elif row.ai_verdict == 'none' %}
+              <span class="rvr-ai-badge rvr-ai-badge--none">Повторов не выявлено</span>
+              {% elif row.ai_checked %}
+              <span class="rvr-ai-badge rvr-ai-badge--unchecked">Нет данных</span>
+              {% else %}
+              <span class="rvr-ai-badge rvr-ai-badge--unchecked">Не проверялось</span>
+              {% endif %}
+              {% if row.analysis %}
+              <p class="rvr-matrix-analysis-text">{{ row.analysis }}</p>
+              {% elif not row.ai_checked and not row.ai_stale %}
+              <p class="rvr-matrix-analysis-text text-secondary">—</p>
+              {% endif %}
+            </td>
+            <td class="rvr-matrix-description text-secondary">
+              {% if row.description %}{{ row.description }}{% else %}—{% endif %}
             </td>
           </tr>
           <tr

@@ -673,6 +673,24 @@ GROUP BY tb, work_type
 ORDER BY total DESC;
 ```
 
+### 6.7.1. Таблица `rvr_ai_analysis`
+
+Кэш AI-проверки отчёта «Анализ повторных РВР». Одна строка — один объект (адрес + тип объекта). Ключ `row_id` = `rvr-` + sha256(`address\0object_type`)[:12]. Запись обновляется при повторной проверке (`UPSERT` по `row_id`). Поле `fingerprint` — sha256 набора заявок объекта; при несовпадении с текущими данными UI помечает результат как устаревший.
+
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| `row_id` | TEXT PK | Идентификатор строки матрицы отчёта |
+| `address` | TEXT | Адрес объекта |
+| `object_type` | TEXT | Тип объекта (АДЗ/ВСП) |
+| `fingerprint` | TEXT | Отпечаток набора заявок на момент проверки |
+| `verdict` | TEXT | `repeat` / `possible` / `none` |
+| `analysis` | TEXT | Колонка «Анализ заявок / подозрение на повтор» |
+| `description` | TEXT | Колонка «Описание проблем на объекте» |
+| `model` | TEXT | ID модели VseLLM |
+| `created_at` | TEXT | UTC ISO момента проверки |
+
+Методы `StateStore`: `upsert_rvr_ai_analysis`, `get_rvr_ai_analysis`.
+
 ### 6.8. Таблица `arsenal_analytics`
 
 Полная замена при каждом импорте выгрузки АС Арсенал (файл с «паспортам» в имени → `data/uploads/arsenal.xlsx`). Одна строка — один паспорт (лист «Аналитика»).
@@ -818,6 +836,7 @@ sequenceDiagram
 | `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
 | `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
 | `replace_pp_requests` / `count_pp_requests` / `pp_requests_rows` | `pp_requests` | Импорт выгрузки заявок ПП; чтение строк для отчёта «Анализ повторных РВР» |
+| `upsert_rvr_ai_analysis` / `get_rvr_ai_analysis` | `rvr_ai_analysis` | Кэш AI-проверки повторных РВР |
 | `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` / `naumen_description_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты»; карта описаний для «Анализ повторных РВР» |
 | `replace_arsenal_data` / `count_arsenal_records` / `arsenal_analytics_rows` / `arsenal_systems_rows` / `get_arsenal_analytics` / `arsenal_systems_for_passport` | `arsenal_analytics`, `arsenal_systems` | Импорт АС Арсенал; дашборд `/arsenal` и drill-down |
 

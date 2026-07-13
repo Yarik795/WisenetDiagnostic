@@ -80,6 +80,7 @@
 | `email_sender.py` | SMTP-отправка письма (HTML-тело + вложение), настройки из `EmailReportSettings` |
 | `cashflow_report.py` | Отчёт «Статус оплаты» из Excel-выгрузки заявок: разбор, JSON-артефакт `data/reports/cashflow_report.json` с `series` (сумма по месяцам × ответственный) для интерактивных графиков ECharts на `/payments` |
 | `rvr_repeat_report.py` | Отчёт «Анализ повторных РВР» из SQLite (`pp_requests` + `naumen_records`): фильтры, группировка по адресу и виду систем, пороги ≥2/≥3 |
+| `rvr_ai_analysis.py` | AI-проверка повторных РВР через VseLLM: батчинг, парсинг JSON, fingerprint заявок, кэш в `rvr_ai_analysis` |
 | `pp_import.py` | Импорт выгрузки заявок ПП (файл с «заявки» в имени) в SQLite (`pp_requests`) |
 | `report_jobs.py` | Менеджер фоновых задач построения отчётов и импорта источников (прогресс для UI) |
 

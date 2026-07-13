@@ -1410,6 +1410,24 @@ function initRvrRepeatActions(root) {
     });
   }
 
+  scope.querySelectorAll("[data-rvr-ai-check]").forEach((btn) => {
+    if (btn.dataset.rvrAiCheckBound === "1") return;
+    btn.dataset.rvrAiCheckBound = "1";
+    const defaultLabel = btn.textContent || "Проверить через AI";
+    btn.addEventListener("htmx:beforeRequest", () => {
+      if (btn.disabled) return;
+      btn.dataset.rvrAiWasEnabled = "1";
+      btn.disabled = true;
+      btn.textContent = "Анализ…";
+    });
+    btn.addEventListener("htmx:afterRequest", () => {
+      if (btn.dataset.rvrAiWasEnabled !== "1") return;
+      delete btn.dataset.rvrAiWasEnabled;
+      btn.disabled = false;
+      btn.textContent = defaultLabel;
+    });
+  });
+
   scope.querySelectorAll("[data-rvr-email]").forEach((btn) => {
     if (btn.dataset.rvrEmailBound === "1") return;
     btn.dataset.rvrEmailBound = "1";
