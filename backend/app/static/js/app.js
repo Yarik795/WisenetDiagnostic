@@ -1371,18 +1371,15 @@ function openRvrRepeatDetail(rowId, kind, scope) {
   if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
 }
 
-function initRvrRepeatMatrix(root) {
-  const scope = root || document;
-  const reportRoot =
-    scope.id === "rvr-repeat-report-root"
-      ? scope
-      : scope.querySelector("#rvr-repeat-report-root");
-  if (!reportRoot || reportRoot.dataset.rvrMatrixBound === "1") return;
-  reportRoot.dataset.rvrMatrixBound = "1";
+function initRvrRepeatMatrix() {
+  if (document.body.dataset.rvrMatrixDelegated === "1") return;
+  document.body.dataset.rvrMatrixDelegated = "1";
 
-  reportRoot.addEventListener("click", (e) => {
+  document.body.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-rvr-cell-toggle]");
-    if (!btn || !reportRoot.contains(btn)) return;
+    if (!btn) return;
+    const reportRoot = document.getElementById("rvr-repeat-report-root");
+    if (!reportRoot || !reportRoot.contains(btn)) return;
 
     const rowId = btn.dataset.rowId;
     const kind = btn.dataset.kind;
@@ -1400,7 +1397,7 @@ function initRvrRepeatMatrix(root) {
 function initRvrRepeatActions(root) {
   const scope = root || document;
   updateRvrRepeatLinks();
-  initRvrRepeatMatrix(scope);
+  initRvrRepeatMatrix();
 
   const form = document.getElementById("rvr-repeat-filters");
   if (form && form.dataset.rvrFiltersBound !== "1") {
