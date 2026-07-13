@@ -25,6 +25,7 @@
 - История смены статуса по категориям здоровья (`category_status_history`).
 - Журнал попыток опроса в рамках массового job (`recorder_poll_attempts`).
 - Журнал импортов исходных файлов (`source_imports`).
+- Выгрузка заявок ПП (`pp_requests`).
 - Выгрузка заявок Naumen (`naumen_records`).
 - Выгрузка паспортов АС Арсенал (`arsenal_analytics`, `arsenal_systems`).
 
@@ -621,63 +622,125 @@ Append-only журнал **каждой попытки** опроса регис
 
 Полная замена при каждом импорте выгрузки Naumen (`naumen_all.xlsx` → `data/uploads/naumen.xlsx`).
 
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| `external_id` | TEXT PK | `ID внешней системы` |
-| `number` | TEXT | `Номер` |
-| `cost` | REAL | `Стоимость` (пусто → 0) |
-| `sberdrug_number` | TEXT | `Номер Сбердруг` |
-| `description` | TEXT | `Описание` |
-| `source_row` | INTEGER | Номер строки в xlsx |
-| `imported_at` | TEXT | UTC ISO момента импорта |
+| Колонка | Тип | Исходное поле (Naumen) | Описание |
+|---------|-----|------------------------|----------|
+| `external_id` | TEXT PK | `ID внешней системы` | Уникальный идентификатор заявки во внешней системе |
+| `number` | TEXT | `Номер` | Номер заявки в Naumen |
+| `cost` | REAL | `Стоимость` | Стоимость (пусто в xlsx → 0) |
+| `sberdrug_number` | TEXT | `Номер Сбердруг` | Ключ связи с `pp_requests.drug_number` |
+| `description` | TEXT | `Описание` | Текст описания заявки |
+| `source_row` | INTEGER | — | Номер строки в xlsx (служебное) |
+| `imported_at` | TEXT | — | UTC ISO момента импорта (служебное) |
 
 Импорт: `naumen_import.import_naumen_xlsx()` → `StateStore.replace_naumen_records()` (DELETE + batch INSERT в одной транзакции). Парсинг — openpyxl `read_only=True` для больших файлов.
 
 Чтение для отчёта «Статус оплаты»: `StateStore.naumen_cost_by_sberdrug()` — карта `sberdrug_number` → первая ненулевая `cost` (по `source_row`). При сборке отчёта, если у заявки из ПП «Сумма с НДС» = 0, подставляется стоимость по ключу «№ заявки ДРУГ» ↔ `sberdrug_number`.
 
-### 6.7. Таблица `arsenal_analytics`
+### 6.7. Таблица `pp_requests`
+
+Полная замена при каждом импорте выгрузки заявок ПП (файл с «заявки» в имени → `data/uploads/requests.xlsx`). Одна строка — одна заявка.
+
+| Колонка | Тип | Исходное поле (ПП) | Описание |
+|---------|-----|-------------------|----------|
+| `request_number` | TEXT PK | `Заявка №` | Номер заявки в системе ПП |
+| `status` | TEXT | `Статус` | Текущий статус заявки |
+| `drug_number` | TEXT | `№ заявки ДРУГ` | Ключ связи с `naumen_records.sberdrug_number` |
+| `created_at` | TEXT | `Дата создания (UTC)` | Дата создания (ISO UTC; в xlsx `ДД.ММ.ГГГГ ЧЧ:ММ[:СС]`) |
+| `completed_at` | TEXT | `Фактическая дата выполнения (UTC)` | Дата выполнения (ISO UTC; может быть NULL) |
+| `customer_fio` | TEXT | `ФИО заказчика` | ФИО заказчика |
+| `tb` | TEXT | `Территориальный банк` | Территориальный банк |
+| `work_type` | TEXT | `Вид работ` | Вид работ (Модернизация, РВР, …) |
+| `act_status` | TEXT | `Статус акта` | Статус акта (может быть пустым) |
+| `amount_vat` | REAL | `Сумма с НДС` | Сумма с НДС (число; `RUR` — формат ячейки Excel, не часть значения) |
+| `warranty` | TEXT | `Гарантийная заявка` | Признак гарантийной заявки (Да/Нет) |
+| `address` | TEXT | `Адрес` | Адрес объекта |
+| `security_system_type` | TEXT | `Вид системы безопасности` | СОТС, ТСВ, УС и т.д. |
+| `in_limit` | TEXT | `В лимите` | Признак «В лимите» |
+| `raw_json` | TEXT | все колонки строки | JSON исходного ряда (заголовок → значение) для новых/доп. колонок |
+| `source_row` | INTEGER | — | Номер строки в xlsx (служебное) |
+| `imported_at` | TEXT | — | UTC ISO момента импорта (служебное) |
+
+Импорт: `pp_import.import_pp_requests_xlsx()` → `StateStore.replace_pp_requests()` (DELETE + batch `INSERT OR REPLACE` в одной транзакции). Дубликаты `request_number` в файле: последняя строка выигрывает.
+
+Парсинг суммы: openpyxl `data_only=True` обычно возвращает `int/float`; строковый фолбэк — запятая как десятичный разделитель. Парсинг дат: `datetime` как есть → ISO; строки — `%d.%m.%Y %H:%M:%S` или `%d.%m.%Y %H:%M`.
+
+Пример SQL для отчёта без повторной загрузки Excel:
+
+```sql
+SELECT tb, work_type, COUNT(*) AS cnt, SUM(amount_vat) AS total
+FROM pp_requests
+GROUP BY tb, work_type
+ORDER BY total DESC;
+```
+
+### 6.8. Таблица `arsenal_analytics`
 
 Полная замена при каждом импорте выгрузки АС Арсенал (файл с «паспортам» в имени → `data/uploads/arsenal.xlsx`). Одна строка — один паспорт (лист «Аналитика»).
 
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| `passport_number` | TEXT PK | `Номер паспорта` |
-| `tb` | TEXT | `Наименование ТБ` |
-| `gosb` | TEXT | `Наименование ГОСБ` |
-| `status` | TEXT | `Статус паспорта` |
-| `object_type` | TEXT | `Тип объекта охраны` (срез на дашборде) |
-| `subtype` | TEXT | `Подтип объекта охраны` |
-| `object_name` | TEXT | `Полное наименование объекта банка` |
-| `address` | TEXT | `Уточненный фактический адрес расположения` (лист «Общая информация») |
-| `fill_total` | REAL | `% заполнения паспорта` |
-| `fill_sections_json` | TEXT | JSON: раздел → % заполнения |
-| `errors_total` | INTEGER | `Количество ошибок в паспорте` |
-| `errors_sections_json` | TEXT | JSON: раздел → число ошибок |
-| `fill_project_docs` | REAL | `% заполнения проектной документации` |
-| `docs_json` | TEXT | JSON: система → наличие документации (Да/Нет/-) |
-| `has_photos` | TEXT | Наличие фотографий в основной информации |
-| `source_row` | INTEGER | Номер строки в xlsx |
-| `imported_at` | TEXT | UTC ISO момента импорта |
+| Колонка | Тип | Исходное поле (Арсенал) | Описание |
+|---------|-----|--------------------------|----------|
+| `passport_number` | TEXT PK | `Номер паспорта` | Номер паспорта объекта |
+| `tb` | TEXT | `Наименование ТБ` | Территориальный банк |
+| `gosb` | TEXT | `Наименование ГОСБ` | ГОСБ |
+| `status` | TEXT | `Статус паспорта` | Статус паспорта |
+| `object_type` | TEXT | `Тип объекта охраны` | Срез на дашборде `/arsenal` |
+| `subtype` | TEXT | `Подтип объекта охраны` | Подтип объекта |
+| `object_name` | TEXT | `Полное наименование объекта банка` | Наименование объекта |
+| `address` | TEXT | `Уточненный фактический адрес расположения` | Адрес (лист «Общая информация») |
+| `fill_total` | REAL | `% заполнения паспорта` | Общий % заполнения |
+| `fill_sections_json` | TEXT | разделы листа «Аналитика» | JSON: раздел → % заполнения |
+| `errors_total` | INTEGER | `Количество ошибок в паспорте` | Суммарное число ошибок |
+| `errors_sections_json` | TEXT | разделы листа «Аналитика» | JSON: раздел → число ошибок |
+| `fill_project_docs` | REAL | `% заполнения проектной документации` | % проектной документации |
+| `docs_json` | TEXT | колонки документации | JSON: система → наличие (Да/Нет/-) |
+| `has_photos` | TEXT | наличие фотографий | Наличие фотографий |
+| `source_row` | INTEGER | — | Номер строки в xlsx (служебное) |
+| `imported_at` | TEXT | — | UTC ISO момента импорта (служебное) |
 
-### 6.8. Таблица `arsenal_systems`
+### 6.9. Таблица `arsenal_systems`
 
 Строки с системных листов (САЗ, СОУЭ, СОТС, САПС, ТСВ, СКУД): производитель (с подстановкой из колонки «Иной»).
 
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| `id` | INTEGER PK | Автоинкремент |
-| `passport_number` | TEXT | `Номер паспорта` |
-| `tb`, `gosb`, `object_type`, `subtype` | TEXT | Идентификация объекта |
-| `system_type` | TEXT | САЗ / СОУЭ / СОТС / САПС / ТСВ / СКУД |
-| `manufacturer` | TEXT | Нормализованный производитель |
-| `year` | INTEGER | Год установки / капремонта (если есть) |
-| `present` | INTEGER | 1 — система на объекте есть («Наличие …» ≠ «НЕТ»); 0 — отсутствует |
-| `source_row` | INTEGER | Номер строки в xlsx |
-| `imported_at` | TEXT | UTC ISO |
+| Колонка | Тип | Исходное поле (Арсенал) | Описание |
+|---------|-----|--------------------------|----------|
+| `id` | INTEGER PK | — | Суррогатный ключ (служебное) |
+| `passport_number` | TEXT | `Номер паспорта` | Номер паспорта объекта |
+| `tb` | TEXT | `Наименование ТБ` | Территориальный банк |
+| `gosb` | TEXT | `Наименование ГОСБ` | ГОСБ |
+| `object_type` | TEXT | `Тип объекта охраны` | Тип объекта |
+| `subtype` | TEXT | `Подтип объекта охраны` | Подтип объекта |
+| `system_type` | TEXT | имя системного листа | САЗ / СОУЭ / СОТС / САПС / ТСВ / СКУД |
+| `manufacturer` | TEXT | колонка производителя | Нормализованный производитель |
+| `year` | INTEGER | год установки / капремонта | Год (если есть) |
+| `present` | INTEGER | «Наличие …» | 1 — система есть; 0 — отсутствует |
+| `source_row` | INTEGER | — | Номер строки в xlsx (служебное) |
+| `imported_at` | TEXT | — | UTC ISO (служебное) |
 
 Строки с `present = 0` сохраняются в БД, но **не участвуют** в графиках и детализации производителей на дашборде `/arsenal` (исключаются фантомные «Не указан» для объектов без системы).
 
 Импорт: `arsenal_import.import_arsenal_xlsx()` → `StateStore.replace_arsenal_data()` (DELETE обеих таблиц + batch INSERT). UI: `/arsenal`, partial `GET /arsenal/partials/dashboard?object_type=…`; экспорт HTML `GET /arsenal/export.html?object_type=…`; email `POST /arsenal/report/email?object_type=…`.
+
+### 6.10. Соглашение об описании импортных таблиц
+
+Для таблиц, заполняемых из внешних Excel-выгрузок (`pp_requests`, `naumen_records`, `arsenal_*`), в документации у каждого поля указывается:
+
+1. **Исходное поле** — точное имя колонки в файле-источнике (или «—» для служебных).
+2. **Тип в SQLite** — для построения SQL-отчётов без повторного парсинга Excel.
+3. **Стратегия обновления** — полная замена снимка (`DELETE` + batch insert) при каждой загрузке.
+
+Таблицы мониторинга NVR (`channels`, `recorder_metrics`, `status_history`, …) заполняются из SUNAPI/config и описываются в соответствующих разделах §2–§5.
+
+### 6.11. Правила добавления нового источника данных
+
+Чек-лист при подключении новой выгрузки:
+
+1. **`data_sources.py`** — `SourceSpec` (key, label, маркер имени файла, `storage_filename`) и runner в `_RUNNERS`.
+2. **`*_import.py`** — модуль парсинга xlsx → dataclass строк; потоковое чтение для больших файлов.
+3. **`state_store.py`** — таблица в `init_db()` + блок в `_migrate_schema()`; `replace_*()` (контекст-менеджер с DELETE), `count_*()`.
+4. **`load_source()`** — вызов импорта из runner; условие пропуска «без изменений» (hash файла + `count_*() > 0`).
+5. **`schema_context.py`** — добавить таблицу в `CHAT_TABLES` для LLM/SQL-agent.
+6. **Документация** — раздел в `ai-docs/monitoring-db.md` с маппингом «колонка БД ↔ исходное поле»; строка в `AGENTS.md` и `ai-docs/basic-structure.md`.
+7. **Тесты** — `test_*_import.py` (парсинг, замена, skip unchanged) + интеграция через `load_source`.
 
 ---
 
@@ -754,7 +817,8 @@ sequenceDiagram
 | `list_poll_attempts` | `recorder_poll_attempts` | Выборка по `job_id` / `recorder_id` |
 | `update_poll_recorder_summary` | `recorder_metrics` | Снимок итога job (`last_poll_*`) |
 | `record_source_import` / `list_source_imports` / `get_latest_source_import` | `source_imports` | Журнал импортов исходных файлов |
-| `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты» |
+| `replace_pp_requests` / `count_pp_requests` / `pp_requests_rows` | `pp_requests` | Импорт выгрузки заявок ПП; чтение строк для отчёта «Анализ повторных РВР» |
+| `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` / `naumen_description_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты»; карта описаний для «Анализ повторных РВР» |
 | `replace_arsenal_data` / `count_arsenal_records` / `arsenal_analytics_rows` / `arsenal_systems_rows` / `get_arsenal_analytics` / `arsenal_systems_for_passport` | `arsenal_analytics`, `arsenal_systems` | Импорт АС Арсенал; дашборд `/arsenal` и drill-down |
 
 ### 6.9. Таблицы чата с AI

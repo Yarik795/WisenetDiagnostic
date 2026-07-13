@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
@@ -72,6 +72,14 @@ from ..ui.arsenal_export import (
     build_arsenal_export_context,
     render_arsenal_email_body,
     render_arsenal_export_html,
+)
+from ..ui.rvr_repeat_dashboard import rvr_repeat_page_context
+from ..ui.rvr_repeat_export import (
+    XLSX_MIME,
+    build_rvr_repeat_xlsx,
+    render_rvr_repeat_email_body,
+    rvr_repeat_email_subject,
+    rvr_repeat_export_filename,
 )
 from ..ui.time_dashboard import time_dashboard_context
 from .templates_env import templates
@@ -626,6 +634,154 @@ def arsenal_report_email(
             email_cfg,
             body_html=body_html,
             attachments=[(filename, attachment_html)],
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
+
+
+@router.get("/rvr-repeat", response_class=HTMLResponse)
+def rvr_repeat_page(
+    request: Request,
+    date_from: str = Query("", alias="from"),
+    date_to: str = Query("", alias="to"),
+    threshold: int = 2,
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "rvr_repeat.html",
+        {
+            "active_nav": "rvr_repeat",
+            "toast": _toast_from_query(request),
+            **rvr_repeat_page_context(
+                state,
+                date_from=date_from or None,
+                date_to=date_to or None,
+                threshold=threshold,
+            ),
+        },
+    )
+
+
+@router.get("/rvr-repeat/partials/report", response_class=HTMLResponse)
+def rvr_repeat_report_partial(
+    request: Request,
+    date_from: str = Query("", alias="from"),
+    date_to: str = Query("", alias="to"),
+    threshold: int = 2,
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/rvr_repeat_report.html",
+        rvr_repeat_page_context(
+            state,
+            date_from=date_from or None,
+            date_to=date_to or None,
+            threshold=threshold,
+        ),
+    )
+
+
+def _rvr_repeat_query_params(request: Request) -> dict[str, str | int]:
+    qp = request.query_params
+    return {
+        "date_from": qp.get("from") or qp.get("date_from") or "",
+        "date_to": qp.get("to") or qp.get("date_to") or "",
+        "threshold": int(qp.get("threshold") or 2),
+    }
+
+
+def _rvr_repeat_export_response(
+    request: Request,
+    state: StateStore,
+) -> Response:
+    params = _rvr_repeat_query_params(request)
+    page_ctx = rvr_repeat_page_context(
+        state,
+        date_from=params["date_from"] or None,
+        date_to=params["date_to"] or None,
+        threshold=int(params["threshold"]),
+    )
+    report = page_ctx.get("rvr_report")
+    if not report or not report.get("has_data"):
+        return _redirect(
+            "/rvr-repeat",
+            "error",
+            "Нет данных для экспорта за выбранный период",
+            request=request,
+        )
+    xlsx_bytes = build_rvr_repeat_xlsx(report)
+    filename = rvr_repeat_export_filename(report)
+    return Response(
+        content=xlsx_bytes,
+        media_type=XLSX_MIME,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/rvr-repeat/export.xlsx", include_in_schema=False)
+def rvr_repeat_export_xlsx(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _rvr_repeat_export_response(request, state)
+
+
+@router.post("/rvr-repeat/report/email", include_in_schema=False)
+def rvr_repeat_report_email(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    params = _rvr_repeat_query_params(request)
+    page_ctx = rvr_repeat_page_context(
+        state,
+        date_from=params["date_from"] or None,
+        date_to=params["date_to"] or None,
+        threshold=int(params["threshold"]),
+    )
+    report = page_ctx.get("rvr_report")
+    if not report or not report.get("has_data"):
+        return JSONResponse(
+            {"ok": False, "message": "Нет данных для отправки за выбранный период"},
+            status_code=400,
+        )
+
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: "
+                + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+
+    xlsx_bytes = build_rvr_repeat_xlsx(report)
+    filename = rvr_repeat_export_filename(report)
+    body_html = render_rvr_repeat_email_body(report)
+    subject = rvr_repeat_email_subject(report)
+
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            binary_attachments=[(filename, xlsx_bytes, XLSX_MIME)],
             subject=subject,
         )
     except Exception as exc:

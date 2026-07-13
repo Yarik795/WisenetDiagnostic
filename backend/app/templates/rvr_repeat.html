@@ -1,0 +1,88 @@
+{% extends "layout.html" %}
+{% block title %}Повторные РВР — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Анализ повторных РВР{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Сводка повторных заявок РВР по адресам и видам систем безопасности.
+  {% if rvr_latest_import %}
+  Последняя загрузка заявок: {{ format_datetime(rvr_latest_import.imported_at) }}
+  ({{ rvr_latest_import.record_count }} записей).
+  {% else %}
+  Данные заявок ещё не загружены — положите файл с «заявки» в названии в
+  <a href="/sources">Исходные данные</a>.
+  {% endif %}
+  {% if rvr_latest_naumen_import %}
+  Описания Naumen: {{ format_datetime(rvr_latest_naumen_import.imported_at) }}.
+  {% endif %}
+</p>
+
+<form
+  id="rvr-repeat-filters"
+  class="toolbar"
+  style="flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:flex-end;"
+  hx-get="/rvr-repeat/partials/report"
+  hx-target="#rvr-repeat-report-root"
+  hx-swap="outerHTML"
+  hx-trigger="change from:select, change from:input[type=date], submit"
+>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <label class="text-secondary" for="rvr-date-from">С</label>
+    <input
+      type="date"
+      id="rvr-date-from"
+      name="from"
+      class="input"
+      value="{{ rvr_date_from }}"
+      data-rvr-date-from
+    />
+    <label class="text-secondary" for="rvr-date-to">По</label>
+    <input
+      type="date"
+      id="rvr-date-to"
+      name="to"
+      class="input"
+      value="{{ rvr_date_to }}"
+      data-rvr-date-to
+    />
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+    <span class="text-secondary">Пресеты:</span>
+    {% for preset in rvr_period_presets %}
+    <button
+      type="button"
+      class="btn btn-outline btn-sm"
+      data-rvr-preset="{{ preset.key }}"
+      data-rvr-preset-from="{{ preset.from }}"
+      data-rvr-preset-to="{{ preset.to }}"
+    >{{ preset.label }}</button>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex;gap:8px;align-items:center;">
+    <label class="text-secondary" for="rvr-threshold">Порог</label>
+    <select id="rvr-threshold" name="threshold" class="select" data-rvr-threshold>
+      <option value="2" {% if rvr_threshold == 2 %}selected{% endif %}>Сводка (≥2)</option>
+      <option value="3" {% if rvr_threshold == 3 %}selected{% endif %}>Сводка 3 (≥3)</option>
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+  </div>
+
+  {% if rvr_pp_count > 0 %}
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-rvr-export
+    title="Скачать XLSX за выбранный период"
+  >Скачать XLSX</button>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-rvr-email
+    title="Отправить XLSX на адреса из config.email_report"
+  >Отправить на почту</button>
+  {% endif %}
+</form>
+
+{% include "partials/rvr_repeat_report.html" %}
+{% endblock %}

@@ -189,29 +189,41 @@ def _run_requests(
 ) -> SourceLoadResult:
     from .cashflow_report import load_report_artifact
 
-    if file_unchanged and load_report_artifact() is not None:
+    if (
+        file_unchanged
+        and load_report_artifact() is not None
+        and deps.state.count_pp_requests() > 0
+    ):
         on_progress("Проверка", 50)
         return SourceLoadResult(
             ok=True,
             message="Новых данных нет",
-            record_count=0,
+            record_count=deps.state.count_pp_requests(),
             changed=False,
             filename=source.name,
         )
 
     def report_progress(phase: str, percent: int) -> None:
-        on_progress(phase, 25 + int(percent * 0.65))
+        on_progress(phase, 25 + int(percent * 0.60))
 
     report = build_cashflow_report(
         dest,
         on_progress=report_progress,
         naumen_cost_map=deps.state.naumen_cost_by_sberdrug(),
     )
-    row_count = int(report.get("row_count", 0))
+
+    from .pp_import import import_pp_requests_xlsx
+
+    def import_progress(phase: str, percent: int) -> None:
+        on_progress(phase, 85 + int(percent * 0.12))
+
+    db_count = import_pp_requests_xlsx(
+        dest, deps.state, on_progress=import_progress
+    )
     return SourceLoadResult(
         ok=True,
-        message=f"Данные загружены: {row_count} строк",
-        record_count=row_count,
+        message=f"Данные загружены: {db_count} строк",
+        record_count=db_count,
         changed=True,
         filename=source.name,
     )

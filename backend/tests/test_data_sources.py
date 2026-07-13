@@ -94,6 +94,34 @@ def test_load_source_no_changes_requests(
     store = ConfigStore(path=tmp_path / "config.json")
     state = StateStore(path=tmp_path / "monitoring.db")
     state.init_db()
+
+    from app.state_store import PPRequestRow
+    from app.pp_import import parse_dt
+
+    with state.replace_pp_requests() as session:
+        session.write_batch(
+            [
+                PPRequestRow(
+                    request_number="seed",
+                    status="ok",
+                    drug_number="SD1",
+                    created_at=None,
+                    completed_at=parse_dt("2026-01-01"),
+                    customer_fio="Test",
+                    tb="TB",
+                    work_type="РВР",
+                    act_status="",
+                    amount_vat=0.0,
+                    warranty="Нет",
+                    address="",
+                    security_system_type="СОТС",
+                    in_limit="",
+                    raw_json="{}",
+                    source_row=2,
+                )
+            ]
+        )
+
     deps = RunnerDeps(store=store, state=state)
 
     result = load_source("requests", deps)

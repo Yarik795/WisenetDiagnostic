@@ -1313,6 +1313,71 @@ function initArsenalExportActions(root) {
   });
 }
 
+function collectRvrRepeatParams() {
+  const params = new URLSearchParams();
+  const fromInput = document.querySelector("[data-rvr-date-from]");
+  const toInput = document.querySelector("[data-rvr-date-to]");
+  const thresholdSelect = document.querySelector("[data-rvr-threshold]");
+  if (fromInput && fromInput.value) params.set("from", fromInput.value);
+  if (toInput && toInput.value) params.set("to", toInput.value);
+  if (thresholdSelect && thresholdSelect.value) {
+    params.set("threshold", thresholdSelect.value);
+  }
+  return params;
+}
+
+function initRvrRepeatActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-rvr-preset]").forEach((btn) => {
+    if (btn.dataset.rvrPresetBound === "1") return;
+    btn.dataset.rvrPresetBound = "1";
+    btn.addEventListener("click", () => {
+      const fromInput = document.querySelector("[data-rvr-date-from]");
+      const toInput = document.querySelector("[data-rvr-date-to]");
+      const form = document.getElementById("rvr-repeat-filters");
+      if (fromInput) fromInput.value = btn.dataset.rvrPresetFrom || "";
+      if (toInput) toInput.value = btn.dataset.rvrPresetTo || "";
+      if (form && typeof htmx !== "undefined") {
+        htmx.trigger(form, "submit");
+      }
+    });
+  });
+  scope.querySelectorAll("[data-rvr-export]").forEach((btn) => {
+    if (btn.dataset.rvrExportBound === "1") return;
+    btn.dataset.rvrExportBound = "1";
+    btn.addEventListener("click", () => {
+      const params = collectRvrRepeatParams();
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/rvr-repeat/export.xlsx?${qs}`
+        : "/rvr-repeat/export.xlsx";
+    });
+  });
+  scope.querySelectorAll("[data-rvr-email]").forEach((btn) => {
+    if (btn.dataset.rvrEmailBound === "1") return;
+    btn.dataset.rvrEmailBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const params = collectRvrRepeatParams();
+        const qs = params.toString();
+        const url = qs
+          ? `/rvr-repeat/report/email?${qs}`
+          : "/rvr-repeat/report/email";
+        const res = await fetch(url, { method: "POST" });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить отчёт на почту");
+        console.error("[wisenet] rvr-repeat email error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function initPaymentsPage(root) {
   initPaymentsTabs(root);
   initPaymentsCollapsibles(root);
@@ -1326,6 +1391,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPaymentsPage();
   initArsenalCharts();
   initArsenalExportActions();
+  initRvrRepeatActions();
   if (typeof htmx === "undefined") {
     showToast(
       "error",
@@ -1357,6 +1423,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsCharts(e.detail?.target);
   initArsenalCharts(e.detail?.target);
   initPaymentsExportActions(e.detail?.target);
+  initRvrRepeatActions(e.detail?.target);
   scrollToHighlightedCategory();
 });
 

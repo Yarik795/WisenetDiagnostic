@@ -209,6 +209,8 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 Отчёт **«Статус оплаты»** (`/payments`): «Экспорт в HTML» передаёт активную вкладку (Модернизация/РВР) и метрику графиков по разделам (`kind`, `m_<section>`). `GET /payments/export.html` — standalone HTML со встроенным CSS и inline-SVG. «Отправить на почту» (`POST /payments/report/email`) — одно письмо с **двумя** HTML-вложениями (Модернизация и РВР); метрики Модернизации берутся из UI (`m_<section>`), для РВР всегда **Количество**. Отправка через `send_report_email` на `email_report.to_emails` (в `report_delivery_history` не пишется).
 
+Отчёт **«Анализ повторных РВР»** (`/rvr-repeat`): данные из SQLite (`pp_requests` + описания `naumen_records`), период задаётся query `from`/`to` (по умолчанию текущий квартал), порог `threshold` (2 — «Сводка», 3 — «Сводка 3»). `GET /rvr-repeat/export.xlsx` — XLSX с листами «Данные», «Сводка», «Сводка 3» (в сводках зарезервирована колонка «Анализ заявок / подозрение на повтор» для будущего LLM-анализа). `POST /rvr-repeat/report/email` — письмо с XLSX-вложением через `send_report_email(..., binary_attachments=...)`.
+
 Тест SMTP без UI: `python scripts/send_test_email.py`.
 
 ---
@@ -270,9 +272,11 @@ CLI: обновление `recorders` в `config.json` из CMDB, резервн
 | key | Маркер в имени | Хранилище данных |
 |-----|----------------|------------------|
 | `cmdb` | `cmdb` | `config.json` (устройства) |
-| `requests` | `заявки` | `data/reports/cashflow_report.json` |
+| `requests` | `заявки` | SQLite `pp_requests` + `data/reports/cashflow_report.json` |
 | `naumen` | `naumen` | SQLite `naumen_records` |
 | `arsenal` | `паспортам` | SQLite `arsenal_analytics`, `arsenal_systems` |
+
+Импорт ПП: `pp_import.import_pp_requests_xlsx()` — все колонки выгрузки в `pp_requests` (типизированные поля + `raw_json`); полная замена при каждой загрузке. Отчёт «Статус оплаты» по-прежнему строится в `cashflow_report.json`.
 
 Импорт Арсенал: `arsenal_import.import_arsenal_xlsx()` — листы «Аналитика», «Общая информация» (адрес объекта), системные листы САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД (производители). Дашборд: `ui/arsenal_dashboard.py`, страница `/arsenal` (ECharts, срез по `Тип объекта охраны`, drill-down: `GET /arsenal/partials/detail`, карточка паспорта `GET /arsenal/passport/{номер}`).
 

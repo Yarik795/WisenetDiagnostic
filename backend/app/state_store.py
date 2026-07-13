@@ -136,6 +136,26 @@ class NaumenRecordRow:
 
 
 @dataclass(frozen=True)
+class PPRequestRow:
+    request_number: str
+    status: str
+    drug_number: str
+    created_at: Optional[str]
+    completed_at: Optional[str]
+    customer_fio: str
+    tb: str
+    work_type: str
+    act_status: str
+    amount_vat: float
+    warranty: str
+    address: str
+    security_system_type: str
+    in_limit: str
+    raw_json: str
+    source_row: int
+
+
+@dataclass(frozen=True)
 class ArsenalAnalyticsRow:
     passport_number: str
     tb: str
@@ -229,6 +249,52 @@ class NaumenReplaceSession:
                     row.cost,
                     row.sberdrug_number,
                     row.description,
+                    row.source_row,
+                    imported_at,
+                )
+                for row in rows
+            ],
+        )
+        self.count += len(rows)
+
+
+class PPReplaceSession:
+    def __init__(self, conn: sqlite3.Connection, imported_at: str) -> None:
+        self._conn = conn
+        self._imported_at = imported_at
+        self.count = 0
+
+    def write_batch(self, rows: list[Any]) -> None:
+        if not rows:
+            return
+        conn = self._conn
+        imported_at = self._imported_at
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO pp_requests (
+                request_number, status, drug_number, created_at, completed_at,
+                customer_fio, tb, work_type, act_status, amount_vat, warranty,
+                address, security_system_type, in_limit, raw_json, source_row,
+                imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row.request_number,
+                    row.status,
+                    row.drug_number,
+                    row.created_at,
+                    row.completed_at,
+                    row.customer_fio,
+                    row.tb,
+                    row.work_type,
+                    row.act_status,
+                    row.amount_vat,
+                    row.warranty,
+                    row.address,
+                    row.security_system_type,
+                    row.in_limit,
+                    row.raw_json,
                     row.source_row,
                     imported_at,
                 )
@@ -453,6 +519,35 @@ class StateStore:
                     imported_at TEXT NOT NULL                -- время импорта (ISO 8601, UTC)
                 );
 
+                -- pp_requests: выгрузка заявок ПП (requests.xlsx).
+                -- Полностью перезаписывается при каждом импорте (DELETE + batch INSERT OR REPLACE).
+                CREATE TABLE IF NOT EXISTS pp_requests (
+                    request_number TEXT PRIMARY KEY,         -- "Заявка №"
+                    status TEXT,                             -- "Статус"
+                    drug_number TEXT,                        -- "№ заявки ДРУГ"
+                    created_at TEXT,                         -- "Дата создания (UTC)" (ISO)
+                    completed_at TEXT,                       -- "Фактическая дата выполнения (UTC)" (ISO)
+                    customer_fio TEXT,                       -- "ФИО заказчика"
+                    tb TEXT,                                 -- "Территориальный банк"
+                    work_type TEXT,                          -- "Вид работ"
+                    act_status TEXT,                         -- "Статус акта"
+                    amount_vat REAL NOT NULL DEFAULT 0,      -- "Сумма с НДС"
+                    warranty TEXT,                           -- "Гарантийная заявка"
+                    address TEXT,                            -- "Адрес"
+                    security_system_type TEXT,               -- "Вид системы безопасности"
+                    in_limit TEXT,                           -- "В лимите"
+                    raw_json TEXT,                           -- полный исходный ряд (JSON)
+                    source_row INTEGER,                      -- номер строки в исходном xlsx
+                    imported_at TEXT NOT NULL                -- время импорта (ISO 8601, UTC)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_pp_requests_tb
+                    ON pp_requests(tb);
+                CREATE INDEX IF NOT EXISTS idx_pp_requests_drug
+                    ON pp_requests(drug_number);
+                CREATE INDEX IF NOT EXISTS idx_pp_requests_completed
+                    ON pp_requests(completed_at);
+
                 -- arsenal_analytics: лист «Аналитика» выгрузки АС Арсенал.
                 CREATE TABLE IF NOT EXISTS arsenal_analytics (
                     passport_number TEXT PRIMARY KEY,
@@ -596,6 +691,49 @@ class StateStore:
                 """
             )
 
+        if "pp_requests" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE pp_requests (
+                    request_number TEXT PRIMARY KEY,
+                    status TEXT,
+                    drug_number TEXT,
+                    created_at TEXT,
+                    completed_at TEXT,
+                    customer_fio TEXT,
+                    tb TEXT,
+                    work_type TEXT,
+                    act_status TEXT,
+                    amount_vat REAL NOT NULL DEFAULT 0,
+                    warranty TEXT,
+                    address TEXT,
+                    security_system_type TEXT,
+                    in_limit TEXT,
+                    raw_json TEXT,
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_pp_requests_tb
+                    ON pp_requests(tb)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_pp_requests_drug
+                    ON pp_requests(drug_number)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_pp_requests_completed
+                    ON pp_requests(completed_at)
+                """
+            )
+
         if "arsenal_analytics" not in tables:
             conn.execute(
                 """
@@ -687,10 +825,67 @@ class StateStore:
             session = NaumenReplaceSession(conn, when)
             yield session
 
+    @contextmanager
+    def replace_pp_requests(
+        self, imported_at: Optional[datetime] = None
+    ) -> Iterator[PPReplaceSession]:
+        when = _iso(imported_at or datetime.now(timezone.utc))
+        with self._connect() as conn:
+            conn.execute("DELETE FROM pp_requests")
+            session = PPReplaceSession(conn, when)
+            yield session
+
     def count_naumen_records(self) -> int:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM naumen_records").fetchone()
         return int(row["cnt"]) if row else 0
+
+    def count_pp_requests(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS cnt FROM pp_requests").fetchone()
+        return int(row["cnt"]) if row else 0
+
+    def pp_requests_rows(
+        self,
+        *,
+        created_from: Optional[datetime] = None,
+        created_to: Optional[datetime] = None,
+    ) -> list[dict[str, Any]]:
+        """Строки pp_requests для отчётов; опционально по created_at (ISO UTC)."""
+        clauses: list[str] = []
+        params: list[str] = []
+        if created_from is not None:
+            clauses.append("created_at >= ?")
+            params.append(_iso(created_from))
+        if created_to is not None:
+            clauses.append("created_at < ?")
+            params.append(_iso(created_to))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = (
+            "SELECT request_number, status, drug_number, created_at, completed_at, "
+            "customer_fio, tb, work_type, act_status, amount_vat, warranty, "
+            "address, security_system_type, in_limit, raw_json, source_row "
+            f"FROM pp_requests{where} ORDER BY created_at, source_row"
+        )
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def naumen_description_by_sberdrug(self) -> dict[str, str]:
+        """Карта «Номер Сбердруг» -> первая непустая «Описание» (по source_row)."""
+        result: dict[str, str] = {}
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT sberdrug_number, description FROM naumen_records "
+                "WHERE sberdrug_number IS NOT NULL AND sberdrug_number != '' "
+                "ORDER BY source_row"
+            ).fetchall()
+        for row in rows:
+            key = str(row["sberdrug_number"]).strip()
+            desc = (row["description"] or "").strip()
+            if key and desc and key not in result:
+                result[key] = desc
+        return result
 
     @contextmanager
     def replace_arsenal_data(

@@ -16,6 +16,7 @@ def send_report_email(
     attachment_html: str | None = None,
     attachment_filename: str | None = None,
     attachments: list[tuple[str, str]] | None = None,
+    binary_attachments: list[tuple[str, bytes, str]] | None = None,
     subject: str | None = None,
 ) -> None:
     if not settings.to_emails:
@@ -48,6 +49,21 @@ def send_report_email(
             filename=filename,
         )
         msg.attach(attachment)
+
+    if binary_attachments:
+        for filename, content, mime in binary_attachments:
+            subtype = mime.split("/", 1)[1] if "/" in mime else "octet-stream"
+            attachment = MIMEApplication(
+                content,
+                _subtype=subtype,
+                Name=filename,
+            )
+            attachment.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=filename,
+            )
+            msg.attach(attachment)
 
     if settings.use_starttls:
         context = ssl.SSLContext(getattr(ssl, "PROTOCOL_TLSv1_2", ssl.PROTOCOL_TLS_CLIENT))

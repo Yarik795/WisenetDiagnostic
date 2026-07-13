@@ -1,0 +1,67 @@
+<div id="rvr-repeat-report-root">
+  {% if rvr_filters_text %}
+  <p class="text-secondary" style="font-size:0.9rem;margin-bottom:12px;">{{ rvr_filters_text }}</p>
+  {% endif %}
+
+  {% if not rvr_pp_count %}
+  <div class="empty-state">
+    <p>{{ rvr_empty_message }}</p>
+  </div>
+  {% elif not rvr_has_data %}
+  <div class="empty-state">
+    <p>{{ rvr_empty_message }}</p>
+  </div>
+  {% else %}
+  <div class="kpi-grid" style="margin-bottom:20px;">
+    <div class="kpi-card">
+      <div class="kpi-label">Групп с повторами</div>
+      <div class="kpi-value">{{ rvr_kpi.groups_total }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Всего повторов</div>
+      <div class="kpi-value">{{ rvr_kpi.repeats_total }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Заявок в выборке</div>
+      <div class="kpi-value">{{ rvr_kpi.requests_total }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Топ-объект</div>
+      <div class="kpi-value" style="font-size:1rem;line-height:1.3;">{{ rvr_kpi.top_object or "—" }}</div>
+    </div>
+  </div>
+
+  {% if rvr_table_groups %}
+  <div class="table-wrap" style="overflow-x:auto;">
+    <table class="data-table rvr-repeat-table">
+      <thead>
+        <tr>
+          <th>Адрес</th>
+          <th>Тип объекта</th>
+          <th>Количество повторов</th>
+          {% for kind in rvr_kinds %}
+          <th>{{ kind }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for group in rvr_table_groups %}
+        <tr>
+          <td>{{ group.address }}</td>
+          <td>{{ group.object_type }}</td>
+          <td class="num">{{ group.repeat_count }}</td>
+          {% for kind in rvr_kinds %}
+          <td class="rvr-kind-cell" style="white-space:pre-wrap;min-width:200px;">{{ group.cells[kind] }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>Нет групп, удовлетворяющих выбранному порогу повторов.</p>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>

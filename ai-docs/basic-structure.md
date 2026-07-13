@@ -79,6 +79,8 @@
 | `report_delivery_history.py` | Журнал отправок (`data/report_delivery_history.json`): триггеры scheduled/catchup/manual |
 | `email_sender.py` | SMTP-отправка письма (HTML-тело + вложение), настройки из `EmailReportSettings` |
 | `cashflow_report.py` | Отчёт «Статус оплаты» из Excel-выгрузки заявок: разбор, JSON-артефакт `data/reports/cashflow_report.json` с `series` (сумма по месяцам × ответственный) для интерактивных графиков ECharts на `/payments` |
+| `rvr_repeat_report.py` | Отчёт «Анализ повторных РВР» из SQLite (`pp_requests` + `naumen_records`): фильтры, группировка по адресу и виду систем, пороги ≥2/≥3 |
+| `pp_import.py` | Импорт выгрузки заявок ПП (файл с «заявки» в имени) в SQLite (`pp_requests`) |
 | `report_jobs.py` | Менеджер фоновых задач построения отчётов и импорта источников (прогресс для UI) |
 
 #### Чат с AI (`backend/app/llm/`, `chat_store.py`)
@@ -111,7 +113,7 @@
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -133,6 +135,8 @@
 | `email_charts.py` | SVG-графики/спарклайны для тела письма |
 | `payments.py` | Контекст страницы отчёта «Статус оплаты» |
 | `payments_export.py` | Статичный HTML-экспорт и тело письма отчёта «Статус оплаты» (inline-SVG графики) |
+| `rvr_repeat_dashboard.py` | Контекст страницы «Анализ повторных РВР»: период, KPI, таблица сводки |
+| `rvr_repeat_export.py` | XLSX-экспорт и тело письма отчёта «Анализ повторных РВР» (листы Данные/Сводка/Сводка 3) |
 | `source_imports.py` | Контекст страницы источников данных (импорты `inputData/`) |
 | `arsenal_dashboard.py` | Дашборд АС Арсенал: KPI, ECharts, drill-down и карточка паспорта |
 | `arsenal_export.py` | HTML-экспорт и email текущей выборки дашборда Арсенал (inline SVG) |
@@ -143,7 +147,7 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `payments.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
 - `exports/` — печатные/экспортные отчёты (отчёт об ошибках)
 

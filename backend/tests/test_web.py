@@ -80,6 +80,26 @@ def test_placeholder_sections(client: TestClient) -> None:
         assert "в разработке" in r.text.lower()
 
 
+def test_rvr_repeat_page_renders(client: TestClient) -> None:
+    r = client.get("/rvr-repeat")
+    assert r.status_code == 200
+    assert "Анализ повторных РВР" in r.text
+    assert "Повторные РВР" in r.text
+
+
+def test_rvr_repeat_export_without_data_redirects(client: TestClient) -> None:
+    r = client.get("/rvr-repeat/export.xlsx", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/rvr-repeat" in r.headers["location"]
+
+
+def test_rvr_repeat_email_without_data(client: TestClient) -> None:
+    r = client.post("/rvr-repeat/report/email")
+    assert r.status_code == 400
+    data = r.json()
+    assert data["ok"] is False
+
+
 def test_objects_redirects_to_monitoring(client: TestClient) -> None:
     r = client.get("/objects", follow_redirects=False)
     assert r.status_code == 302
