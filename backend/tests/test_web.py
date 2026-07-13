@@ -85,6 +85,15 @@ def test_rvr_repeat_page_renders(client: TestClient) -> None:
     assert r.status_code == 200
     assert "Анализ повторных РВР" in r.text
     assert "Повторные РВР" in r.text
+    assert 'id="rvr-object-type"' in r.text
+    assert 'data-rvr-date-from' in r.text
+
+
+def test_rvr_repeat_page_with_object_type_filter(client: TestClient) -> None:
+    r = client.get("/rvr-repeat?object_type=%D0%92%D0%A1%D0%9F")
+    assert r.status_code == 200
+    assert 'value="ВСП" selected' in r.text
+    assert "object_type=%D0%92%D0%A1%D0%9F" in r.text or "object_type=ВСП" in r.text
 
 
 def test_rvr_repeat_export_without_data_redirects(client: TestClient) -> None:

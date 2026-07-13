@@ -49,17 +49,22 @@
   <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
     <span class="text-secondary">Пресеты:</span>
     {% for preset in rvr_period_presets %}
-    <button
-      type="button"
+    <a
       class="btn btn-outline btn-sm"
-      data-rvr-preset="{{ preset.key }}"
-      data-rvr-preset-from="{{ preset.from }}"
-      data-rvr-preset-to="{{ preset.to }}"
-    >{{ preset.label }}</button>
+      href="/rvr-repeat?from={{ preset.from }}&to={{ preset.to }}&threshold={{ rvr_threshold }}{% if rvr_object_type %}&object_type={{ rvr_object_type | urlencode }}{% endif %}"
+    >{{ preset.label }}</a>
     {% endfor %}
   </div>
 
-  <div style="display:flex;gap:8px;align-items:center;">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <label class="text-secondary" for="rvr-object-type">Тип объекта</label>
+    <select id="rvr-object-type" name="object_type" class="select" data-rvr-object-type>
+      <option value="" {% if not rvr_object_type %}selected{% endif %}>Все</option>
+      {% for option in rvr_object_type_options %}
+      <option value="{{ option }}" {% if rvr_object_type == option %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+
     <label class="text-secondary" for="rvr-threshold">Порог</label>
     <select id="rvr-threshold" name="threshold" class="select" data-rvr-threshold>
       <option value="2" {% if rvr_threshold == 2 %}selected{% endif %}>Сводка (≥2)</option>
@@ -69,12 +74,13 @@
   </div>
 
   {% if rvr_pp_count > 0 %}
-  <button
-    type="button"
+  <a
+    id="rvr-export-link"
     class="btn btn-ghost btn-sm"
+    href="{{ rvr_export_url }}"
     data-rvr-export
     title="Скачать XLSX за выбранный период"
-  >Скачать XLSX</button>
+  >Скачать XLSX</a>
   <button
     type="button"
     class="btn btn-ghost btn-sm"
@@ -85,4 +91,12 @@
 </form>
 
 {% include "partials/rvr_repeat_report.html" %}
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script>
+  if (typeof initRvrRepeatActions === "function") {
+    initRvrRepeatActions();
+  }
+</script>
 {% endblock %}

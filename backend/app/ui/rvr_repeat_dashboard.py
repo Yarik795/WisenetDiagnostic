@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
+from urllib.parse import urlencode
 
-from ..rvr_repeat_report import build_rvr_repeat_report, format_kind_cell
+from ..rvr_repeat_report import (
+    OBJECT_TYPE_ADZ,
+    OBJECT_TYPE_VSP,
+    build_rvr_repeat_report,
+    format_kind_cell,
+)
 from ..state_store import StateStore
+
+OBJECT_TYPE_OPTIONS = (OBJECT_TYPE_VSP, OBJECT_TYPE_ADZ)
 
 
 def _quarter_bounds(year: int, quarter: int) -> tuple[date, date]:
@@ -111,6 +119,64 @@ def _datetime_bounds(date_from: date, date_to: date) -> tuple[datetime, datetime
     return start, end_exclusive
 
 
+def normalize_object_type_filter(value: Optional[str]) -> str:
+    if value in OBJECT_TYPE_OPTIONS:
+        return value
+    return ""
+
+
+def filter_report_by_object_type(
+    report: dict[str, Any], object_type: str
+) -> dict[str, Any]:
+    if object_type not in OBJECT_TYPE_OPTIONS:
+        return report
+
+    groups_ge2 = [
+        group for group in report.get("groups_ge2", []) if group["object_type"] == object_type
+    ]
+    groups_ge3 = [
+        group for group in report.get("groups_ge3", []) if group["object_type"] == object_type
+    ]
+    data_rows = [
+        row for row in report.get("data_rows", []) if row.get("object_type") == object_type
+    ]
+    repeats_total = sum(group["repeat_count"] for group in groups_ge2)
+    top_object = ""
+    if groups_ge2:
+        top = groups_ge2[0]
+        top_object = f"{top['address']} ({top['object_type']})"
+
+    filtered = dict(report)
+    filtered["groups_ge2"] = groups_ge2
+    filtered["groups_ge3"] = groups_ge3
+    filtered["data_rows"] = data_rows
+    filtered["kpi"] = {
+        "groups_total": len(groups_ge2),
+        "repeats_total": repeats_total,
+        "top_object": top_object,
+        "requests_total": len(data_rows),
+    }
+    filtered["has_data"] = bool(data_rows)
+    return filtered
+
+
+def build_rvr_repeat_query_string(
+    *,
+    date_from: str,
+    date_to: str,
+    threshold: int,
+    object_type: str = "",
+) -> str:
+    params: dict[str, str | int] = {
+        "from": date_from,
+        "to": date_to,
+        "threshold": threshold,
+    }
+    if object_type:
+        params["object_type"] = object_type
+    return urlencode(params)
+
+
 def _prepare_table_groups(
     groups: list[dict[str, Any]], kinds: list[str]
 ) -> list[dict[str, Any]]:
@@ -138,25 +204,43 @@ def rvr_repeat_page_context(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     threshold: int = 2,
+    object_type: Optional[str] = None,
 ) -> dict[str, Any]:
     d_from, d_to = parse_period_dates(date_from, date_to)
     if threshold not in (2, 3):
         threshold = 2
+    object_type_filter = normalize_object_type_filter(object_type)
+    date_from_iso = d_from.isoformat()
+    date_to_iso = d_to.isoformat()
+    query_string = build_rvr_repeat_query_string(
+        date_from=date_from_iso,
+        date_to=date_to_iso,
+        threshold=threshold,
+        object_type=object_type_filter,
+    )
 
     pp_count = state.count_pp_requests()
     latest_import = state.get_latest_source_import("requests")
     latest_naumen = state.get_latest_source_import("naumen")
 
+    base_ctx = {
+        "rvr_pp_count": pp_count,
+        "rvr_date_from": date_from_iso,
+        "rvr_date_to": date_to_iso,
+        "rvr_threshold": threshold,
+        "rvr_object_type": object_type_filter,
+        "rvr_object_type_options": OBJECT_TYPE_OPTIONS,
+        "rvr_period_presets": period_presets(),
+        "rvr_latest_import": latest_import,
+        "rvr_latest_naumen_import": latest_naumen,
+        "rvr_query_string": query_string,
+        "rvr_export_url": f"/rvr-repeat/export.xlsx?{query_string}",
+    }
+
     if pp_count == 0:
         return {
+            **base_ctx,
             "rvr_has_data": False,
-            "rvr_pp_count": 0,
-            "rvr_date_from": d_from.isoformat(),
-            "rvr_date_to": d_to.isoformat(),
-            "rvr_threshold": threshold,
-            "rvr_period_presets": period_presets(),
-            "rvr_latest_import": latest_import,
-            "rvr_latest_naumen_import": latest_naumen,
             "rvr_report": None,
             "rvr_kpi": None,
             "rvr_table_groups": [],
@@ -174,27 +258,29 @@ def rvr_repeat_page_context(
     )
     desc_map = state.naumen_description_by_sberdrug()
     report = build_rvr_repeat_report(rows, desc_map, date_from=d_from, date_to=d_to)
+    report = filter_report_by_object_type(report, object_type_filter)
 
     groups = report["groups_ge3"] if threshold == 3 else report["groups_ge2"]
     kinds = report.get("kinds") or []
+    has_groups = bool(groups)
+
+    empty_message = ""
+    if not report.get("has_data"):
+        empty_message = (
+            "За выбранный период нет заявок РВР, удовлетворяющих фильтрам отчёта."
+        )
+    elif not has_groups:
+        empty_message = (
+            "Нет групп с повторами для выбранного типа объекта и порога."
+        )
 
     return {
-        "rvr_has_data": report.get("has_data", False),
-        "rvr_pp_count": pp_count,
-        "rvr_date_from": d_from.isoformat(),
-        "rvr_date_to": d_to.isoformat(),
-        "rvr_threshold": threshold,
-        "rvr_period_presets": period_presets(),
-        "rvr_latest_import": latest_import,
-        "rvr_latest_naumen_import": latest_naumen,
+        **base_ctx,
+        "rvr_has_data": report.get("has_data", False) and has_groups,
         "rvr_report": report,
         "rvr_kpi": report.get("kpi"),
         "rvr_table_groups": _prepare_table_groups(groups, kinds),
         "rvr_kinds": kinds,
-        "rvr_empty_message": (
-            "За выбранный период нет заявок РВР, удовлетворяющих фильтрам отчёта."
-            if not report.get("has_data")
-            else ""
-        ),
+        "rvr_empty_message": empty_message,
         "rvr_filters_text": report.get("filters_text", ""),
     }

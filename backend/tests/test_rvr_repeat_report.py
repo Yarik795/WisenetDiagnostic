@@ -15,6 +15,7 @@ from app.rvr_repeat_report import (
     extract_vk_comment,
     object_type_from_fio,
 )
+from app.ui.rvr_repeat_dashboard import filter_report_by_object_type
 from app.ui.rvr_repeat_export import build_rvr_repeat_xlsx
 
 
@@ -178,3 +179,29 @@ def test_build_rvr_repeat_xlsx_sheets() -> None:
     assert "Адрес" in headers
     assert "Количество повторов" in headers
     assert "Анализ заявок / подозрение на повтор" in headers
+
+
+def test_filter_report_by_object_type() -> None:
+    report = {
+        "groups_ge2": [
+            {"address": "A", "object_type": OBJECT_TYPE_VSP, "repeat_count": 2},
+            {"address": "B", "object_type": OBJECT_TYPE_ADZ, "repeat_count": 1},
+        ],
+        "groups_ge3": [
+            {"address": "A", "object_type": OBJECT_TYPE_VSP, "repeat_count": 2},
+        ],
+        "data_rows": [
+            {"object_type": OBJECT_TYPE_VSP},
+            {"object_type": OBJECT_TYPE_VSP},
+            {"object_type": OBJECT_TYPE_ADZ},
+        ],
+        "has_data": True,
+        "kpi": {"groups_total": 2, "repeats_total": 3, "top_object": "A", "requests_total": 3},
+    }
+    filtered = filter_report_by_object_type(report, OBJECT_TYPE_VSP)
+    assert len(filtered["groups_ge2"]) == 1
+    assert filtered["groups_ge2"][0]["address"] == "A"
+    assert len(filtered["data_rows"]) == 2
+    assert filtered["kpi"]["groups_total"] == 1
+    assert filtered["kpi"]["repeats_total"] == 2
+    assert filtered["kpi"]["requests_total"] == 2

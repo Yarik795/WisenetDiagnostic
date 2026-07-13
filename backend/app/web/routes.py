@@ -653,6 +653,7 @@ def rvr_repeat_page(
     date_from: str = Query("", alias="from"),
     date_to: str = Query("", alias="to"),
     threshold: int = 2,
+    object_type: str = "",
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -666,6 +667,7 @@ def rvr_repeat_page(
                 date_from=date_from or None,
                 date_to=date_to or None,
                 threshold=threshold,
+                object_type=object_type or None,
             ),
         },
     )
@@ -677,6 +679,7 @@ def rvr_repeat_report_partial(
     date_from: str = Query("", alias="from"),
     date_to: str = Query("", alias="to"),
     threshold: int = 2,
+    object_type: str = "",
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -687,6 +690,7 @@ def rvr_repeat_report_partial(
             date_from=date_from or None,
             date_to=date_to or None,
             threshold=threshold,
+            object_type=object_type or None,
         ),
     )
 
@@ -697,6 +701,7 @@ def _rvr_repeat_query_params(request: Request) -> dict[str, str | int]:
         "date_from": qp.get("from") or qp.get("date_from") or "",
         "date_to": qp.get("to") or qp.get("date_to") or "",
         "threshold": int(qp.get("threshold") or 2),
+        "object_type": qp.get("object_type") or "",
     }
 
 
@@ -710,6 +715,7 @@ def _rvr_repeat_export_response(
         date_from=params["date_from"] or None,
         date_to=params["date_to"] or None,
         threshold=int(params["threshold"]),
+        object_type=str(params.get("object_type") or "") or None,
     )
     report = page_ctx.get("rvr_report")
     if not report or not report.get("has_data"):
@@ -751,6 +757,7 @@ def rvr_repeat_report_email(
         date_from=params["date_from"] or None,
         date_to=params["date_to"] or None,
         threshold=int(params["threshold"]),
+        object_type=str(params.get("object_type") or "") or None,
     )
     report = page_ctx.get("rvr_report")
     if not report or not report.get("has_data"):

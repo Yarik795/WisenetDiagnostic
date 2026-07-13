@@ -1318,47 +1318,49 @@ function collectRvrRepeatParams() {
   const fromInput = document.querySelector("[data-rvr-date-from]");
   const toInput = document.querySelector("[data-rvr-date-to]");
   const thresholdSelect = document.querySelector("[data-rvr-threshold]");
+  const objectTypeSelect = document.querySelector("[data-rvr-object-type]");
   if (fromInput && fromInput.value) params.set("from", fromInput.value);
   if (toInput && toInput.value) params.set("to", toInput.value);
   if (thresholdSelect && thresholdSelect.value) {
     params.set("threshold", thresholdSelect.value);
   }
+  if (objectTypeSelect && objectTypeSelect.value) {
+    params.set("object_type", objectTypeSelect.value);
+  }
   return params;
+}
+
+function updateRvrRepeatLinks() {
+  const params = collectRvrRepeatParams();
+  const qs = params.toString();
+  const exportLink = document.getElementById("rvr-export-link");
+  if (exportLink) {
+    exportLink.href = qs
+      ? `/rvr-repeat/export.xlsx?${qs}`
+      : "/rvr-repeat/export.xlsx";
+  }
 }
 
 function initRvrRepeatActions(root) {
   const scope = root || document;
-  scope.querySelectorAll("[data-rvr-preset]").forEach((btn) => {
-    if (btn.dataset.rvrPresetBound === "1") return;
-    btn.dataset.rvrPresetBound = "1";
-    btn.addEventListener("click", () => {
-      const fromInput = document.querySelector("[data-rvr-date-from]");
-      const toInput = document.querySelector("[data-rvr-date-to]");
-      const form = document.getElementById("rvr-repeat-filters");
-      if (fromInput) fromInput.value = btn.dataset.rvrPresetFrom || "";
-      if (toInput) toInput.value = btn.dataset.rvrPresetTo || "";
-      if (form && typeof htmx !== "undefined") {
-        htmx.trigger(form, "submit");
-      }
+  updateRvrRepeatLinks();
+
+  const form = document.getElementById("rvr-repeat-filters");
+  if (form && form.dataset.rvrFiltersBound !== "1") {
+    form.dataset.rvrFiltersBound = "1";
+    form.addEventListener("change", () => {
+      updateRvrRepeatLinks();
     });
-  });
-  scope.querySelectorAll("[data-rvr-export]").forEach((btn) => {
-    if (btn.dataset.rvrExportBound === "1") return;
-    btn.dataset.rvrExportBound = "1";
-    btn.addEventListener("click", () => {
-      const params = collectRvrRepeatParams();
-      const qs = params.toString();
-      window.location.href = qs
-        ? `/rvr-repeat/export.xlsx?${qs}`
-        : "/rvr-repeat/export.xlsx";
-    });
-  });
+  }
+
   scope.querySelectorAll("[data-rvr-email]").forEach((btn) => {
     if (btn.dataset.rvrEmailBound === "1") return;
     btn.dataset.rvrEmailBound = "1";
+    const defaultLabel = btn.textContent || "Отправить на почту";
     btn.addEventListener("click", async () => {
       if (btn.disabled) return;
       btn.disabled = true;
+      btn.textContent = "Отправка…";
       try {
         const params = collectRvrRepeatParams();
         const qs = params.toString();
@@ -1373,6 +1375,7 @@ function initRvrRepeatActions(root) {
         console.error("[wisenet] rvr-repeat email error", err);
       } finally {
         btn.disabled = false;
+        btn.textContent = defaultLabel;
       }
     });
   });
