@@ -451,27 +451,59 @@ a:hover {
   background: rgba(239, 68, 68, 0.05);
 }
 
-/* AI verdict row coloring (overrides metric-based warn/error when present) */
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] th,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] td {
-  background: rgba(185, 28, 28, 0.1);
+/* AI verdict row coloring — replaces metric warn/error when verdict is set */
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > td,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > td {
+  background: rgba(185, 28, 28, 0.16);
 }
 
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] th,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] td,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] th,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] td {
-  background: rgba(220, 38, 38, 0.07);
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th:first-child,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th:first-child {
+  box-shadow: inset 4px 0 0 #b91c1c;
 }
 
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] th,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] td {
-  background: rgba(234, 179, 8, 0.08);
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > td,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > td,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > td,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > td {
+  background: rgba(234, 88, 12, 0.14);
 }
 
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] th,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] td {
-  background: rgba(22, 163, 74, 0.06);
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th:first-child,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th:first-child,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th:first-child,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th:first-child {
+  box-shadow: inset 4px 0 0 #ea580c;
+}
+
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > td,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > td {
+  background: rgba(234, 179, 8, 0.16);
+}
+
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th:first-child,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th:first-child {
+  box-shadow: inset 4px 0 0 #ca8a04;
+}
+
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-none > td,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > td {
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th:first-child,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th:first-child {
+  box-shadow: inset 4px 0 0 #16a34a;
 }
 
 .rvr-repeat-detail td {

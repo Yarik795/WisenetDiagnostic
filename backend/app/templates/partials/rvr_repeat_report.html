@@ -53,7 +53,11 @@
         </thead>
         <tbody>
           {% for row in rvr_matrix_rows %}
-          <tr class="object-matrix-row object-matrix-row--{{ row.aggregate_status }}" data-rvr-matrix-row="{{ row.row_id }}"{% if row.ai_verdict %} data-ai-verdict="{{ row.ai_verdict }}"{% endif %}>
+          <tr
+            class="object-matrix-row{% if row.ai_verdict %} rvr-matrix-row--ai-{{ row.ai_verdict }}{% else %} object-matrix-row--{{ row.aggregate_status }}{% endif %}"
+            data-rvr-matrix-row="{{ row.row_id }}"
+            {% if row.ai_verdict %}data-ai-verdict="{{ row.ai_verdict }}"{% endif %}
+          >
             <th scope="row" class="object-matrix-object rvr-matrix-object">
               <span class="rvr-matrix-address">{{ row.address }}</span>
               <span class="rvr-matrix-type text-secondary">{{ row.object_type }}</span>
