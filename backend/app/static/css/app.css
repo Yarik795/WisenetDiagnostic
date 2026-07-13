@@ -456,12 +456,12 @@ a:hover {
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > td,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > td {
-  background: rgba(185, 28, 28, 0.16);
+  background-color: rgba(185, 28, 28, 0.22);
 }
 
-.rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th:first-child,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th:first-child {
-  box-shadow: inset 4px 0 0 #b91c1c;
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th.rvr-matrix-object,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th.rvr-matrix-object {
+  border-left: 4px solid #dc2626;
 }
 
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th,
@@ -472,38 +472,46 @@ a:hover {
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > td,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > td {
-  background: rgba(234, 88, 12, 0.14);
+  background-color: rgba(234, 88, 12, 0.2);
 }
 
-.rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th:first-child,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th:first-child,
-.rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th:first-child,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th:first-child {
-  box-shadow: inset 4px 0 0 #ea580c;
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th.rvr-matrix-object,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th.rvr-matrix-object,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th.rvr-matrix-object,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th.rvr-matrix-object {
+  border-left: 4px solid #ea580c;
 }
 
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th,
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > td,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > td {
-  background: rgba(234, 179, 8, 0.16);
+  background-color: rgba(234, 179, 8, 0.2);
 }
 
-.rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th:first-child,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th:first-child {
-  box-shadow: inset 4px 0 0 #ca8a04;
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th.rvr-matrix-object,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th.rvr-matrix-object {
+  border-left: 4px solid #ca8a04;
 }
 
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th,
 .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > td,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th,
 .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > td {
-  background: rgba(22, 163, 74, 0.12);
+  background-color: rgba(22, 163, 74, 0.18);
 }
 
-.rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th:first-child,
-.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th:first-child {
-  box-shadow: inset 4px 0 0 #16a34a;
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th.rvr-matrix-object,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th.rvr-matrix-object {
+  border-left: 4px solid #16a34a;
+}
+
+/* Ячейки систем в строке «нет повтора» — нейтральнее, чтобы не спорили с зелёным фоном */
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-none .matrix-cell--warn,
+.rvr-repeat-matrix-table .rvr-matrix-row--ai-none .matrix-cell--error {
+  background: rgba(107, 114, 128, 0.14);
+  border-color: rgba(107, 114, 128, 0.28);
+  color: var(--text-secondary);
 }
 
 .rvr-repeat-detail td {
@@ -1230,7 +1238,7 @@ tr.recorder-row--excluded {
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.data-table th {
+.data-table thead th {
   color: var(--text-secondary);
   font-weight: 500;
   font-size: 12px;
@@ -1239,6 +1247,15 @@ tr.recorder-row--excluded {
   background: var(--bg-elevated);
   position: sticky;
   top: 0;
+}
+
+.data-table tbody th {
+  font-weight: inherit;
+  font-size: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  color: inherit;
+  background: transparent;
 }
 
 .toolbar {
