@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlencode
 
 from ..rvr_repeat_report import (
     OBJECT_TYPE_ADZ,
     OBJECT_TYPE_VSP,
     build_rvr_repeat_report,
-    format_kind_cell,
 )
 from ..state_store import StateStore
+
+KindCellStatus = Literal["na", "neutral", "warn", "error"]
+RowAggregateStatus = Literal["ok", "warn", "error"]
 
 OBJECT_TYPE_OPTIONS = (OBJECT_TYPE_VSP, OBJECT_TYPE_ADZ)
 
@@ -177,20 +180,96 @@ def build_rvr_repeat_query_string(
     return urlencode(params)
 
 
-def _prepare_table_groups(
-    groups: list[dict[str, Any]], kinds: list[str]
+def _base_kind_cell_status(count: int) -> KindCellStatus:
+    if count <= 0:
+        return "na"
+    if count == 1:
+        return "neutral"
+    if count == 2:
+        return "warn"
+    return "error"
+
+
+def _bump_kind_cell_status(status: KindCellStatus) -> KindCellStatus:
+    if status == "neutral":
+        return "warn"
+    if status == "warn":
+        return "error"
+    return status
+
+
+def kind_cell_status(count: int, *, boost: bool = False) -> KindCellStatus:
+    status = _base_kind_cell_status(count)
+    if boost and count >= 2:
+        return _bump_kind_cell_status(status)
+    return status
+
+
+def row_aggregate_status(repeat_count: int) -> RowAggregateStatus:
+    if repeat_count >= 7:
+        return "error"
+    if repeat_count >= 2:
+        return "warn"
+    return "ok"
+
+
+def _kind_cell_title(kind: str, entries: list[dict[str, str]]) -> str:
+    if not entries:
+        return f"{kind}: нет заявок"
+    parts = [
+        f"{e.get('num', '')} ({e.get('date', '')})".strip()
+        for e in entries
+    ]
+    return f"{kind}: " + ", ".join(p for p in parts if p)
+
+
+def _matrix_row_id(address: str, object_type: str) -> str:
+    raw = f"{address}\0{object_type}".encode("utf-8")
+    return "rvr-" + hashlib.sha256(raw).hexdigest()[:12]
+
+
+def build_kind_cells(
+    by_kind: dict[str, list[dict[str, str]]],
+    kinds: list[str],
+) -> list[dict[str, Any]]:
+    counts = {kind: len(by_kind.get(kind, [])) for kind in kinds}
+    local_repeats = {kind: max(0, counts[kind] - 1) for kind in kinds}
+    max_local_repeat = max(local_repeats.values()) if local_repeats else 0
+
+    cells: list[dict[str, Any]] = []
+    for kind in kinds:
+        entries = list(by_kind.get(kind, []))
+        count = counts[kind]
+        boost = max_local_repeat > 0 and local_repeats[kind] == max_local_repeat
+        cells.append(
+            {
+                "kind": kind,
+                "count": count,
+                "status": kind_cell_status(count, boost=boost),
+                "entries": entries,
+                "title": _kind_cell_title(kind, entries),
+            }
+        )
+    return cells
+
+
+def build_rvr_matrix_rows(
+    groups: list[dict[str, Any]],
+    kinds: list[str],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for group in groups:
-        cells: dict[str, str] = {}
         by_kind = group.get("by_kind") or {}
-        for kind in kinds:
-            cells[kind] = format_kind_cell(by_kind.get(kind, []))
+        address = group["address"]
+        object_type = group["object_type"]
+        cells = build_kind_cells(by_kind, kinds)
         rows.append(
             {
-                "address": group["address"],
-                "object_type": group["object_type"],
+                "row_id": _matrix_row_id(address, object_type),
+                "address": address,
+                "object_type": object_type,
                 "repeat_count": group["repeat_count"],
+                "aggregate_status": row_aggregate_status(group["repeat_count"]),
                 "cells": cells,
                 "analysis": group.get("analysis"),
             }
@@ -243,7 +322,7 @@ def rvr_repeat_page_context(
             "rvr_has_data": False,
             "rvr_report": None,
             "rvr_kpi": None,
-            "rvr_table_groups": [],
+            "rvr_matrix_rows": [],
             "rvr_kinds": [],
             "rvr_empty_message": (
                 "Данные заявок ещё не загружены. Загрузите файл с «заявки» в названии "
@@ -279,7 +358,7 @@ def rvr_repeat_page_context(
         "rvr_has_data": report.get("has_data", False) and has_groups,
         "rvr_report": report,
         "rvr_kpi": report.get("kpi"),
-        "rvr_table_groups": _prepare_table_groups(groups, kinds),
+        "rvr_matrix_rows": build_rvr_matrix_rows(groups, kinds),
         "rvr_kinds": kinds,
         "rvr_empty_message": empty_message,
         "rvr_filters_text": report.get("filters_text", ""),

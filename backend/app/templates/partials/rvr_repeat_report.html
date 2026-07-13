@@ -31,33 +31,98 @@
     </div>
   </div>
 
-  {% if rvr_table_groups %}
-  <div class="table-wrap" style="overflow-x:auto;">
-    <table class="data-table rvr-repeat-table">
-      <thead>
-        <tr>
-          <th>Адрес</th>
-          <th>Тип объекта</th>
-          <th>Количество повторов</th>
-          {% for kind in rvr_kinds %}
-          <th>{{ kind }}</th>
+  {% if rvr_matrix_rows %}
+  {% set matrix_colspan = 3 + rvr_kinds|length + 1 %}
+  <section class="object-health-matrix rvr-repeat-matrix card" aria-label="Проблемные объекты">
+    <div class="object-health-matrix-header">
+      <h2 class="object-health-matrix-title">Проблемные объекты</h2>
+      <p class="object-health-matrix-hint">Клик по числу в ячейке — заявки выбранного вида системы.</p>
+    </div>
+    <div class="table-wrap object-health-matrix-wrap rvr-repeat-matrix-wrap">
+      <table class="data-table data-table--compact object-health-matrix-table rvr-repeat-matrix-table">
+        <thead>
+          <tr>
+            <th scope="col">Объект</th>
+            <th scope="col" class="matrix-col-narrow">Повторы</th>
+            {% for kind in rvr_kinds %}
+            <th scope="col" class="matrix-col-narrow" title="{{ kind }}">{{ kind }}</th>
+            {% endfor %}
+            <th scope="col">Анализ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rvr_matrix_rows %}
+          <tr class="object-matrix-row object-matrix-row--{{ row.aggregate_status }}" data-rvr-matrix-row="{{ row.row_id }}">
+            <th scope="row" class="object-matrix-object rvr-matrix-object">
+              <span class="rvr-matrix-address">{{ row.address }}</span>
+              <span class="rvr-matrix-type text-secondary">{{ row.object_type }}</span>
+            </th>
+            <td class="num rvr-matrix-repeats">{{ row.repeat_count }}</td>
+            {% for cell in row.cells %}
+            <td>
+              {% if cell.count > 0 %}
+              <button
+                type="button"
+                class="matrix-cell matrix-cell--{{ cell.status }} rvr-matrix-cell-btn"
+                data-rvr-cell-toggle
+                data-row-id="{{ row.row_id }}"
+                data-kind="{{ cell.kind }}"
+                title="{{ cell.title }}"
+                aria-expanded="false"
+                aria-controls="rvr-detail-{{ row.row_id }}"
+              >{{ cell.count }}</button>
+              {% else %}
+              <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+            <td class="rvr-matrix-analysis text-secondary">
+              {% if row.analysis %}{{ row.analysis }}{% else %}—{% endif %}
+            </td>
+          </tr>
+          <tr
+            id="rvr-detail-{{ row.row_id }}"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="{{ row.row_id }}"
+            hidden
+          >
+            <td colspan="{{ matrix_colspan }}">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="{{ row.row_id }}">
+                {% for cell in row.cells %}
+                {% if cell.count > 0 %}
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="{{ row.row_id }}"
+                  data-kind="{{ cell.kind }}"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">{{ cell.kind }} <span class="rvr-kind-detail-count">({{ cell.count }})</span></h3>
+                  <ul class="rvr-ticket-list">
+                    {% for entry in cell.entries %}
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ {{ entry.num }}</span>
+                        {% if entry.date %}
+                        <span class="rvr-ticket-date text-secondary">{{ entry.date }}</span>
+                        {% endif %}
+                      </div>
+                      {% if entry.desc %}
+                      <p class="rvr-ticket-desc">{{ entry.desc }}</p>
+                      {% endif %}
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </section>
+                {% endif %}
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
           {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for group in rvr_table_groups %}
-        <tr>
-          <td>{{ group.address }}</td>
-          <td>{{ group.object_type }}</td>
-          <td class="num">{{ group.repeat_count }}</td>
-          {% for kind in rvr_kinds %}
-          <td class="rvr-kind-cell" style="white-space:pre-wrap;min-width:200px;">{{ group.cells[kind] }}</td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+        </tbody>
+      </table>
+    </div>
+  </section>
   {% else %}
   <div class="empty-state">
     <p>Нет групп, удовлетворяющих выбранному порогу повторов.</p>

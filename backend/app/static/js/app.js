@@ -1341,9 +1341,66 @@ function updateRvrRepeatLinks() {
   }
 }
 
+function closeAllRvrRepeatDetails(scope) {
+  const root = scope || document;
+  root.querySelectorAll("[data-rvr-detail-row]").forEach((row) => {
+    row.hidden = true;
+  });
+  root.querySelectorAll("[data-rvr-kind-block]").forEach((block) => {
+    block.hidden = true;
+  });
+  root.querySelectorAll("[data-rvr-cell-toggle]").forEach((btn) => {
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function openRvrRepeatDetail(rowId, kind, scope) {
+  const root = scope || document;
+  closeAllRvrRepeatDetails(root);
+
+  const detailRow = root.querySelector(`[data-rvr-detail-row="${rowId}"]`);
+  const kindBlock = root.querySelector(
+    `[data-rvr-kind-block="${rowId}"][data-kind="${kind}"]`
+  );
+  const toggleBtn = root.querySelector(
+    `[data-rvr-cell-toggle][data-row-id="${rowId}"][data-kind="${kind}"]`
+  );
+
+  if (detailRow) detailRow.hidden = false;
+  if (kindBlock) kindBlock.hidden = false;
+  if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+}
+
+function initRvrRepeatMatrix(root) {
+  const scope = root || document;
+  const reportRoot =
+    scope.id === "rvr-repeat-report-root"
+      ? scope
+      : scope.querySelector("#rvr-repeat-report-root");
+  if (!reportRoot || reportRoot.dataset.rvrMatrixBound === "1") return;
+  reportRoot.dataset.rvrMatrixBound = "1";
+
+  reportRoot.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-rvr-cell-toggle]");
+    if (!btn || !reportRoot.contains(btn)) return;
+
+    const rowId = btn.dataset.rowId;
+    const kind = btn.dataset.kind;
+    if (!rowId || !kind) return;
+
+    const isOpen = btn.getAttribute("aria-expanded") === "true";
+    if (isOpen) {
+      closeAllRvrRepeatDetails(reportRoot);
+      return;
+    }
+    openRvrRepeatDetail(rowId, kind, reportRoot);
+  });
+}
+
 function initRvrRepeatActions(root) {
   const scope = root || document;
   updateRvrRepeatLinks();
+  initRvrRepeatMatrix(scope);
 
   const form = document.getElementById("rvr-repeat-filters");
   if (form && form.dataset.rvrFiltersBound !== "1") {

@@ -87,6 +87,7 @@ def test_rvr_repeat_page_renders(client: TestClient) -> None:
     assert "Повторные РВР" in r.text
     assert 'id="rvr-object-type"' in r.text
     assert 'data-rvr-date-from' in r.text
+    assert "rvr-kind-cell" not in r.text
 
 
 def test_rvr_repeat_page_with_object_type_filter(client: TestClient) -> None:
