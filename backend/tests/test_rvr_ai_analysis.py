@@ -14,6 +14,8 @@ from app.rvr_ai_analysis import (
     group_fingerprint,
     matrix_row_id,
     parse_batch_response,
+    verdict_label,
+    _normalize_verdict,
 )
 from app.state_store import StateStore
 
@@ -64,10 +66,29 @@ def test_build_batch_prompt_contains_objects() -> None:
     group = _sample_group()
     messages = build_batch_prompt([group])
     assert messages[0]["role"] == "system"
+    system = messages[0]["content"]
+    assert "confirmed|suspect|possible|none" in system
     user = messages[1]["content"]
     assert "i=0" in user
     assert "г Москва, ул Тестовая, 1" in user
     assert "САПС" in user
+
+
+def test_normalize_verdict_legacy_repeat() -> None:
+    assert _normalize_verdict("repeat") == "suspect"
+    assert _normalize_verdict("confirmed") == "confirmed"
+    assert _normalize_verdict("suspect") == "suspect"
+    assert _normalize_verdict("подозрение на повтор") == "suspect"
+    assert _normalize_verdict("повтор подтверждён") == "confirmed"
+
+
+def test_verdict_label() -> None:
+    assert verdict_label("confirmed") == "Повтор"
+    assert verdict_label("suspect") == "Подозрение на повтор"
+    assert verdict_label("repeat") == "Подозрение на повтор"
+    assert verdict_label("possible") == "Возможен повтор"
+    assert verdict_label("none") == "Нет повтора"
+    assert verdict_label(None) == ""
 
 
 def test_parse_batch_response_with_json_fence() -> None:
@@ -86,10 +107,17 @@ def test_parse_batch_response_with_json_fence() -> None:
     records = parse_batch_response(text, [group], model="google/gemini-2.5-flash")
     assert len(records) == 1
     rec = records[0]
-    assert rec.verdict == "repeat"
+    assert rec.verdict == "suspect"
     assert "3 заявки" in rec.analysis
     assert "датчиков" in rec.description
     assert rec.row_id == matrix_row_id(group["address"], group["object_type"])
+
+
+def test_parse_batch_response_confirmed_verdict() -> None:
+    group = _sample_group()
+    text = """[{"i": 0, "verdict": "confirmed", "analysis": "Повтор.", "description": "Камера 29."}]"""
+    records = parse_batch_response(text, [group], model="test-model")
+    assert records[0].verdict == "confirmed"
 
 
 def test_parse_batch_response_defaults_when_index_missing() -> None:

@@ -87,7 +87,21 @@
     hx-indicator="#rvr-ai-check-indicator"
     title="Проверить текущую выборку через AI"
   >Проверить через AI</button>
-  <span id="rvr-ai-check-indicator" class="htmx-indicator text-secondary" style="margin-left:6px;">Анализ…</span>
+  <div
+    id="rvr-ai-check-indicator"
+    class="htmx-indicator rvr-ai-check-indicator"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+  >
+    <p class="rvr-ai-check-indicator-text">
+      AI анализирует заявки, это может занять до минуты…
+      <span class="rvr-ai-check-elapsed" data-rvr-ai-elapsed>прошло 0 с</span>
+    </p>
+    <div class="rvr-ai-check-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+      <div class="rvr-ai-check-progress-bar"></div>
+    </div>
+  </div>
   <a
     id="rvr-export-link"
     class="btn btn-ghost btn-sm"

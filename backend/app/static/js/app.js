@@ -1394,6 +1394,29 @@ function initRvrRepeatMatrix() {
   });
 }
 
+let rvrAiCheckTimer = null;
+let rvrAiCheckStartedAt = 0;
+
+function startRvrAiCheckTimer() {
+  stopRvrAiCheckTimer();
+  const indicator = document.getElementById("rvr-ai-check-indicator");
+  const elapsedEl = indicator?.querySelector("[data-rvr-ai-elapsed]");
+  if (!elapsedEl) return;
+  rvrAiCheckStartedAt = Date.now();
+  elapsedEl.textContent = "прошло 0 с";
+  rvrAiCheckTimer = setInterval(() => {
+    const sec = Math.floor((Date.now() - rvrAiCheckStartedAt) / 1000);
+    elapsedEl.textContent = `прошло ${sec} с`;
+  }, 1000);
+}
+
+function stopRvrAiCheckTimer() {
+  if (rvrAiCheckTimer) {
+    clearInterval(rvrAiCheckTimer);
+    rvrAiCheckTimer = null;
+  }
+}
+
 function initRvrRepeatActions(root) {
   const scope = root || document;
   updateRvrRepeatLinks();
@@ -1416,12 +1439,14 @@ function initRvrRepeatActions(root) {
       btn.dataset.rvrAiWasEnabled = "1";
       btn.disabled = true;
       btn.textContent = "Анализ…";
+      startRvrAiCheckTimer();
     });
     btn.addEventListener("htmx:afterRequest", () => {
       if (btn.dataset.rvrAiWasEnabled !== "1") return;
       delete btn.dataset.rvrAiWasEnabled;
       btn.disabled = false;
       btn.textContent = defaultLabel;
+      stopRvrAiCheckTimer();
     });
   });
 

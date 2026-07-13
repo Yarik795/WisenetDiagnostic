@@ -683,7 +683,7 @@ ORDER BY total DESC;
 | `address` | TEXT | Адрес объекта |
 | `object_type` | TEXT | Тип объекта (АДЗ/ВСП) |
 | `fingerprint` | TEXT | Отпечаток набора заявок на момент проверки |
-| `verdict` | TEXT | `repeat` / `possible` / `none` |
+| `verdict` | TEXT | `confirmed` / `suspect` / `possible` / `none` (легаси `repeat` в старом кэше) |
 | `analysis` | TEXT | Колонка «Анализ заявок / подозрение на повтор» |
 | `description` | TEXT | Колонка «Описание проблем на объекте» |
 | `model` | TEXT | ID модели VseLLM |

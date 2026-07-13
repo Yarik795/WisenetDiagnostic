@@ -451,6 +451,29 @@ a:hover {
   background: rgba(239, 68, 68, 0.05);
 }
 
+/* AI verdict row coloring (overrides metric-based warn/error when present) */
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] td {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] td,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] td {
+  background: rgba(220, 38, 38, 0.07);
+}
+
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] td {
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] th,
+.rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] td {
+  background: rgba(22, 163, 74, 0.06);
+}
+
 .rvr-repeat-detail td {
   padding: 0 !important;
   border-top: none;
@@ -545,6 +568,12 @@ a:hover {
   white-space: nowrap;
 }
 
+.rvr-ai-badge--confirmed {
+  background: rgba(185, 28, 28, 0.18);
+  color: #991b1b;
+}
+
+.rvr-ai-badge--suspect,
 .rvr-ai-badge--repeat {
   background: rgba(220, 38, 38, 0.12);
   color: #b91c1c;
@@ -564,6 +593,62 @@ a:hover {
 .rvr-ai-badge--unchecked {
   background: rgba(100, 116, 139, 0.12);
   color: var(--text-secondary);
+}
+
+.rvr-ai-check-indicator {
+  display: none;
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 420px;
+  margin-left: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.htmx-request .rvr-ai-check-indicator,
+.htmx-request#rvr-ai-check-indicator {
+  display: block;
+}
+
+.rvr-ai-check-indicator-text {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.rvr-ai-check-elapsed {
+  display: block;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.rvr-ai-check-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.rvr-ai-check-progress-bar {
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: rvr-ai-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes rvr-ai-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
 
 .status-overview-grid {

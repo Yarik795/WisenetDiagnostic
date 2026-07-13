@@ -80,12 +80,14 @@
             <td class="rvr-matrix-analysis">
               {% if row.ai_stale %}
               <span class="rvr-ai-badge rvr-ai-badge--stale">Устарело</span>
-              {% elif row.ai_verdict == 'repeat' %}
-              <span class="rvr-ai-badge rvr-ai-badge--repeat">Подозрение на повтор</span>
+              {% elif row.ai_verdict == 'confirmed' %}
+              <span class="rvr-ai-badge rvr-ai-badge--confirmed">Повтор</span>
+              {% elif row.ai_verdict == 'suspect' or row.ai_verdict == 'repeat' %}
+              <span class="rvr-ai-badge rvr-ai-badge--suspect">Подозрение на повтор</span>
               {% elif row.ai_verdict == 'possible' %}
               <span class="rvr-ai-badge rvr-ai-badge--possible">Возможен повтор</span>
               {% elif row.ai_verdict == 'none' %}
-              <span class="rvr-ai-badge rvr-ai-badge--none">Повторов не выявлено</span>
+              <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
               {% elif row.ai_checked %}
               <span class="rvr-ai-badge rvr-ai-badge--unchecked">Нет данных</span>
               {% else %}

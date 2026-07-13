@@ -12,7 +12,7 @@ from ..rvr_repeat_report import (
     OBJECT_TYPE_VSP,
     build_rvr_repeat_report,
 )
-from ..rvr_ai_analysis import group_fingerprint, matrix_row_id
+from ..rvr_ai_analysis import group_fingerprint, matrix_row_id, _normalize_verdict
 from ..state_store import StateStore
 
 KindCellStatus = Literal["na", "neutral", "warn", "error"]
@@ -259,7 +259,10 @@ def _enrich_groups_with_ai_cache(
         else:
             group["analysis"] = entry.get("analysis") or None
             group["description"] = entry.get("description") or None
-            group["ai_verdict"] = entry.get("verdict") or None
+            verdict_raw = entry.get("verdict")
+            group["ai_verdict"] = (
+                _normalize_verdict(verdict_raw) if verdict_raw else None
+            )
 
 
 def _enrich_report_groups_with_ai_cache(
