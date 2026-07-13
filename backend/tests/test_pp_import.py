@@ -24,6 +24,7 @@ from app.pp_import import (
     PPRequestRow,
     build_col_index,
     import_pp_requests_xlsx,
+    is_excluded_pp_status,
     parse_dt,
     parse_money,
 )
@@ -84,6 +85,84 @@ def test_parse_dt_variants() -> None:
 def test_build_col_index_requires_columns() -> None:
     with pytest.raises(ValueError, match="отсутствуют колонки"):
         build_col_index(["Заявка №", "Статус"])
+
+
+def test_is_excluded_pp_status() -> None:
+    assert is_excluded_pp_status("Отклонена")
+    assert is_excluded_pp_status("Отозвана ДБ")
+    assert is_excluded_pp_status("Отозвана ВК")
+    assert not is_excluded_pp_status("Отправлена подрядчику")
+    assert not is_excluded_pp_status("")
+
+
+def test_import_pp_requests_skips_rejected_and_withdrawn(tmp_path: Path) -> None:
+    xlsx = tmp_path / "requests.xlsx"
+    _write_pp_xlsx(
+        xlsx,
+        [
+            (
+                "100",
+                "Отправлена подрядчику",
+                "SD1",
+                None,
+                date.today(),
+                "Иванов",
+                "ТБ",
+                "РВР",
+                "",
+                100.0,
+                "Нет",
+                "А1",
+                "СОТС",
+                "",
+            ),
+            (
+                "200",
+                "Отклонена",
+                "SD2",
+                None,
+                date.today(),
+                "Петров",
+                "ТБ",
+                "РВР",
+                "",
+                200.0,
+                "Нет",
+                "А2",
+                "СОТС",
+                "",
+            ),
+            (
+                "300",
+                "Отозвана ДБ",
+                "SD3",
+                None,
+                date.today(),
+                "Сидоров",
+                "ТБ",
+                "РВР",
+                "",
+                300.0,
+                "Нет",
+                "А3",
+                "СОТС",
+                "",
+            ),
+        ],
+    )
+
+    state = StateStore(path=tmp_path / "monitoring.db")
+    state.init_db()
+    count = import_pp_requests_xlsx(xlsx, state)
+    assert count == 1
+    assert state.count_pp_requests() == 1
+
+    with sqlite3.connect(state.path) as conn:
+        numbers = {
+            row[0]
+            for row in conn.execute("SELECT request_number FROM pp_requests").fetchall()
+        }
+    assert numbers == {"100"}
 
 
 def test_import_pp_requests_xlsx_parses_rows(tmp_path: Path) -> None:

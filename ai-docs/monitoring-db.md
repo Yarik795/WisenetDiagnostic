@@ -660,7 +660,7 @@ Append-only журнал **каждой попытки** опроса регис
 | `source_row` | INTEGER | — | Номер строки в xlsx (служебное) |
 | `imported_at` | TEXT | — | UTC ISO момента импорта (служебное) |
 
-Импорт: `pp_import.import_pp_requests_xlsx()` → `StateStore.replace_pp_requests()` (DELETE + batch `INSERT OR REPLACE` в одной транзакции). Дубликаты `request_number` в файле: последняя строка выигрывает.
+Импорт: `pp_import.import_pp_requests_xlsx()` → `StateStore.replace_pp_requests()` (DELETE + batch `INSERT OR REPLACE` в одной транзакции). Дубликаты `request_number` в файле: последняя строка выигрывает. Строки с «Статус», содержащим «Отклонена» или «Отозвана», не импортируются.
 
 Парсинг суммы: openpyxl `data_only=True` обычно возвращает `int/float`; строковый фолбэк — запятая как десятичный разделитель. Парсинг дат: `datetime` как есть → ISO; строки — `%d.%m.%Y %H:%M:%S` или `%d.%m.%Y %H:%M`.
 

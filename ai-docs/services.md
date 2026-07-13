@@ -276,7 +276,7 @@ CLI: обновление `recorders` в `config.json` из CMDB, резервн
 | `naumen` | `naumen` | SQLite `naumen_records` |
 | `arsenal` | `паспортам` | SQLite `arsenal_analytics`, `arsenal_systems` |
 
-Импорт ПП: `pp_import.import_pp_requests_xlsx()` — все колонки выгрузки в `pp_requests` (типизированные поля + `raw_json`); полная замена при каждой загрузке. Отчёт «Статус оплаты» по-прежнему строится в `cashflow_report.json`.
+Импорт ПП: `pp_import.import_pp_requests_xlsx()` — колонки выгрузки в `pp_requests` (типизированные поля + `raw_json`); полная замена при каждой загрузке. Строки, где «Статус» содержит «Отклонена» или «Отозвана», пропускаются. Отчёт «Статус оплаты» по-прежнему строится в `cashflow_report.json`.
 
 Импорт Арсенал: `arsenal_import.import_arsenal_xlsx()` — листы «Аналитика», «Общая информация» (адрес объекта), системные листы САЗ/СОУЭ/СОТС/САПС/ТСВ/СКУД (производители). Дашборд: `ui/arsenal_dashboard.py`, страница `/arsenal` (ECharts, срез по `Тип объекта охраны`, drill-down: `GET /arsenal/partials/detail`, карточка паспорта `GET /arsenal/passport/{номер}`).
 

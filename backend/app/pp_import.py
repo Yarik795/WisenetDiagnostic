@@ -40,6 +40,13 @@ MIN_REQUIRED_COLUMNS = (
 
 BATCH_SIZE = 500
 
+EXCLUDED_STATUS_MARKERS = ("Отклонена", "Отозвана")
+
+
+def is_excluded_pp_status(status: str) -> bool:
+    """Заявки с этими подстроками в «Статус» не импортируются."""
+    return any(marker in status for marker in EXCLUDED_STATUS_MARKERS)
+
 
 @dataclass(frozen=True)
 class PPRequestRow:
@@ -224,6 +231,8 @@ def import_pp_requests_xlsx(
                     continue
                 row = _row_from_values(tuple(values), col_index, header_row, row_idx)
                 if row is None:
+                    continue
+                if is_excluded_pp_status(row.status):
                     continue
                 if row.request_number in seen_numbers:
                     duplicate_numbers += 1
