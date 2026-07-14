@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 
 FUNCTIONAL_TYPE_VIDEO = "Видеорегистраторы"
+FUNCTIONAL_TYPE_CAMERA = "Видеокамеры"
+FUNCTIONAL_TYPE_AUX = "Вспомогательное оборудование"
 COL_IP = "IP"
 COL_ADDRESS = "Адрес"
 COL_MODEL = "Модель устройства"
@@ -106,13 +108,31 @@ def classify_cmdb_row(func_type: str, manufacturer: str) -> Optional[CmdbDeviceK
     return None
 
 
+def is_cmdb_importable_row(func_type: str, manufacturer: str) -> bool:
+    if classify_cmdb_row(func_type, manufacturer) is not None:
+        return True
+    return func_type in (FUNCTIONAL_TYPE_CAMERA, FUNCTIONAL_TYPE_AUX)
+
+
+def _count_key_for_row(func_type: str, device_kind: Optional[CmdbDeviceKind]) -> str:
+    if device_kind is not None:
+        return device_kind
+    if func_type == FUNCTIONAL_TYPE_CAMERA:
+        return "camera"
+    if func_type == FUNCTIONAL_TYPE_AUX:
+        return "aux"
+    return "other"
+
+
 @dataclass(frozen=True)
 class CmdbDeviceRow:
     host: str
     object_name: str
     name: Optional[str]
     mac: Optional[str]
-    device_kind: CmdbDeviceKind
+    functional_type: str
+    manufacturer: str
+    device_kind: Optional[CmdbDeviceKind]
     source_row: int
 
 
@@ -167,25 +187,28 @@ def parse_cmdb_grid(rows: list[list[Any]]) -> CmdbParseResult:
         manufacturer = normalize_cmdb_label(
             row[vendor_col] if vendor_col < len(row) else None
         )
-        device_kind = classify_cmdb_row(func_type, manufacturer)
-        if device_kind is None:
+        if not is_cmdb_importable_row(func_type, manufacturer):
             skipped_unclassified += 1
             continue
 
+        device_kind = classify_cmdb_row(func_type, manufacturer)
         object_name = _cell_str(row[addr_col] if addr_col < len(row) else None)
         model = _cell_str(row[model_col] if model_col < len(row) else None)
         mac_raw = _cell_str(row[mac_col] if mac_col < len(row) else None)
+        count_key = _count_key_for_row(func_type, device_kind)
         result_rows.append(
             CmdbDeviceRow(
                 host=host,
                 object_name=object_name,
                 name=model or None,
                 mac=mac_raw or None,
+                functional_type=func_type,
+                manufacturer=manufacturer,
                 device_kind=device_kind,
                 source_row=row_idx,
             )
         )
-        counts_by_kind[device_kind] = counts_by_kind.get(device_kind, 0) + 1
+        counts_by_kind[count_key] = counts_by_kind.get(count_key, 0) + 1
 
     return CmdbParseResult(
         rows=result_rows,
@@ -269,7 +292,9 @@ def merge_devices_from_cmdb(
     preserved = 0
     added = 0
 
-    for row in cmdb_rows:
+    managed_rows = [row for row in cmdb_rows if row.device_kind is not None]
+
+    for row in managed_rows:
         try:
             base = {
                 "object_name": row.object_name,
@@ -280,7 +305,7 @@ def merge_devices_from_cmdb(
                 "port": 80,
                 "use_https": False,
             }
-            key = _merge_key(row.host, row.device_kind)
+            key = _merge_key(row.host, row.device_kind)  # type: ignore[arg-type]
             old = remaining.pop(key, None)
             if old:
                 recorder = Recorder(

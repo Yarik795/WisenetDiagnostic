@@ -27,6 +27,7 @@
 - Журнал импортов исходных файлов (`source_imports`).
 - Выгрузка заявок ПП (`pp_requests`).
 - Выгрузка заявок Naumen (`naumen_records`).
+- Выгрузка CMDB (`cmdb_records`).
 - Выгрузка паспортов АС Арсенал (`arsenal_analytics`, `arsenal_systems`).
 
 **Не в БД (смежные хранилища):**
@@ -636,6 +637,38 @@ Append-only журнал **каждой попытки** опроса регис
 
 Чтение для отчёта «Статус оплаты»: `StateStore.naumen_cost_by_sberdrug()` — карта `sberdrug_number` → первая ненулевая `cost` (по `source_row`). При сборке отчёта, если у заявки из ПП «Сумма с НДС» = 0, подставляется стоимость по ключу «№ заявки ДРУГ» ↔ `sberdrug_number`.
 
+### 6.6.1. Таблица `cmdb_records`
+
+Полная замена при каждом импорте выгрузки CMDB (`*cmdb*.xlsx` → `data/uploads/cmdb.xlsx`).
+
+| Колонка | Тип | Исходное поле (CMDB) | Описание |
+|---------|-----|----------------------|----------|
+| `host` | TEXT | `IP` | IP-адрес устройства (часть PK) |
+| `functional_type` | TEXT | `Функциональный тип` | Классификация из CMDB (часть PK) |
+| `manufacturer` | TEXT | `Производитель устройства` | Производитель (часть PK) |
+| `object_name` | TEXT | `Адрес` | Адрес объекта |
+| `model_name` | TEXT | `Модель устройства` | Модель устройства |
+| `mac` | TEXT | `MAC` | MAC-адрес |
+| `device_kind` | TEXT | — | `tsv` / `skud` / `bio` для устройств мониторинга; `NULL` для «Видеокамеры» и «Вспомогательное оборудование» |
+| `source_row` | INTEGER | — | Номер строки в xlsx (служебное) |
+| `imported_at` | TEXT | — | UTC ISO момента импорта (служебное) |
+
+**Первичный ключ:** `(host, functional_type, manufacturer)`.
+
+**Фильтры импорта** (строки с пустым IP пропускаются):
+
+| Условие | `device_kind` | Куда попадает |
+|---------|---------------|---------------|
+| `Функциональный тип` = «Видеорегистраторы» | `tsv` | БД + `config.json` |
+| `Производитель устройства` = «Бастион» | `skud` | БД + `config.json` |
+| `Производитель устройства` = «PocketKey» | `bio` | БД + `config.json` |
+| `Функциональный тип` = «Видеокамеры» | `NULL` | только БД |
+| `Функциональный тип` = «Вспомогательное оборудование» | `NULL` | только БД |
+
+Импорт: `cmdb_import.import_cmdb_xlsx()` → `StateStore.replace_cmdb_records()` (DELETE + batch INSERT). Параллельно `cmdb_sync.sync_from_cmdb()` обновляет `config.json` только для строк с `device_kind` ∈ {`tsv`, `skud`, `bio`}.
+
+Парсинг: `scripts/cmdb_reader.py` (`read_cmdb_xlsx`, `parse_cmdb_grid`).
+
 ### 6.7. Таблица `pp_requests`
 
 Полная замена при каждом импорте выгрузки заявок ПП (файл с «заявки» в имени → `data/uploads/requests.xlsx`). Одна строка — одна заявка.
@@ -740,7 +773,7 @@ ORDER BY total DESC;
 
 ### 6.10. Соглашение об описании импортных таблиц
 
-Для таблиц, заполняемых из внешних Excel-выгрузок (`pp_requests`, `naumen_records`, `arsenal_*`), в документации у каждого поля указывается:
+Для таблиц, заполняемых из внешних Excel-выгрузок (`cmdb_records`, `pp_requests`, `naumen_records`, `arsenal_*`), в документации у каждого поля указывается:
 
 1. **Исходное поле** — точное имя колонки в файле-источнике (или «—» для служебных).
 2. **Тип в SQLite** — для построения SQL-отчётов без повторного парсинга Excel.
@@ -838,6 +871,7 @@ sequenceDiagram
 | `replace_pp_requests` / `count_pp_requests` / `pp_requests_rows` | `pp_requests` | Импорт выгрузки заявок ПП; чтение строк для отчёта «Анализ повторных РВР» |
 | `upsert_rvr_ai_analysis` / `get_rvr_ai_analysis` | `rvr_ai_analysis` | Кэш AI-проверки повторных РВР |
 | `replace_naumen_records` / `count_naumen_records` / `naumen_cost_by_sberdrug` / `naumen_description_by_sberdrug` | `naumen_records` | Импорт выгрузки Naumen; карта сумм для отчёта «Статус оплаты»; карта описаний для «Анализ повторных РВР» |
+| `replace_cmdb_records` / `count_cmdb_records` / `cmdb_records_rows` | `cmdb_records` | Импорт выгрузки CMDB; справочник устройств из CMDB (включая камеры и вспомогательное оборудование); чтение строк для отчёта «Устройства на объекте» |
 | `replace_arsenal_data` / `count_arsenal_records` / `arsenal_analytics_rows` / `arsenal_systems_rows` / `get_arsenal_analytics` / `arsenal_systems_for_passport` | `arsenal_analytics`, `arsenal_systems` | Импорт АС Арсенал; дашборд `/arsenal` и drill-down |
 
 ### 6.9. Таблицы чата с AI

@@ -23,9 +23,12 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from cmdb_reader import (  # noqa: E402
+    FUNCTIONAL_TYPE_AUX,
+    FUNCTIONAL_TYPE_CAMERA,
     FUNCTIONAL_TYPE_VIDEO,
     MANUFACTURER_BIO,
     MANUFACTURER_SKUD,
+    CmdbParseResult,
     MergeError,
     MergeStats,
     merge_devices_from_cmdb,
@@ -55,7 +58,14 @@ def _kind_breakdown(counts: dict[str, int]) -> str:
     tsv = counts.get("tsv", 0)
     skud = counts.get("skud", 0)
     bio = counts.get("bio", 0)
-    return f"ТСВ {tsv}, СКУД {skud}, Био {bio}"
+    camera = counts.get("camera", 0)
+    aux = counts.get("aux", 0)
+    parts = [f"ТСВ {tsv}", f"СКУД {skud}", f"Био {bio}"]
+    if camera:
+        parts.append(f"Камеры {camera}")
+    if aux:
+        parts.append(f"Всп. оборуд. {aux}")
+    return ", ".join(parts)
 
 
 def _success_message(stats: MergeStats, total: int, counts: dict[str, int]) -> str:
@@ -92,20 +102,26 @@ def sync_from_cmdb(
     state: Optional["StateStore"] = None,
     backup: bool = True,
     dry_run: bool = False,
-    record_import: bool = True,
+    parsed: Optional[CmdbParseResult] = None,
 ) -> CmdbSyncResult:
     path = (cmdb_path or DEFAULT_CMDB_PATH).resolve()
 
-    if not path.is_file():
+    if parsed is None:
+        if not path.is_file():
+            return CmdbSyncResult(
+                ok=False,
+                message=f"Файл CMDB не найден: {path}",
+            )
+
+        try:
+            parsed = read_cmdb_xlsx(path)
+        except Exception as e:
+            return CmdbSyncResult(ok=False, message=f"Ошибка чтения CMDB: {e}")
+    elif cmdb_path is not None and not path.is_file():
         return CmdbSyncResult(
             ok=False,
             message=f"Файл CMDB не найден: {path}",
         )
-
-    try:
-        parsed = read_cmdb_xlsx(path)
-    except Exception as e:
-        return CmdbSyncResult(ok=False, message=f"Ошибка чтения CMDB: {e}")
 
     try:
         old_config = store.load()
@@ -165,14 +181,6 @@ def sync_from_cmdb(
 
     if _configs_equivalent(old_config, new_config):
         message = _no_change_message(len(merged), parsed.counts_by_kind)
-        if state is not None and record_import:
-            state.record_source_import(
-                "cmdb",
-                filename=path.name,
-                record_count=len(merged),
-                status="ok",
-                message=message,
-            )
         return CmdbSyncResult(
             ok=True,
             message=message,
@@ -200,14 +208,6 @@ def sync_from_cmdb(
     if state is not None:
         for recorder_id in removed_ids:
             state.delete_recorder_data(recorder_id)
-        if record_import:
-            state.record_source_import(
-                "cmdb",
-                filename=path.name,
-                record_count=len(merged),
-                status="ok",
-                message=_success_message(stats, len(merged), parsed.counts_by_kind),
-            )
 
     return CmdbSyncResult(
         ok=True,
@@ -235,8 +235,8 @@ def cmdb_sync_report_lines(result: CmdbSyncResult) -> list[str]:
             f"(всего {result.cmdb_row_count})"
         )
         lines.append(
-            f"Фильтры: «{FUNCTIONAL_TYPE_VIDEO}», "
-            f"«{MANUFACTURER_SKUD}», «{MANUFACTURER_BIO}»"
+            f"Фильтры: «{FUNCTIONAL_TYPE_VIDEO}», «{FUNCTIONAL_TYPE_CAMERA}», "
+            f"«{FUNCTIONAL_TYPE_AUX}», «{MANUFACTURER_SKUD}», «{MANUFACTURER_BIO}»"
         )
         lines.append(
             f"Пропущено: пустой IP — {result.skipped_empty_ip}, "

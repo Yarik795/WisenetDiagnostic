@@ -143,10 +143,52 @@ def _run_cmdb(
     *,
     file_unchanged: bool,
 ) -> SourceLoadResult:
-    on_progress("Чтение CMDB", 40)
-    result = sync_from_cmdb(
-        deps.store, dest, state=deps.state, record_import=False
+    import sys
+
+    from .cmdb_import import import_cmdb_xlsx
+
+    scripts = PROJECT_ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    from cmdb_reader import read_cmdb_xlsx
+
+    on_progress("Чтение CMDB", 25)
+    try:
+        parsed = read_cmdb_xlsx(dest)
+    except Exception as e:
+        return SourceLoadResult(
+            ok=False,
+            message=f"Ошибка чтения CMDB: {e}",
+            filename=source.name,
+        )
+
+    if file_unchanged and deps.state.count_cmdb_records() > 0:
+        preview = sync_from_cmdb(
+            deps.store,
+            dest,
+            state=deps.state,
+            parsed=parsed,
+            dry_run=True,
+        )
+        if preview.ok and "Изменений нет" in preview.message:
+            on_progress("Проверка", 50)
+            return SourceLoadResult(
+                ok=True,
+                message="Новых данных нет",
+                record_count=deps.state.count_cmdb_records(),
+                changed=False,
+                filename=source.name,
+            )
+
+    def import_progress(phase: str, percent: int) -> None:
+        on_progress(phase, 25 + int(percent * 0.35))
+
+    db_count = import_cmdb_xlsx(
+        dest, deps.state, on_progress=import_progress, parsed=parsed
     )
+
+    on_progress("Синхронизация config", 65)
+    result = sync_from_cmdb(deps.store, dest, state=deps.state, parsed=parsed)
     on_progress("Сохранение", 90)
 
     if not result.ok:
@@ -156,24 +198,24 @@ def _run_cmdb(
             filename=source.name,
         )
 
-    changed = not (
-        file_unchanged and result.stats and result.stats.added == 0 and result.stats.removed == 0
-    )
-    if "Изменений нет" in result.message or not changed:
+    config_changed = "Изменений нет" not in result.message
+    changed = not file_unchanged or config_changed
+    if file_unchanged and not config_changed:
         message = "Новых данных нет"
         changed = False
-    elif result.stats:
+    elif result.stats and config_changed:
         message = (
-            f"Данные загружены: обновлено {result.total_recorders} устройств "
+            f"Данные загружены: {db_count} строк в БД, "
+            f"обновлено {result.total_recorders} устройств в config "
             f"(новых {result.stats.added}, удалено {result.stats.removed})"
         )
     else:
-        message = f"Данные загружены: {result.total_recorders} устройств"
+        message = f"Данные загружены: {db_count} строк в БД"
 
     return SourceLoadResult(
         ok=True,
         message=message,
-        record_count=result.total_recorders,
+        record_count=db_count,
         changed=changed,
         filename=source.name,
     )

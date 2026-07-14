@@ -103,6 +103,7 @@
 |--------|------------|
 | `data_sources.py` | Единый реестр исходных файлов `inputData/` (CMDB, заявки, Naumen, Арсенал): спецификации, загрузка, импорт |
 | `cmdb_sync.py` | Синхронизация устройств в `config.json` из `cmdb.xlsx` (с резервной копией конфига) |
+| `cmdb_import.py` | Импорт выгрузки CMDB в SQLite `cmdb_records` (полная замена при загрузке) |
 | `naumen_import.py` | Импорт выгрузки Naumen (`naumen_all.xlsx`) в SQLite (`naumen_records`) |
 | `arsenal_import.py` | Импорт выгрузки АС Арсенал (листы «Аналитика», «Общая информация», системные) в SQLite |
 
@@ -115,7 +116,7 @@
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/recorders-age` — распределение NVR по дате производства (`GET /recorders-age/export.html`); `/disks-wear` — распределение HDD по наработке (`GET /disks-wear/export.html`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/recorders-age` — распределение NVR по дате производства (`GET /recorders-age/export.html`); `/disks-wear` — распределение HDD по наработке (`GET /disks-wear/export.html`); `/site-devices` — отчёт «Устройства на объекте»: реальные NVR/камеры vs CMDB (`GET /site-devices/export.html`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -147,6 +148,8 @@
 | `recorder_age_export.py` | HTML-экспорт отчёта «Регистраторы по времени» (inline SVG + таблицы объектов) |
 | `disk_wear_dashboard.py` | Дашборд «Диски по времени»: распределение HDD по `PowerOnDuration`, ECharts, drill-down |
 | `disk_wear_export.py` | HTML-экспорт отчёта «Диски по времени» (inline SVG + таблицы объектов) |
+| `site_inventory.py` | Отчёт «Устройства на объекте»: реальные NVR/камеры из опроса, сопоставление с CMDB, аналоговые камеры, вспомогательное оборудование |
+| `site_inventory_export.py` | HTML-экспорт отчёта «Устройства на объекте» для выдачи инженеру |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
 #### Шаблоны и статика
@@ -154,7 +157,7 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `disk_wear.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `disk_wear.html`, `site_devices.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
 - `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, регистраторы/диски по времени, повторные РВР)
 
@@ -170,7 +173,7 @@
 
 | Файл | Назначение |
 |------|------------|
-| `cmdb_reader.py` | Чтение `cmdb.xlsx`: фильтр по типу «Видеорегистраторы», слияние с существующими записями в конфиге |
+| `cmdb_reader.py` | Чтение `cmdb.xlsx`: фильтр по функциональным типам и производителям, слияние с существующими записями в конфиге |
 | `sync_config_from_cmdb.py` | CLI: обновление списка `recorders` в `config.json` из CMDB с резервной копией |
 | `cashflow.py` | CLI-сборка отчёта «Статус оплаты» из Excel-выгрузки |
 | `send_test_email.py` | Проверка SMTP-настроек без UI |
@@ -230,7 +233,7 @@ scheduler.py → poll_jobs → monitoring
 scheduler.py → report_delivery → email_sender + report_delivery_history
                                   + ui.error_report_render, ui.email_charts (содержимое письма)
 
-web/routes.py → report_jobs → data_sources → cashflow_report / cmdb_sync
+web/routes.py → report_jobs → data_sources → cashflow_report / cmdb_import / cmdb_sync
 ```
 
 Версия API в `main.py`: 0.4.0; заголовок — «Дашборд руководителя ТСО».

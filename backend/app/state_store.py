@@ -136,6 +136,18 @@ class NaumenRecordRow:
 
 
 @dataclass(frozen=True)
+class CmdbRecordRow:
+    host: str
+    functional_type: str
+    manufacturer: str
+    object_name: str
+    model_name: str
+    mac: Optional[str]
+    device_kind: Optional[str]
+    source_row: int
+
+
+@dataclass(frozen=True)
 class PPRequestRow:
     request_number: str
     status: str
@@ -249,6 +261,42 @@ class NaumenReplaceSession:
                     row.cost,
                     row.sberdrug_number,
                     row.description,
+                    row.source_row,
+                    imported_at,
+                )
+                for row in rows
+            ],
+        )
+        self.count += len(rows)
+
+
+class CmdbReplaceSession:
+    def __init__(self, conn: sqlite3.Connection, imported_at: str) -> None:
+        self._conn = conn
+        self._imported_at = imported_at
+        self.count = 0
+
+    def write_batch(self, rows: list[Any]) -> None:
+        if not rows:
+            return
+        conn = self._conn
+        imported_at = self._imported_at
+        conn.executemany(
+            """
+            INSERT INTO cmdb_records (
+                host, functional_type, manufacturer, object_name, model_name,
+                mac, device_kind, source_row, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row.host,
+                    row.functional_type,
+                    row.manufacturer,
+                    row.object_name,
+                    row.model_name,
+                    row.mac,
+                    row.device_kind,
                     row.source_row,
                     imported_at,
                 )
@@ -519,6 +567,24 @@ class StateStore:
                     imported_at TEXT NOT NULL                -- время импорта (ISO 8601, UTC)
                 );
 
+                -- cmdb_records: выгрузка CMDB (cmdb.xlsx).
+                -- Полностью перезаписывается при каждом импорте (DELETE + batch INSERT).
+                CREATE TABLE IF NOT EXISTS cmdb_records (
+                    host TEXT NOT NULL,                      -- "IP"
+                    functional_type TEXT NOT NULL,           -- "Функциональный тип"
+                    manufacturer TEXT NOT NULL,              -- "Производитель устройства"
+                    object_name TEXT NOT NULL DEFAULT '',    -- "Адрес"
+                    model_name TEXT NOT NULL DEFAULT '',     -- "Модель устройства"
+                    mac TEXT,                                -- "MAC"
+                    device_kind TEXT,                        -- tsv/skud/bio или NULL (камеры, всп. оборудование)
+                    source_row INTEGER,                      -- номер строки в исходном xlsx
+                    imported_at TEXT NOT NULL,               -- время импорта (ISO 8601, UTC)
+                    PRIMARY KEY (host, functional_type, manufacturer)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_cmdb_records_device_kind
+                    ON cmdb_records(device_kind);
+
                 -- pp_requests: выгрузка заявок ПП (requests.xlsx).
                 -- Полностью перезаписывается при каждом импорте (DELETE + batch INSERT OR REPLACE).
                 CREATE TABLE IF NOT EXISTS pp_requests (
@@ -704,6 +770,30 @@ class StateStore:
                 """
             )
 
+        if "cmdb_records" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE cmdb_records (
+                    host TEXT NOT NULL,
+                    functional_type TEXT NOT NULL,
+                    manufacturer TEXT NOT NULL,
+                    object_name TEXT NOT NULL DEFAULT '',
+                    model_name TEXT NOT NULL DEFAULT '',
+                    mac TEXT,
+                    device_kind TEXT,
+                    source_row INTEGER,
+                    imported_at TEXT NOT NULL,
+                    PRIMARY KEY (host, functional_type, manufacturer)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_cmdb_records_device_kind
+                    ON cmdb_records(device_kind)
+                """
+            )
+
         if "pp_requests" not in tables:
             conn.execute(
                 """
@@ -856,6 +946,16 @@ class StateStore:
             yield session
 
     @contextmanager
+    def replace_cmdb_records(
+        self, imported_at: Optional[datetime] = None
+    ) -> Iterator[CmdbReplaceSession]:
+        when = _iso(imported_at or datetime.now(timezone.utc))
+        with self._connect() as conn:
+            conn.execute("DELETE FROM cmdb_records")
+            session = CmdbReplaceSession(conn, when)
+            yield session
+
+    @contextmanager
     def replace_pp_requests(
         self, imported_at: Optional[datetime] = None
     ) -> Iterator[PPReplaceSession]:
@@ -869,6 +969,23 @@ class StateStore:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM naumen_records").fetchone()
         return int(row["cnt"]) if row else 0
+
+    def count_cmdb_records(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS cnt FROM cmdb_records").fetchone()
+        return int(row["cnt"]) if row else 0
+
+    def cmdb_records_rows(self) -> list[CmdbRecordRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT host, functional_type, manufacturer, object_name, model_name,
+                       mac, device_kind, source_row
+                FROM cmdb_records
+                ORDER BY object_name, functional_type, host, source_row
+                """
+            ).fetchall()
+        return [_cmdb_record_from_row(row) for row in rows]
 
     def count_pp_requests(self) -> int:
         with self._connect() as conn:
@@ -1818,6 +1935,19 @@ def _history_from_row(row: sqlite3.Row) -> HistoryRow:
         status=row["status"],
         reason=row["reason"],
         recorded_at=_parse_iso(row["recorded_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _cmdb_record_from_row(row: sqlite3.Row) -> CmdbRecordRow:
+    return CmdbRecordRow(
+        host=row["host"],
+        functional_type=row["functional_type"],
+        manufacturer=row["manufacturer"],
+        object_name=row["object_name"] or "",
+        model_name=row["model_name"] or "",
+        mac=row["mac"],
+        device_kind=row["device_kind"],
+        source_row=int(row["source_row"] or 0),
     )
 
 

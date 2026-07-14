@@ -14,6 +14,8 @@ sys.path.insert(0, str(BACKEND))
 
 from app.models import CheckStatus, Recorder  # noqa: E402
 from cmdb_reader import (  # noqa: E402
+    FUNCTIONAL_TYPE_AUX,
+    FUNCTIONAL_TYPE_CAMERA,
     MANUFACTURER_BIO,
     MANUFACTURER_SKUD,
     CmdbDeviceRow,
@@ -21,6 +23,7 @@ from cmdb_reader import (  # noqa: E402
     build_col_index,
     classify_cmdb_row,
     find_header_row,
+    is_cmdb_importable_row,
     merge_devices_from_cmdb,
     merge_recorders_from_cmdb,
     parse_cmdb_grid,
@@ -66,7 +69,9 @@ def _cmdb_row(
     *,
     name: str | None = None,
     mac: str | None = None,
-    device_kind: str = "tsv",
+    functional_type: str = FUNCTIONAL_TYPE_VIDEO,
+    manufacturer: str = "Hanwha",
+    device_kind: str | None = "tsv",
     source_row: int = 5,
 ) -> CmdbDeviceRow:
     return CmdbDeviceRow(
@@ -74,6 +79,8 @@ def _cmdb_row(
         object_name=object_name,
         name=name,
         mac=mac,
+        functional_type=functional_type,
+        manufacturer=manufacturer,
         device_kind=device_kind,  # type: ignore[arg-type]
         source_row=source_row,
     )
@@ -89,6 +96,9 @@ def test_classify_cmdb_row() -> None:
     assert classify_cmdb_row("", MANUFACTURER_SKUD) == "skud"
     assert classify_cmdb_row("", MANUFACTURER_BIO) == "bio"
     assert classify_cmdb_row("Камера", "Hanwha") is None
+    assert is_cmdb_importable_row(FUNCTIONAL_TYPE_CAMERA, "Hanwha")
+    assert is_cmdb_importable_row(FUNCTIONAL_TYPE_AUX, "Hanwha")
+    assert not is_cmdb_importable_row("Камера", "Hanwha")
 
 
 def test_parse_cmdb_filters_videoregistratory() -> None:
@@ -155,6 +165,91 @@ def test_parse_cmdb_filters_videoregistratory() -> None:
     assert result.rows[0].mac == "E8:FF:1E:30:15:3F"
     assert result.skipped_unclassified == 1
     assert result.counts_by_kind["tsv"] == 1
+
+
+def test_parse_cmdb_camera_and_aux() -> None:
+    grid = _grid_with_data(
+        [
+            "538000010",
+            "Оборудование ТСО",
+            "10.0.0.10",
+            "AA:BB:CC:DD:EE:FF",
+            "",
+            "г. Москва",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Hanwha",
+            "QNO-6010R",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            FUNCTIONAL_TYPE_CAMERA,
+        ],
+        [
+            "538000011",
+            "Оборудование ТСО",
+            "10.0.0.11",
+            "",
+            "",
+            "г. СПб",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Generic",
+            "UPS-100",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            FUNCTIONAL_TYPE_AUX,
+        ],
+    )
+    result = parse_cmdb_grid(grid)
+    assert len(result.rows) == 2
+    by_host = {r.host: r for r in result.rows}
+    assert by_host["10.0.0.10"].device_kind is None
+    assert by_host["10.0.0.10"].functional_type == FUNCTIONAL_TYPE_CAMERA
+    assert by_host["10.0.0.11"].device_kind is None
+    assert by_host["10.0.0.11"].functional_type == FUNCTIONAL_TYPE_AUX
+    assert result.counts_by_kind["camera"] == 1
+    assert result.counts_by_kind["aux"] == 1
+
+
+def test_merge_ignores_db_only_rows() -> None:
+    existing: list[Recorder] = []
+    rows = [
+        _cmdb_row("10.0.0.1", "obj", name="NVR"),
+        _cmdb_row(
+            "10.0.0.2",
+            "cam obj",
+            name="Cam",
+            functional_type=FUNCTIONAL_TYPE_CAMERA,
+            device_kind=None,
+        ),
+    ]
+    merged, stats, errors = merge_devices_from_cmdb(rows, existing)
+    assert not errors
+    assert len(merged) == 1
+    assert merged[0].host == "10.0.0.1"
+    assert stats.added == 1
 
 
 def test_parse_cmdb_skud_and_bio() -> None:
@@ -342,8 +437,22 @@ def test_merge_duplicate_ip_same_kind_second_gets_new_id() -> None:
 def test_merge_same_ip_different_kinds() -> None:
     existing: list[Recorder] = []
     rows = [
-        _cmdb_row("10.0.0.5", "addr", name="NVR", device_kind="tsv"),
-        _cmdb_row("10.0.0.5", "addr", name="NG NET", device_kind="skud"),
+        _cmdb_row(
+            "10.0.0.5",
+            "addr",
+            name="NVR",
+            functional_type=FUNCTIONAL_TYPE_VIDEO,
+            manufacturer="Hanwha",
+            device_kind="tsv",
+        ),
+        _cmdb_row(
+            "10.0.0.5",
+            "addr",
+            name="NG NET",
+            functional_type="",
+            manufacturer=MANUFACTURER_SKUD,
+            device_kind="skud",
+        ),
     ]
     merged, stats, errors = merge_devices_from_cmdb(rows, existing)
     assert not errors

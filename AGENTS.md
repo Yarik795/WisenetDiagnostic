@@ -26,9 +26,10 @@
 | Импорт Naumen (`naumen_all.xlsx`) | `backend/app/naumen_import.py`, `data_sources.py`, `state_store.py` | `ai-docs/monitoring-db.md` §naumen_records |
 | Отчёт «Регистраторы по времени», дата пр-ва NVR, drill-down по объектам | `backend/app/ui/equipment_timeline.py`, `ui/recorder_age_dashboard.py`, `ui/recorder_age_export.py` | `ai-docs/monitoring-db.md` §recorder_metrics (`manufacture_date`) |
 | Отчёт «Диски по времени», наработка HDD, drill-down по объектам | `backend/app/ui/equipment_timeline.py`, `ui/disk_wear_dashboard.py`, `ui/disk_wear_export.py` | `ai-docs/monitoring-db.md` §recorder_metrics (`disks_json`) |
+| Отчёт «Устройства на объекте», реальные NVR/камеры vs CMDB, HTML-экспорт | `backend/app/ui/site_inventory.py`, `ui/site_inventory_export.py`, `state_store.py` | `ai-docs/monitoring-db.md` §channels, §recorder_metrics, §cmdb_records |
 | Импорт АС Арсенал (файл с «паспортам») | `backend/app/arsenal_import.py`, `data_sources.py`, `state_store.py`, `ui/arsenal_dashboard.py`, `ui/arsenal_export.py` | `ai-docs/monitoring-db.md` §arsenal_* |
 | Планировщик, фоновые задачи опроса | `backend/app/scheduler.py`, `poll_jobs.py` | — |
-| Импорт из CMDB | `backend/app/cmdb_sync.py`, `scripts/sync_config_from_cmdb.py`, `scripts/cmdb_reader.py` | — |
+| Импорт из CMDB | `backend/app/cmdb_sync.py`, `cmdb_import.py`, `scripts/sync_config_from_cmdb.py`, `scripts/cmdb_reader.py` | `ai-docs/monitoring-db.md` §cmdb_records |
 | Отчёт об ошибках (HTML-экспорт) | `backend/app/ui/error_report.py`, `error_report_render.py` | — |
 | Аналитика устранённых инцидентов (HTML-отчёт) | `scripts/resolved_incidents_report.py`, `scripts/episode_parser.py` | `ai-docs/monitoring-db.md` §4–§5 (`status_history`, `category_status_history`) |
 | Чат с AI, LLM, SQL-agent, история диалогов | `backend/app/llm/`, `chat_store.py`, `web/ai_chat.py` | `ai-docs/services.md` §Чат с AI |

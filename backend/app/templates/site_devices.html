@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block title %}Устройства на объекте — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Устройства на объекте{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Список реальных устройств ТСВ, полученных при опросе регистраторов, с сопоставлением с эталоном CMDB.
+  Отчёт предназначен для инженера на объекте: что подключено, что числится в CMDB, но не найдено, и какое вспомогательное оборудование проверить.
+</p>
+
+<form
+  class="toolbar"
+  style="flex-wrap:wrap;gap:8px;margin-bottom:16px;"
+  hx-get="/site-devices/partials/list"
+  hx-target="#site-devices-list-root"
+  hx-swap="outerHTML"
+  hx-trigger="keyup changed delay:300ms from:#site-devices-search, submit"
+>
+  <label class="text-secondary" for="site-devices-search">Поиск по объекту или устройству</label>
+  <input
+    id="site-devices-search"
+    type="search"
+    name="search"
+    class="input"
+    value="{{ site_devices_search }}"
+    placeholder="Адрес, IP, модель…"
+    style="min-width:280px;"
+  />
+  <button type="submit" class="btn btn-outline btn-sm">Найти</button>
+  {% if site_devices_has_data %}
+  <a
+    class="btn btn-ghost btn-sm"
+    href="/site-devices/export.html{% if site_devices_search %}?search={{ site_devices_search | urlencode }}{% endif %}"
+    title="Скачать HTML текущей выборки"
+  >Экспорт в HTML</a>
+  {% endif %}
+</form>
+
+{% include "partials/site_devices_list.html" %}
+{% endblock %}

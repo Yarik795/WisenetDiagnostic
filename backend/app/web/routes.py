@@ -91,6 +91,12 @@ from ..ui.disk_wear_export import (
     disk_wear_export_filename,
     render_disk_wear_export_html,
 )
+from ..ui.site_inventory import site_devices_page_context
+from ..ui.site_inventory_export import (
+    build_site_devices_export_context,
+    render_site_devices_export_html,
+    site_devices_export_filename,
+)
 from ..ui.rvr_repeat_dashboard import rvr_repeat_page_context
 from ..ui.rvr_repeat_export import (
     XLSX_MIME,
@@ -892,6 +898,76 @@ def disks_wear_export_html(
         min_years=min_years,
         max_years=max_years,
         model=model,
+    )
+
+
+@router.get("/site-devices", response_class=HTMLResponse)
+def site_devices_page(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "site_devices.html",
+        {
+            "active_nav": "site_devices",
+            "toast": _toast_from_query(request),
+            **site_devices_page_context(store, state, search=search),
+        },
+    )
+
+
+@router.get("/site-devices/partials/list", response_class=HTMLResponse)
+def site_devices_list_partial(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/site_devices_list.html",
+        site_devices_page_context(store, state, search=search),
+    )
+
+
+def _site_devices_export_html_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    search: str = "",
+) -> Response:
+    page_ctx = site_devices_page_context(store, state, search=search)
+    if not page_ctx.get("site_devices_has_data"):
+        return _redirect(
+            "/site-devices",
+            "error",
+            "Нет данных для экспорта отчёта по устройствам на объекте",
+            request=request,
+        )
+    export_ctx = build_site_devices_export_context(store, state, search=search)
+    filename = site_devices_export_filename()
+    html = render_site_devices_export_html(export_ctx)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/site-devices/export.html", include_in_schema=False)
+def site_devices_export_html(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _site_devices_export_html_response(
+        request,
+        store,
+        state,
+        search=search,
     )
 
 

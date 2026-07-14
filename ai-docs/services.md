@@ -247,8 +247,8 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 ### `cmdb_reader.py`
 
-Чтение `cmdb.xlsx`: строки с функциональным типом «Видеорегистраторы».  
-`parse_cmdb_grid(rows) → CmdbParseResult` с `CmdbRecorderRow` (`host`, `object_name`, `name`, `source_row`). Слияние с существующими записями конфига по IP — в `sync_config_from_cmdb.py`.
+Чтение `cmdb.xlsx`: строки с функциональным типом «Видеорегистраторы», «Видеокамеры», «Вспомогательное оборудование», а также СКУД (производитель «Бастион») и биотерминалы («PocketKey»).  
+`parse_cmdb_grid(rows) → CmdbParseResult` с `CmdbDeviceRow` (`host`, `object_name`, `name`, `functional_type`, `manufacturer`, `device_kind`, `source_row`). Слияние с существующими записями конфига по `(IP, device_kind)` — в `cmdb_sync.py` / `sync_config_from_cmdb.py`.
 
 ### `sync_config_from_cmdb.py`
 
@@ -273,10 +273,12 @@ CLI: обновление `recorders` в `config.json` из CMDB, резервн
 
 | key | Маркер в имени | Хранилище данных |
 |-----|----------------|------------------|
-| `cmdb` | `cmdb` | `config.json` (устройства) |
+| `cmdb` | `cmdb` | SQLite `cmdb_records` + `config.json` (устройства ТСВ/СКУД/Био) |
 | `requests` | `заявки` | SQLite `pp_requests` + `data/reports/cashflow_report.json` |
 | `naumen` | `naumen` | SQLite `naumen_records` |
 | `arsenal` | `паспортам` | SQLite `arsenal_analytics`, `arsenal_systems` |
+
+Импорт CMDB: `cmdb_import.import_cmdb_xlsx()` — все отфильтрованные строки в `cmdb_records` (полная замена); `cmdb_sync.sync_from_cmdb()` — устройства с `device_kind` tsv/skud/bio в `config.json`. Камеры и вспомогательное оборудование — только в БД.
 
 Импорт ПП: `pp_import.import_pp_requests_xlsx()` — колонки выгрузки в `pp_requests` (типизированные поля + `raw_json`); полная замена при каждой загрузке. Строки, где «Статус» содержит «Отклонена» или «Отозвана», пропускаются. Отчёт «Статус оплаты» по-прежнему строится в `cashflow_report.json`.
 

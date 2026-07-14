@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ export.title }} — Wisenet Диагностика</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #fff;
+      --text: #1a1d21;
+      --muted: #5c6370;
+      --border: #d8dce3;
+      --ok: #15803d;
+      --warn: #b45309;
+      --error: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .report {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 1.1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    h3 { margin: 20px 0 8px; font-size: 0.95rem; color: var(--muted); }
+    h4 { margin: 14px 0 6px; font-size: 0.9rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+    .meta p { margin: 4px 0; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 16px 0 8px;
+    }
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .summary-card .value { font-size: 1.25rem; font-weight: 700; }
+    .summary-card .label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 8px 0 16px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef1f5; font-weight: 600; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .section-block { margin-top: 24px; page-break-inside: avoid; }
+    .legend { margin: 12px 0; font-size: 0.85rem; }
+    .legend span { margin-right: 16px; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .error { color: var(--error); }
+  </style>
+</head>
+<body>
+  <div class="report">
+    <h1>{{ export.title }}</h1>
+    <div class="meta">
+      <p>Сформировано: {{ export.generated_at }}</p>
+      <p>{{ export.filter_label }}</p>
+    </div>
+
+    <div class="legend">
+      <span class="ok">● Совпадает с CMDB</span>
+      <span class="warn">● Нет в CMDB (найдено при опросе)</span>
+      <span class="error">● Числится в CMDB, не найдено при опросе</span>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.objects }}</div>
+        <div class="label">Объектов</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.real_total }}</div>
+        <div class="label">Найдено (NVR + IP-камеры)</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.matched_ok }}</div>
+        <div class="label">Совпало с CMDB</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.extra }}</div>
+        <div class="label">Нет в CMDB</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.analog }}</div>
+        <div class="label">Аналоговые камеры</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.auxiliary }}</div>
+        <div class="label">Вспомогательное (CMDB)</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.missing }}</div>
+        <div class="label">В CMDB, не найдено</div>
+      </div>
+    </div>
+
+    {% for group in export.groups %}
+    <section class="section-block">
+      <h2>{{ group.object_name }}</h2>
+
+      {% if group.nvrs or group.ip_cameras or group.analog_cameras %}
+      <h3>Найдено при опросе</h3>
+
+      {% if group.nvrs %}
+      <h4>Видеорегистраторы</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Имя / IP</th>
+            <th>Модель (опрос)</th>
+            <th>Модель (CMDB)</th>
+            <th>MAC</th>
+            <th>Статус</th>
+            <th>CMDB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in group.nvrs %}
+          <tr>
+            <td>{{ row.name }}<br><span class="mono muted">{{ row.host }}</span></td>
+            <td>{{ row.model or "—" }}</td>
+            <td>{{ row.cmdb_model or "—" }}</td>
+            <td class="mono">{{ row.mac or "—" }}</td>
+            <td>{{ row.health_label }}</td>
+            <td>{{ row.match_label }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if group.ip_cameras %}
+      <h4>IP-камеры</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Канал / имя</th>
+            <th>IP</th>
+            <th>Регистратор</th>
+            <th>Модель (опрос)</th>
+            <th>Модель (CMDB)</th>
+            <th>Статус</th>
+            <th>CMDB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in group.ip_cameras %}
+          <tr>
+            <td>{{ row.name }}{% if row.channel_no is not none %} (#{{ row.channel_no + 1 }}){% endif %}</td>
+            <td class="mono">{{ row.host }}</td>
+            <td>{{ row.recorder_name }}<br><span class="mono muted">{{ row.recorder_host }}</span></td>
+            <td>{{ row.model or "—" }}</td>
+            <td>{{ row.cmdb_model or "—" }}</td>
+            <td>{{ row.health_label }}</td>
+            <td>{{ row.match_label }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if group.analog_cameras %}
+      <h4>Аналоговые камеры</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Канал / имя</th>
+            <th>Регистратор</th>
+            <th>Состояние</th>
+            <th>Статус</th>
+            <th>Примечание</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in group.analog_cameras %}
+          <tr>
+            <td>{{ row.name }}{% if row.channel_no is not none %} (#{{ row.channel_no + 1 }}){% endif %}</td>
+            <td>{{ row.recorder_name }}<br><span class="mono muted">{{ row.recorder_host }}</span></td>
+            <td>{{ row.source_state or "—" }}</td>
+            <td>{{ row.health_label }}</td>
+            <td class="muted">{{ row.note }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% endif %}
+
+      {% if group.auxiliary %}
+      <h3>Вспомогательное оборудование (CMDB)</h3>
+      <p class="muted">SPD-151, SPD-152 и др. — проверить наличие на объекте.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Тип</th>
+            <th>IP</th>
+            <th>Модель</th>
+            <th>Производитель</th>
+            <th>MAC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in group.auxiliary %}
+          <tr>
+            <td>{{ row.device_type_label }}</td>
+            <td class="mono">{{ row.host }}</td>
+            <td>{{ row.model or "—" }}</td>
+            <td>{{ row.manufacturer or "—" }}</td>
+            <td class="mono">{{ row.mac or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if group.missing %}
+      <h3>Числится в CMDB, но не найдено при опросе</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Тип</th>
+            <th>IP</th>
+            <th>Модель (CMDB)</th>
+            <th>Производитель</th>
+            <th>MAC</th>
+            <th>Примечание</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in group.missing %}
+          <tr>
+            <td>{{ row.device_type_label }}</td>
+            <td class="mono">{{ row.host }}</td>
+            <td>{{ row.model or "—" }}</td>
+            <td>{{ row.manufacturer or "—" }}</td>
+            <td class="mono">{{ row.mac or "—" }}</td>
+            <td class="muted">{{ row.note }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+</body>
+</html>

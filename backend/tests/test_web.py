@@ -94,6 +94,13 @@ def test_disks_wear_page_renders(client: TestClient) -> None:
     assert "data-disk-wear-dashboard" in r.text or "Нет данных" in r.text
 
 
+def test_site_devices_page_renders(client: TestClient) -> None:
+    r = client.get("/site-devices")
+    assert r.status_code == 200
+    assert "Устройства на объекте" in r.text
+    assert "data-site-devices-list" in r.text or "Нет данных" in r.text
+
+
 def test_rvr_repeat_page_renders(client: TestClient) -> None:
     r = client.get("/rvr-repeat")
     assert r.status_code == 200

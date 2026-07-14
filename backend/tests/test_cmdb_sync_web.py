@@ -184,6 +184,11 @@ def test_sync_cmdb_success(
     assert "Обновлено:" in sources.text
     assert "cmdb-export.xlsx" in sources.text
 
+    from app.state_store import StateStore
+
+    state = StateStore(path=tmp_path / "monitoring.db")
+    assert state.count_cmdb_records() == 1
+
 
 def test_sources_load_cmdb_returns_job_panel(
     client: TestClient,
