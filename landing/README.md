@@ -28,6 +28,8 @@ python -m http.server 8080
 
 Обновление: любой push в `main`, затрагивающий файлы в `landing/`, пересобирает сайт автоматически.
 
+**Для агента:** после правок в `landing/` обязательно смержить в `main`, дождаться workflow и проверить живой URL — см. `.cursor/rules/deploy-landing.mdc`.
+
 ## Деплой на Netlify
 
 1. Загрузите содержимое папки `landing/` как сайт (drag-and-drop или Git).
