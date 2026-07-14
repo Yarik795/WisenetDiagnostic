@@ -99,6 +99,63 @@ def test_site_devices_page_renders(client: TestClient) -> None:
     assert r.status_code == 200
     assert "Устройства на объекте" in r.text
     assert "site-object-details" in r.text or "Нет данных" in r.text
+    assert r.text.count("<form") == r.text.count("</form>")
+
+
+def test_site_devices_ping_zombies_returns_panel(
+    client: TestClient,
+    tmp_path: Path,
+) -> None:
+    from app.state_store import CmdbRecordRow
+    from app.ui.site_inventory import CMDB_TYPE_CAMERA
+
+    store = ConfigStore(path=tmp_path / "config_ping.json")
+    store.create_recorder(
+        RecorderCreate(
+            object_name="Объект 1",
+            name="NVR-1",
+            host="10.1.1.10",
+            port=80,
+            use_https=False,
+            device_kind="tsv",
+        )
+    )
+
+    from app.state_store import StateStore
+
+    state = StateStore(path=tmp_path / "ping.db")
+    state.init_db()
+    with state.replace_cmdb_records() as session:
+        session.write_batch(
+            [
+                CmdbRecordRow(
+                    host="10.1.1.30",
+                    functional_type=CMDB_TYPE_CAMERA,
+                    manufacturer="Hanwha",
+                    object_name="Объект 1",
+                    model_name="XNO-6080R",
+                    mac=None,
+                    device_kind=None,
+                    source_row=1,
+                ),
+            ]
+        )
+
+    def override_store() -> ConfigStore:
+        return store
+
+    def override_state() -> StateStore:
+        return state
+
+    app.dependency_overrides[get_store] = override_store
+    app.dependency_overrides[get_state_store] = override_state
+    try:
+        r = client.post("/site-devices/ping-zombies", data={"search": ""})
+        assert r.status_code == 200
+        assert 'id="site-ping-panel"' in r.text
+        assert "Ping выполняется" in r.text or "Запуск" in r.text or "Завершён" in r.text
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_rvr_repeat_page_renders(client: TestClient) -> None:
