@@ -119,6 +119,7 @@ from .validation import parse_recorder_form
 
 router = APIRouter(tags=["web"])
 check_logger = get_logger("check")
+rvr_ai_logger = get_logger("rvr_ai")
 
 
 def _redirect(
@@ -1189,6 +1190,7 @@ def rvr_repeat_ai_check(
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
+    check_started = time.perf_counter()
     llm_cfg = store.load().llm
     page_ctx = rvr_repeat_page_context(
         state,
@@ -1213,35 +1215,68 @@ def rvr_repeat_ai_check(
             )
         return response
 
-    if not llm_cfg.enabled or not llm_cfg.api_key:
-        return _render_partial(
-            {"type": "error", "message": "LLM не настроен: включите llm.enabled и api_key в config.json"},
-        )
-
     report = page_ctx.get("rvr_report")
-    if not report or not page_ctx.get("rvr_has_data"):
-        return _render_partial(
-            {"type": "error", "message": "Нет данных для AI-проверки за выбранный период"},
-        )
-
     groups = (
         report.get("groups_ge3")
         if threshold == 3
         else report.get("groups_ge2")
     ) or []
+
+    rvr_ai_logger.info(
+        "rvr ai check requested",
+        extra={
+            "event": "rvr_ai_check_start",
+            "extra_date_from": date_from or None,
+            "extra_date_to": date_to or None,
+            "extra_threshold": threshold,
+            "extra_object_type": object_type or None,
+            "extra_groups_count": len(groups),
+        },
+    )
+
+    if not llm_cfg.enabled or not llm_cfg.api_key:
+        rvr_ai_logger.info(
+            "rvr ai check skipped",
+            extra={"event": "rvr_ai_check_skip", "extra_reason": "llm_not_configured"},
+        )
+        return _render_partial(
+            {"type": "error", "message": "LLM не настроен: включите llm.enabled и api_key в config.json"},
+        )
+
+    if not report or not page_ctx.get("rvr_has_data"):
+        rvr_ai_logger.info(
+            "rvr ai check skipped",
+            extra={"event": "rvr_ai_check_skip", "extra_reason": "no_data"},
+        )
+        return _render_partial(
+            {"type": "error", "message": "Нет данных для AI-проверки за выбранный период"},
+        )
+
     if not groups:
+        rvr_ai_logger.info(
+            "rvr ai check skipped",
+            extra={"event": "rvr_ai_check_skip", "extra_reason": "no_groups"},
+        )
         return _render_partial(
             {"type": "error", "message": "Нет объектов для AI-проверки"},
         )
 
     try:
-        client = LLMClient(llm_cfg)
+        client = LLMClient(llm_cfg, timeout=llm_cfg.analysis_timeout)
         results = analyze_groups(groups, client, llm_cfg)
         state.upsert_rvr_ai_analysis(
             [record.as_store_dict() for record in results.values()]
         )
     except Exception as exc:
         short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        rvr_ai_logger.exception(
+            "rvr ai check failed",
+            extra={
+                "event": "rvr_ai_check_failed",
+                "extra_error": short,
+                "extra_duration_ms": round((time.perf_counter() - check_started) * 1000),
+            },
+        )
         return _render_partial(
             {"type": "error", "message": f"Ошибка AI-проверки: {short}"},
         )
@@ -1259,6 +1294,14 @@ def rvr_repeat_ai_check(
         page_ctx,
     )
     count = len(results)
+    rvr_ai_logger.info(
+        "rvr ai check done",
+        extra={
+            "event": "rvr_ai_check_done",
+            "extra_results_count": count,
+            "extra_duration_ms": round((time.perf_counter() - check_started) * 1000),
+        },
+    )
     response.headers["HX-Trigger"] = json.dumps(
         {
             "showToast": {

@@ -148,7 +148,7 @@ def test_analyze_groups_merges_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
         analysis_max_concurrency=2,
     )
 
-    def fake_analyze_chunk(client_arg, chunk, *, model):
+    def fake_analyze_chunk(client_arg, chunk, *, model, chunk_index, chunks_total):
         payload = [
             {
                 "i": 0,
@@ -172,6 +172,32 @@ def test_analyze_groups_merges_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     results = analyze_groups(groups, client, settings)
     assert len(results) == 2
     assert all(r.verdict == "possible" for r in results.values())
+
+
+def test_llm_settings_analysis_timeout_default() -> None:
+    settings = LLMSettings()
+    assert settings.analysis_timeout == 150.0
+
+
+def test_analyze_groups_logs_chunk_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    groups = [_sample_group()]
+    client = MagicMock()
+    client.chat.side_effect = TimeoutError("LLM read timed out")
+    settings = LLMSettings(analysis_batch_size=1, analysis_max_concurrency=1)
+    logged: list[dict[str, object]] = []
+
+    def capture_error(msg: str, *args: object, extra: dict[str, object] | None = None, **kwargs: object) -> None:
+        logged.append(extra or {})
+
+    monkeypatch.setattr("app.rvr_ai_analysis.logger.error", capture_error)
+
+    with pytest.raises(TimeoutError, match="LLM read timed out"):
+        analyze_groups(groups, client, settings)
+
+    failed = [entry for entry in logged if entry.get("event") == "rvr_ai_chunk_failed"]
+    assert len(failed) == 1
+    assert failed[0]["extra_error_type"] == "TimeoutError"
+    assert failed[0]["extra_duration_ms"] >= 0
 
 
 def test_rvr_ai_analysis_store_roundtrip(tmp_path) -> None:

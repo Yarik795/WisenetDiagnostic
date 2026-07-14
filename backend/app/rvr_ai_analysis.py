@@ -5,13 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from .llm.client import LLMClient
+from .logging_config import get_logger
 from .models import LLMSettings
+
+logger = get_logger("rvr_ai")
 
 AiVerdict = Literal["confirmed", "suspect", "possible", "none"]
 VALID_VERDICTS: frozenset[str] = frozenset({"confirmed", "suspect", "possible", "none"})
@@ -248,16 +252,69 @@ def chunk_groups(
     return chunks
 
 
+def _truncate_error(exc: BaseException, max_len: int = 500) -> str:
+    text = str(exc)
+    if len(text) > max_len:
+        return text[:max_len] + "…"
+    return text
+
+
+def _prompt_chars(messages: list[dict[str, str]]) -> int:
+    return sum(len(msg.get("content") or "") for msg in messages)
+
+
 def _analyze_chunk(
     client: LLMClient,
     groups_chunk: list[dict[str, Any]],
     *,
     model: str,
+    chunk_index: int,
+    chunks_total: int,
 ) -> list[AiAnalysisRecord]:
     messages = build_batch_prompt(groups_chunk)
-    response = client.chat(messages, model=model)
-    content = response.choices[0].message.content or ""
-    return parse_batch_response(content, groups_chunk, model=model)
+    prompt_chars = _prompt_chars(messages)
+    logger.info(
+        "rvr ai chunk start",
+        extra={
+            "event": "rvr_ai_chunk_start",
+            "extra_chunk_index": chunk_index,
+            "extra_chunks_total": chunks_total,
+            "extra_objects_in_chunk": len(groups_chunk),
+            "extra_prompt_chars": prompt_chars,
+        },
+    )
+    started = time.perf_counter()
+    try:
+        response = client.chat(messages, model=model)
+        content = response.choices[0].message.content or ""
+        records = parse_batch_response(content, groups_chunk, model=model)
+    except Exception as exc:
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        logger.error(
+            "rvr ai chunk failed",
+            extra={
+                "event": "rvr_ai_chunk_failed",
+                "extra_chunk_index": chunk_index,
+                "extra_chunks_total": chunks_total,
+                "extra_duration_ms": duration_ms,
+                "extra_error_type": type(exc).__name__,
+                "extra_error": _truncate_error(exc),
+            },
+        )
+        raise
+    duration_ms = round((time.perf_counter() - started) * 1000)
+    logger.info(
+        "rvr ai chunk done",
+        extra={
+            "event": "rvr_ai_chunk_done",
+            "extra_chunk_index": chunk_index,
+            "extra_chunks_total": chunks_total,
+            "extra_duration_ms": duration_ms,
+            "extra_records_count": len(records),
+            "extra_response_chars": len(content),
+        },
+    )
+    return records
 
 
 def analyze_groups(
@@ -271,16 +328,59 @@ def analyze_groups(
     model = settings.analysis_model or "google/gemini-2.5-flash"
     batch_size = max(1, settings.analysis_batch_size)
     max_concurrency = max(1, settings.analysis_max_concurrency)
+    llm_timeout_s = settings.analysis_timeout
     chunks = chunk_groups(groups, max_items=batch_size)
+    chunks_total = len(chunks)
+    job_started = time.perf_counter()
+
+    logger.info(
+        "rvr ai analysis start",
+        extra={
+            "event": "rvr_ai_start",
+            "extra_groups_count": len(groups),
+            "extra_chunks_count": chunks_total,
+            "extra_model": model,
+            "extra_batch_size": batch_size,
+            "extra_max_concurrency": max_concurrency,
+            "extra_llm_timeout_s": llm_timeout_s,
+        },
+    )
 
     results: dict[str, AiAnalysisRecord] = {}
-    with ThreadPoolExecutor(max_workers=min(max_concurrency, len(chunks))) as pool:
+    completed_chunks = 0
+    with ThreadPoolExecutor(max_workers=min(max_concurrency, chunks_total)) as pool:
         futures = {
-            pool.submit(_analyze_chunk, client, chunk, model=model): chunk
-            for chunk in chunks
+            pool.submit(
+                _analyze_chunk,
+                client,
+                chunk,
+                model=model,
+                chunk_index=chunk_index,
+                chunks_total=chunks_total,
+            ): chunk
+            for chunk_index, chunk in enumerate(chunks)
         }
         for future in as_completed(futures):
             chunk_records = future.result()
             for record in chunk_records:
                 results[record.row_id] = record
+            completed_chunks += 1
+            logger.info(
+                "rvr ai progress",
+                extra={
+                    "event": "rvr_ai_progress",
+                    "extra_completed_chunks": completed_chunks,
+                    "extra_chunks_total": chunks_total,
+                    "extra_elapsed_ms": round((time.perf_counter() - job_started) * 1000),
+                },
+            )
+
+    logger.info(
+        "rvr ai analysis done",
+        extra={
+            "event": "rvr_ai_done",
+            "extra_results_count": len(results),
+            "extra_total_duration_ms": round((time.perf_counter() - job_started) * 1000),
+        },
+    )
     return results

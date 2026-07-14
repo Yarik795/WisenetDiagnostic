@@ -18,14 +18,20 @@ class StreamedToolCall:
 
 
 class LLMClient:
-    def __init__(self, settings: Optional[LLMSettings] = None) -> None:
+    def __init__(
+        self,
+        settings: Optional[LLMSettings] = None,
+        *,
+        timeout: float = 120.0,
+    ) -> None:
         self.settings = settings or ConfigStore().load().llm
+        self.timeout = timeout
         self._client = OpenAI(
             api_key=self.settings.api_key or "not-configured",
             base_url=self.settings.base_url,
             http_client=httpx.Client(
                 verify=self.settings.verify_ssl,
-                timeout=120.0,
+                timeout=timeout,
             ),
         )
 
