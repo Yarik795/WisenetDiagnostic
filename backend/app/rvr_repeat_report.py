@@ -67,6 +67,31 @@ def object_type_from_fio(fio: str) -> str:
     return OBJECT_TYPE_ADZ if _FIO_ADZ_RE.search(fio or "") else OBJECT_TYPE_VSP
 
 
+def passes_tbank_filter(object_type: str, tb: str) -> bool:
+    if object_type == OBJECT_TYPE_ADZ:
+        return True
+    return TBANK_MUST_CONTAIN in (tb or "").strip()
+
+
+_COMMON_FILTERS_TAIL = (
+    "статус без подстроки «отозвана»; вид систем не «УС»; "
+    "колонка «Описание» — фрагмент из Naumen (Комментарий ВК … ФИО ВК)."
+)
+
+
+def build_rvr_filters_text(object_type_filter: str = "") -> str:
+    if object_type_filter == OBJECT_TYPE_ADZ:
+        tb_part = "фильтр по «Территориальный банк» не применяется"
+    elif object_type_filter == OBJECT_TYPE_VSP:
+        tb_part = f"«Территориальный банк» содержит «{TBANK_MUST_CONTAIN}»"
+    else:
+        tb_part = (
+            f"для {OBJECT_TYPE_VSP} «Территориальный банк» содержит «{TBANK_MUST_CONTAIN}»; "
+            f"для {OBJECT_TYPE_ADZ} фильтр по ТБ не применяется"
+        )
+    return f"Отбор: «Вид работ» = РВР; {tb_part}; {_COMMON_FILTERS_TAIL}"
+
+
 def _status_revoked(status: str) -> bool:
     lc = (status or "").lower().replace("ё", "е")
     return STATUS_REVOKED_SUBSTR.lower().replace("ё", "е") in lc
@@ -199,16 +224,18 @@ def build_rvr_repeat_report(
         if work_type != WORK_TYPE_REQUIRED:
             continue
 
-        tb = (row.get("tb") or "").strip()
-        if TBANK_MUST_CONTAIN not in tb:
-            continue
-
         status = (row.get("status") or "").strip()
         if _status_revoked(status):
             continue
 
         kind = (row.get("security_system_type") or "").strip()
         if kind == EXCLUDED_SYSTEM_KIND:
+            continue
+
+        fio = (row.get("customer_fio") or "").strip()
+        row_object_type = object_type_from_fio(fio)
+        tb = (row.get("tb") or "").strip()
+        if not passes_tbank_filter(row_object_type, tb):
             continue
 
         drug_key = norm_sberdrug_key(row.get("drug_number"))
@@ -220,8 +247,6 @@ def build_rvr_repeat_report(
             request_number = drug_key
 
         addr = norm_address((row.get("address") or "").strip())
-        fio = (row.get("customer_fio") or "").strip()
-        row_object_type = object_type_from_fio(fio)
         date_s = _format_created_date_utc(created)
 
         data_rows.append(
@@ -278,11 +303,7 @@ def build_rvr_repeat_report(
         },
         "data_rows": data_rows,
         "has_data": bool(data_rows),
-        "filters_text": (
-            "Отбор: «Вид работ» = РВР; «Территориальный банк» содержит «3800»; "
-            "статус без подстроки «отозвана»; вид систем не «УС»; "
-            "колонка «Описание» — фрагмент из Naumen (Комментарий ВК … ФИО ВК)."
-        ),
+        "filters_text": build_rvr_filters_text(),
     }
 
 

@@ -11,9 +11,11 @@ from openpyxl import load_workbook
 from app.rvr_repeat_report import (
     OBJECT_TYPE_ADZ,
     OBJECT_TYPE_VSP,
+    build_rvr_filters_text,
     build_rvr_repeat_report,
     extract_vk_comment,
     object_type_from_fio,
+    passes_tbank_filter,
 )
 from app.ui.rvr_repeat_dashboard import filter_report_by_object_type
 from app.ui.rvr_repeat_export import build_rvr_repeat_xlsx
@@ -61,6 +63,84 @@ def test_extract_vk_comment() -> None:
 def test_object_type_from_fio() -> None:
     assert object_type_from_fio("Олег Юрьевич К") == OBJECT_TYPE_ADZ
     assert object_type_from_fio("Случайный заказчик") == OBJECT_TYPE_VSP
+
+
+def test_passes_tbank_filter() -> None:
+    assert passes_tbank_filter(OBJECT_TYPE_ADZ, "9900 ЦА") is True
+    assert passes_tbank_filter(OBJECT_TYPE_ADZ, "") is True
+    assert passes_tbank_filter(OBJECT_TYPE_VSP, "3800 Московский банк") is True
+    assert passes_tbank_filter(OBJECT_TYPE_VSP, "9900 ЦА") is False
+
+
+def test_adz_included_without_tbank_3800() -> None:
+    rows = [
+        _row(
+            request_number="adz1",
+            customer_fio="Олег Юрьевич К",
+            tb="9900 ЦА",
+        ),
+    ]
+    report = build_rvr_repeat_report(
+        rows,
+        {},
+        date_from=date(2026, 1, 1),
+        date_to=date(2026, 3, 31),
+    )
+    assert len(report["data_rows"]) == 1
+    assert report["data_rows"][0]["object_type"] == OBJECT_TYPE_ADZ
+
+
+def test_vsp_excluded_without_tbank_3800() -> None:
+    rows = [
+        _row(request_number="vsp1", customer_fio="Иванов", tb="9900 ЦА"),
+    ]
+    report = build_rvr_repeat_report(
+        rows,
+        {},
+        date_from=date(2026, 1, 1),
+        date_to=date(2026, 3, 31),
+    )
+    assert report["data_rows"] == []
+
+
+def test_mixed_object_types_tbank_filter_per_row() -> None:
+    rows = [
+        _row(
+            request_number="adz1",
+            customer_fio="Олег Юрьевич К",
+            tb="9900 ЦА",
+            address="Адрес АДЗ",
+        ),
+        _row(
+            request_number="vsp1",
+            customer_fio="Иванов",
+            tb="3800 Московский банк",
+            address="Адрес ВСП ок",
+        ),
+        _row(
+            request_number="vsp2",
+            customer_fio="Петров",
+            tb="9900 ЦА",
+            address="Адрес ВСП skip",
+        ),
+    ]
+    report = build_rvr_repeat_report(
+        rows,
+        {},
+        date_from=date(2026, 1, 1),
+        date_to=date(2026, 3, 31),
+    )
+    numbers = {row["request_number"] for row in report["data_rows"]}
+    assert numbers == {"adz1", "vsp1"}
+
+
+def test_build_rvr_filters_text_by_object_type() -> None:
+    assert "не применяется" in build_rvr_filters_text(OBJECT_TYPE_ADZ)
+    assert "3800" in build_rvr_filters_text(OBJECT_TYPE_VSP)
+    all_text = build_rvr_filters_text("")
+    assert OBJECT_TYPE_ADZ in all_text
+    assert OBJECT_TYPE_VSP in all_text
+    assert "3800" in all_text
 
 
 def test_filters_exclude_non_rvr_and_revoked() -> None:

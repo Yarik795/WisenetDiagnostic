@@ -10,6 +10,7 @@ from ..config_store import ConfigStore
 from ..rvr_repeat_report import (
     OBJECT_TYPE_ADZ,
     OBJECT_TYPE_VSP,
+    build_rvr_filters_text,
     build_rvr_repeat_report,
 )
 from ..rvr_ai_analysis import group_fingerprint, matrix_row_id, _normalize_verdict
@@ -392,6 +393,7 @@ def rvr_repeat_page_context(
     desc_map = state.naumen_description_by_sberdrug()
     report = build_rvr_repeat_report(rows, desc_map, date_from=d_from, date_to=d_to)
     report = filter_report_by_object_type(report, object_type_filter)
+    report["filters_text"] = build_rvr_filters_text(object_type_filter)
     _enrich_report_groups_with_ai_cache(report, state)
 
     groups = report["groups_ge3"] if threshold == 3 else report["groups_ge2"]
