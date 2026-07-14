@@ -18,6 +18,7 @@
 | `scripts/` | Утилиты обслуживания и диагностики (CMDB, дампы SUNAPI, тест SMTP) |
 | `docs/` | Требования, инструкция запуска, справочники SUNAPI/Open Platform |
 | `ai-docs/` | Документация для разработки и ИИ-ассистентов |
+| `ai-docs/roadmap.md` | Перспективы разработки: запланированные, но не реализованные функции |
 | `.cursor/rules/` | Правила для ИИ-агента (поддержание документации) |
 | `create-project-archive.ps1` | Создание ZIP-архива проекта (Windows) |
 
@@ -137,7 +138,7 @@
 | `payments.py` | Контекст страницы отчёта «Статус оплаты» |
 | `payments_export.py` | Статичный HTML-экспорт и тело письма отчёта «Статус оплаты» (inline-SVG графики) |
 | `rvr_repeat_dashboard.py` | Контекст страницы «Анализ повторных РВР»: период, KPI, матрица объект×вид системы, раскрытие заявок по клику |
-| `rvr_repeat_export.py` | XLSX-экспорт и тело письма отчёта «Анализ повторных РВР» (листы Данные/Сводка/Сводка 3) |
+| `rvr_repeat_export.py` | XLSX/HTML-экспорт и тело письма отчёта «Анализ повторных РВР» (листы Данные/Сводка/Сводка 3; standalone HTML с раскрытием заявок) |
 | `source_imports.py` | Контекст страницы источников данных (импорты `inputData/`) |
 | `arsenal_dashboard.py` | Дашборд АС Арсенал: KPI, ECharts, drill-down и карточка паспорта |
 | `arsenal_export.py` | HTML-экспорт и email текущей выборки дашборда Арсенал (inline SVG) |
@@ -150,7 +151,7 @@
 - `layout.html`, `base.html` — каркас страниц
 - Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
-- `exports/` — печатные/экспортные отчёты (отчёт об ошибках)
+- `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, повторные РВР)
 
 `backend/app/static/`:
 

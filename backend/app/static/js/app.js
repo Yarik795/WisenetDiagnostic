@@ -1450,10 +1450,49 @@ function initRvrRepeatActions(root) {
     });
   });
 
-  scope.querySelectorAll("[data-rvr-email]").forEach((btn) => {
-    if (btn.dataset.rvrEmailBound === "1") return;
-    btn.dataset.rvrEmailBound = "1";
-    const defaultLabel = btn.textContent || "Отправить на почту";
+  scope.querySelectorAll("[data-rvr-export-html]").forEach((btn) => {
+    if (btn.dataset.rvrExportHtmlBound === "1") return;
+    btn.dataset.rvrExportHtmlBound = "1";
+    btn.addEventListener("click", () => {
+      const params = collectRvrRepeatParams();
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/rvr-repeat/export.html?${qs}`
+        : "/rvr-repeat/export.html";
+    });
+  });
+
+  scope.querySelectorAll("[data-rvr-email-html]").forEach((btn) => {
+    if (btn.dataset.rvrEmailHtmlBound === "1") return;
+    btn.dataset.rvrEmailHtmlBound = "1";
+    const defaultLabel = btn.textContent || "Отправить HTML на почту";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = "Отправка…";
+      try {
+        const params = collectRvrRepeatParams();
+        const qs = params.toString();
+        const url = qs
+          ? `/rvr-repeat/report/email.html?${qs}`
+          : "/rvr-repeat/report/email.html";
+        const res = await fetch(url, { method: "POST" });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить HTML-отчёт на почту");
+        console.error("[wisenet] rvr-repeat email html error", err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = defaultLabel;
+      }
+    });
+  });
+
+  scope.querySelectorAll("[data-rvr-email-xlsx]").forEach((btn) => {
+    if (btn.dataset.rvrEmailXlsxBound === "1") return;
+    btn.dataset.rvrEmailXlsxBound = "1";
+    const defaultLabel = btn.textContent || "Отправить XLSX на почту";
     btn.addEventListener("click", async () => {
       if (btn.disabled) return;
       btn.disabled = true;
@@ -1468,8 +1507,8 @@ function initRvrRepeatActions(root) {
         const data = await res.json();
         showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
       } catch (err) {
-        showToast("error", "Не удалось отправить отчёт на почту");
-        console.error("[wisenet] rvr-repeat email error", err);
+        showToast("error", "Не удалось отправить XLSX-отчёт на почту");
+        console.error("[wisenet] rvr-repeat email xlsx error", err);
       } finally {
         btn.disabled = false;
         btn.textContent = defaultLabel;

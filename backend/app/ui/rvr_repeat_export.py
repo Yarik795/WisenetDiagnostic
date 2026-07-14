@@ -1,4 +1,4 @@
-"""XLSX-экспорт и email отчёта «Анализ повторных РВР»."""
+"""XLSX/HTML-экспорт и email отчёта «Анализ повторных РВР»."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from ..display_time import format_for_display
 from ..rvr_ai_analysis import verdict_label
 from ..rvr_repeat_report import format_kind_cell
+from ..web.templates_env import templates
 
 ANALYSIS_COLUMN = "Анализ заявок / подозрение на повтор"
 DESCRIPTION_COLUMN = "Описание проблем на объекте"
@@ -125,6 +126,97 @@ def rvr_repeat_export_filename(report: dict[str, Any]) -> str:
     return f"rvr_repeat_{date_from}_{date_to}_{stamp}.xlsx"
 
 
+def rvr_repeat_html_export_filename(report: dict[str, Any]) -> str:
+    period = report.get("period") or {}
+    date_from = (period.get("from") or "start").replace("-", "")
+    date_to = (period.get("to") or "end").replace("-", "")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return f"rvr_repeat_{date_from}_{date_to}_{stamp}.html"
+
+
+def build_rvr_repeat_export_context(page_ctx: dict[str, Any]) -> dict[str, Any]:
+    report = page_ctx.get("rvr_report") or {}
+    period = report.get("period") or {}
+    threshold = page_ctx.get("rvr_threshold", 2)
+    threshold_label = "Сводка 3 (≥3)" if threshold == 3 else "Сводка (≥2)"
+
+    latest_pp = page_ctx.get("rvr_latest_import")
+    latest_naumen = page_ctx.get("rvr_latest_naumen_import")
+    import_parts: list[str] = []
+    if latest_pp is not None:
+        imported = format_for_display(latest_pp.imported_at, "%d.%m.%Y %H:%M") or "—"
+        import_parts.append(
+            f"заявки: {imported} ({latest_pp.record_count} записей)"
+        )
+    if latest_naumen is not None:
+        imported = format_for_display(latest_naumen.imported_at, "%d.%m.%Y %H:%M") or "—"
+        import_parts.append(f"Naumen: {imported}")
+    import_info = "; ".join(import_parts) if import_parts else "—"
+
+    generated_at = format_for_display(datetime.now(timezone.utc), "%d.%m.%Y %H:%M") or "—"
+
+    return {
+        "export": {
+            "title": "Анализ повторных РВР",
+            "period_label": period.get("label") or "—",
+            "filters_text": page_ctx.get("rvr_filters_text") or "",
+            "threshold_label": threshold_label,
+            "generated_at": generated_at,
+            "import_info": import_info,
+        },
+        "rvr_kpi": page_ctx.get("rvr_kpi") or {},
+        "rvr_matrix_rows": page_ctx.get("rvr_matrix_rows") or [],
+        "rvr_kinds": page_ctx.get("rvr_kinds") or [],
+    }
+
+
+def render_rvr_repeat_export_html(context: dict[str, Any]) -> str:
+    template = templates.env.get_template("exports/rvr_repeat_report.html")
+    return template.render(**context)
+
+
+def render_rvr_repeat_email_body_html(report: dict[str, Any]) -> str:
+    period = report.get("period") or {}
+    kpi = report.get("kpi") or {}
+    generated = report.get("generated_at")
+    gen_display = ""
+    if generated:
+        try:
+            gen_display = format_for_display(
+                datetime.fromisoformat(generated), "%d.%m.%Y %H:%M"
+            )
+        except ValueError:
+            gen_display = generated
+
+    confirmed_count = 0
+    suspect_count = 0
+    for group in report.get("groups_ge2") or []:
+        verdict = group.get("ai_verdict")
+        if verdict == "confirmed":
+            confirmed_count += 1
+        elif verdict in ("suspect", "repeat"):
+            suspect_count += 1
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"></head>
+<body style="font-family:Segoe UI,Arial,sans-serif;color:#1e293b;">
+  <h2>Анализ повторных РВР</h2>
+  <p><strong>Период:</strong> {period.get("label", "—")}</p>
+  <p><strong>Сформирован:</strong> {gen_display or "—"}</p>
+  <ul>
+    <li>Групп с повторами (≥2): {kpi.get("groups_total", 0)}</li>
+    <li>Всего повторов: {kpi.get("repeats_total", 0)}</li>
+    <li>Заявок в выборке: {kpi.get("requests_total", 0)}</li>
+    <li>Топ-объект: {kpi.get("top_object") or "—"}</li>
+    <li>Объектов с повтором (AI, подтверждён): {confirmed_count}</li>
+    <li>Объектов с подозрением на повтор (AI): {suspect_count}</li>
+  </ul>
+  <p>Во вложении — интерактивный HTML-отчёт с матрицей проблемных объектов.</p>
+</body>
+</html>"""
+
+
 def rvr_repeat_email_subject(report: dict[str, Any]) -> str:
     period = report.get("period") or {}
     label = period.get("label") or "период не указан"
@@ -138,7 +230,9 @@ def render_rvr_repeat_email_body(report: dict[str, Any]) -> str:
     gen_display = ""
     if generated:
         try:
-            gen_display = format_for_display(datetime.fromisoformat(generated))
+            gen_display = format_for_display(
+                datetime.fromisoformat(generated), "%d.%m.%Y %H:%M"
+            )
         except ValueError:
             gen_display = generated
 

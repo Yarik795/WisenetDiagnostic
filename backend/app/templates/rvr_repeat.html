@@ -112,9 +112,21 @@
   <button
     type="button"
     class="btn btn-ghost btn-sm"
-    data-rvr-email
+    data-rvr-export-html
+    title="Скачать HTML-отчёт текущей выборки"
+  >Экспорт в HTML</button>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-rvr-email-html
+    title="Отправить HTML-отчёт на адреса из config.email_report"
+  >Отправить HTML на почту</button>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-rvr-email-xlsx
     title="Отправить XLSX на адреса из config.email_report"
-  >Отправить на почту</button>
+  >Отправить XLSX на почту</button>
   {% endif %}
 </form>
 

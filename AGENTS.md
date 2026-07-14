@@ -21,7 +21,7 @@
 | Конфиг, реестр устройств, credentials, исключения | `backend/app/config_store.py`, `models.py`, `exclusions.py` | — |
 | Email-сводка, SMTP, расписание рассылки | `backend/app/report_delivery.py`, `email_sender.py`, `report_delivery_history.py`, `ui/email_charts.py`, `ui/email_history_series.py` | `ai-docs/services.md` §Email |
 | Отчёт «Статус оплаты», импорт Excel, экспорт/email | `backend/app/cashflow_report.py`, `pp_import.py`, `data_sources.py`, `report_jobs.py`, `ui/payments.py`, `ui/payments_export.py`, `ui/source_imports.py` | `ai-docs/monitoring-db.md` §pp_requests, §naumen_records |
-| Отчёт «Анализ повторных РВР», период, XLSX/email, AI-проверка | `backend/app/rvr_repeat_report.py`, `rvr_ai_analysis.py`, `ui/rvr_repeat_dashboard.py`, `ui/rvr_repeat_export.py`, `state_store.py` | `ai-docs/monitoring-db.md` §pp_requests, §naumen_records, §rvr_ai_analysis |
+| Отчёт «Анализ повторных РВР», период, XLSX/HTML/email, AI-проверка | `backend/app/rvr_repeat_report.py`, `rvr_ai_analysis.py`, `ui/rvr_repeat_dashboard.py`, `ui/rvr_repeat_export.py`, `state_store.py` | `ai-docs/monitoring-db.md` §pp_requests, §naumen_records, §rvr_ai_analysis |
 | Импорт заявок ПП (файл с «заявки») | `backend/app/pp_import.py`, `data_sources.py`, `state_store.py` | `ai-docs/monitoring-db.md` §pp_requests |
 | Импорт Naumen (`naumen_all.xlsx`) | `backend/app/naumen_import.py`, `data_sources.py`, `state_store.py` | `ai-docs/monitoring-db.md` §naumen_records |
 | Импорт АС Арсенал (файл с «паспортам») | `backend/app/arsenal_import.py`, `data_sources.py`, `state_store.py`, `ui/arsenal_dashboard.py`, `ui/arsenal_export.py` | `ai-docs/monitoring-db.md` §arsenal_* |
@@ -32,6 +32,7 @@
 | Чат с AI, LLM, SQL-agent, история диалогов | `backend/app/llm/`, `chat_store.py`, `web/ai_chat.py` | `ai-docs/services.md` §Чат с AI |
 | Бизнес-смысл, термины, scope этапов | — | `ai-docs/business-logic.md` |
 | Структура проекта целиком | — | `ai-docs/basic-structure.md` |
+| Запланированные функции, перспективы разработки | — | `ai-docs/roadmap.md` |
 
 ## Инварианты (не нарушать)
 

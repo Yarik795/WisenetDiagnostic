@@ -90,6 +90,13 @@ def test_rvr_repeat_page_renders(client: TestClient) -> None:
     assert "rvr-kind-cell" not in r.text
 
 
+def test_rvr_repeat_page_export_buttons_when_no_data(client: TestClient) -> None:
+    r = client.get("/rvr-repeat")
+    assert r.status_code == 200
+    assert 'data-rvr-export-html' not in r.text
+    assert 'data-rvr-email-html' not in r.text
+
+
 def test_rvr_repeat_page_with_object_type_filter(client: TestClient) -> None:
     r = client.get("/rvr-repeat?object_type=%D0%92%D0%A1%D0%9F")
     assert r.status_code == 200
@@ -103,8 +110,21 @@ def test_rvr_repeat_export_without_data_redirects(client: TestClient) -> None:
     assert "/rvr-repeat" in r.headers["location"]
 
 
+def test_rvr_repeat_export_html_without_data_redirects(client: TestClient) -> None:
+    r = client.get("/rvr-repeat/export.html", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/rvr-repeat" in r.headers["location"]
+
+
 def test_rvr_repeat_email_without_data(client: TestClient) -> None:
     r = client.post("/rvr-repeat/report/email")
+    assert r.status_code == 400
+    data = r.json()
+    assert data["ok"] is False
+
+
+def test_rvr_repeat_email_html_without_data(client: TestClient) -> None:
+    r = client.post("/rvr-repeat/report/email.html")
     assert r.status_code == 400
     data = r.json()
     assert data["ok"] is False

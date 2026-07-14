@@ -76,10 +76,14 @@ from ..ui.arsenal_export import (
 from ..ui.rvr_repeat_dashboard import rvr_repeat_page_context
 from ..ui.rvr_repeat_export import (
     XLSX_MIME,
+    build_rvr_repeat_export_context,
     build_rvr_repeat_xlsx,
     render_rvr_repeat_email_body,
+    render_rvr_repeat_email_body_html,
+    render_rvr_repeat_export_html,
     rvr_repeat_email_subject,
     rvr_repeat_export_filename,
+    rvr_repeat_html_export_filename,
 )
 from ..rvr_ai_analysis import analyze_groups
 from ..llm.client import LLMClient
@@ -836,6 +840,42 @@ def rvr_repeat_export_xlsx(
     return _rvr_repeat_export_response(request, state)
 
 
+def _rvr_repeat_export_html_response(
+    request: Request,
+    state: StateStore,
+) -> Response:
+    params = _rvr_repeat_query_params(request)
+    page_ctx = rvr_repeat_page_context(
+        state,
+        date_from=params["date_from"] or None,
+        date_to=params["date_to"] or None,
+        threshold=int(params["threshold"]),
+        object_type=str(params.get("object_type") or "") or None,
+    )
+    if not page_ctx.get("rvr_has_data"):
+        return _redirect(
+            "/rvr-repeat",
+            "error",
+            "Нет данных для экспорта за выбранный период",
+            request=request,
+        )
+    report = page_ctx.get("rvr_report") or {}
+    export_ctx = build_rvr_repeat_export_context(page_ctx)
+    filename = rvr_repeat_html_export_filename(report)
+    html = render_rvr_repeat_export_html(export_ctx)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/rvr-repeat/export.html", include_in_schema=False)
+def rvr_repeat_export_html(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _rvr_repeat_export_html_response(request, state)
+
+
 @router.post("/rvr-repeat/report/email", include_in_schema=False)
 def rvr_repeat_report_email(
     request: Request,
@@ -893,7 +933,68 @@ def rvr_repeat_report_email(
         )
 
     recipients = ", ".join(email_cfg.to_emails)
-    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
+    return JSONResponse({"ok": True, "message": f"XLSX-отчёт отправлен на {recipients}"})
+
+
+@router.post("/rvr-repeat/report/email.html", include_in_schema=False)
+def rvr_repeat_report_email_html(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    params = _rvr_repeat_query_params(request)
+    page_ctx = rvr_repeat_page_context(
+        state,
+        date_from=params["date_from"] or None,
+        date_to=params["date_to"] or None,
+        threshold=int(params["threshold"]),
+        object_type=str(params.get("object_type") or "") or None,
+    )
+    report = page_ctx.get("rvr_report")
+    if not report or not page_ctx.get("rvr_has_data"):
+        return JSONResponse(
+            {"ok": False, "message": "Нет данных для отправки за выбранный период"},
+            status_code=400,
+        )
+
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: "
+                + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+
+    export_ctx = build_rvr_repeat_export_context(page_ctx)
+    attachment_html = render_rvr_repeat_export_html(export_ctx)
+    filename = rvr_repeat_html_export_filename(report)
+    body_html = render_rvr_repeat_email_body_html(report)
+    subject = rvr_repeat_email_subject(report)
+
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            attachments=[(filename, attachment_html)],
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"HTML-отчёт отправлен на {recipients}"})
 
 
 @router.get("/smartview", response_class=HTMLResponse)

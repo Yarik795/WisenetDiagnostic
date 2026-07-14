@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ export.title }} — Wisenet Диагностика</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --bg-base: #fff;
+      --bg-elevated: #f8fafc;
+      --text: #1a1d21;
+      --text-secondary: #5c6370;
+      --text-muted: #9ca3af;
+      --border: #d8dce3;
+      --border-subtle: #e5e7eb;
+      --accent: #1a5fb4;
+      --status-ok: #16a34a;
+      --status-warn: #ca8a04;
+      --status-error: #dc2626;
+      --status-unknown: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .report {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    .meta { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; }
+    .meta p { margin: 4px 0; }
+    .text-secondary { color: var(--text-secondary); }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .kpi-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px; }
+    .kpi-value { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--bg-base);
+    }
+    .object-health-matrix { margin-bottom: 20px; }
+    .object-health-matrix-header { margin-bottom: 12px; }
+    .object-health-matrix-title { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+    .object-health-matrix-hint { margin: 0; font-size: 12px; color: var(--text-secondary); }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th { background: #eef0f4; font-weight: 600; }
+    td.num, .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .object-matrix-object { text-align: left !important; min-width: 160px; }
+    .matrix-col-narrow { width: 52px; min-width: 48px; }
+    .matrix-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      min-height: 28px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid transparent;
+    }
+    .matrix-cell--ok, .matrix-cell--online {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.3);
+      color: var(--status-ok);
+    }
+    .matrix-cell--warn {
+      background: rgba(234, 179, 8, 0.12);
+      border-color: rgba(234, 179, 8, 0.35);
+      color: var(--status-warn);
+    }
+    .matrix-cell--error, .matrix-cell--offline {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: var(--status-error);
+    }
+    .matrix-cell--unknown {
+      background: rgba(107, 114, 128, 0.15);
+      border-color: rgba(107, 114, 128, 0.35);
+      color: var(--status-unknown);
+    }
+    .matrix-cell--disabled {
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+    .rvr-repeat-matrix .rvr-matrix-object {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: flex-start;
+      min-width: 180px;
+      max-width: 280px;
+    }
+    .rvr-matrix-address { font-weight: 600; line-height: 1.3; }
+    .rvr-matrix-type { font-size: 11px; }
+    .rvr-matrix-repeats { font-weight: 700; }
+    .rvr-matrix-cell-btn {
+      cursor: pointer;
+      font: inherit;
+      transition: box-shadow 0.15s ease, transform 0.1s ease;
+    }
+    .rvr-matrix-cell-btn:hover,
+    .rvr-matrix-cell-btn:focus-visible {
+      box-shadow: 0 0 0 2px var(--accent);
+      outline: none;
+    }
+    .rvr-matrix-cell-btn[aria-expanded="true"] {
+      box-shadow: 0 0 0 2px var(--accent);
+      transform: scale(1.05);
+    }
+    .rvr-repeat-matrix-table .object-matrix-row--warn th,
+    .rvr-repeat-matrix-table .object-matrix-row--warn td {
+      background: rgba(234, 179, 8, 0.04);
+    }
+    .rvr-repeat-matrix-table .object-matrix-row--error th,
+    .rvr-repeat-matrix-table .object-matrix-row--error td {
+      background: rgba(239, 68, 68, 0.05);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > td {
+      background-color: rgba(185, 28, 28, 0.22);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th.rvr-matrix-object {
+      border-left: 4px solid #dc2626;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > td,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > td {
+      background-color: rgba(234, 88, 12, 0.2);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th.rvr-matrix-object {
+      border-left: 4px solid #ea580c;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > td {
+      background-color: rgba(234, 179, 8, 0.2);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th.rvr-matrix-object {
+      border-left: 4px solid #ca8a04;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > td {
+      background-color: rgba(22, 163, 74, 0.18);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th.rvr-matrix-object {
+      border-left: 4px solid #16a34a;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none .matrix-cell--warn,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none .matrix-cell--error {
+      background: rgba(107, 114, 128, 0.14);
+      border-color: rgba(107, 114, 128, 0.28);
+      color: var(--text-secondary);
+    }
+    .rvr-repeat-detail td {
+      padding: 0 !important;
+      border-top: none;
+      background: var(--bg-elevated);
+    }
+    .rvr-repeat-detail-inner {
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .rvr-kind-detail-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+    .rvr-kind-detail-count { font-weight: 500; color: var(--text-secondary); }
+    .rvr-ticket-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .rvr-ticket-card {
+      padding: 10px 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--bg-base);
+    }
+    .rvr-ticket-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+    .rvr-ticket-num { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rvr-ticket-date { font-size: 12px; }
+    .rvr-ticket-desc {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .rvr-matrix-analysis { font-size: 12px; max-width: 220px; text-align: left !important; }
+    .rvr-matrix-description { font-size: 12px; max-width: 220px; line-height: 1.4; text-align: left !important; }
+    .rvr-matrix-analysis-text { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
+    .rvr-ai-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .rvr-ai-badge--confirmed { background: rgba(185, 28, 28, 0.18); color: #991b1b; }
+    .rvr-ai-badge--suspect, .rvr-ai-badge--repeat { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+    .rvr-ai-badge--possible { background: rgba(234, 179, 8, 0.18); color: #a16207; }
+    .rvr-ai-badge--none { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+    .rvr-ai-badge--stale, .rvr-ai-badge--unchecked { background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); }
+    .empty-state { color: var(--text-secondary); padding: 16px 0; }
+    footer { margin-top: 20px; font-size: 0.8rem; color: var(--text-secondary); }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .report { border: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="report">
+    <h1>{{ export.title }}</h1>
+    <div class="meta">
+      <p><strong>Период:</strong> {{ export.period_label }}</p>
+      <p><strong>Порог:</strong> {{ export.threshold_label }}</p>
+      {% if export.filters_text %}
+      <p><strong>Фильтры:</strong> {{ export.filters_text }}</p>
+      {% endif %}
+      <p><strong>Сформирован:</strong> {{ export.generated_at }}</p>
+      <p><strong>Исходные данные:</strong> {{ export.import_info }}</p>
+    </div>
+
+    <div id="rvr-repeat-report-root">
+      {% if export.filters_text %}
+      <p class="text-secondary" style="font-size:0.9rem;margin-bottom:12px;">{{ export.filters_text }}</p>
+      {% endif %}
+      {% include "partials/rvr_repeat_matrix.html" %}
+    </div>
+
+    <footer>Wisenet Диагностика — дашборд руководителя ТСО</footer>
+  </article>
+  <script>
+    function closeAllRvrRepeatDetails(scope) {
+      const root = scope || document;
+      root.querySelectorAll("[data-rvr-detail-row]").forEach((row) => {
+        row.hidden = true;
+      });
+      root.querySelectorAll("[data-rvr-kind-block]").forEach((block) => {
+        block.hidden = true;
+      });
+      root.querySelectorAll("[data-rvr-cell-toggle]").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    function openRvrRepeatDetail(rowId, kind, scope) {
+      const root = scope || document;
+      closeAllRvrRepeatDetails(root);
+      const detailRow = root.querySelector('[data-rvr-detail-row="' + rowId + '"]');
+      const kindBlock = root.querySelector(
+        '[data-rvr-kind-block="' + rowId + '"][data-kind="' + kind + '"]'
+      );
+      const toggleBtn = root.querySelector(
+        '[data-rvr-cell-toggle][data-row-id="' + rowId + '"][data-kind="' + kind + '"]'
+      );
+      if (detailRow) detailRow.hidden = false;
+      if (kindBlock) kindBlock.hidden = false;
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      const reportRoot = document.getElementById("rvr-repeat-report-root");
+      if (!reportRoot) return;
+      reportRoot.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-rvr-cell-toggle]");
+        if (!btn || !reportRoot.contains(btn)) return;
+        const rowId = btn.dataset.rowId;
+        const kind = btn.dataset.kind;
+        if (!rowId || !kind) return;
+        const isOpen = btn.getAttribute("aria-expanded") === "true";
+        if (isOpen) {
+          closeAllRvrRepeatDetails(reportRoot);
+          return;
+        }
+        openRvrRepeatDetail(rowId, kind, reportRoot);
+      });
+    });
+  </script>
+</body>
+</html>
