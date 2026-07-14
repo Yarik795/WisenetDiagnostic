@@ -46,174 +46,27 @@
     </div>
   </section>
 
+  <p class="text-secondary" style="margin:16px 0 8px;font-size:13px;">
+    Раскройте объект, чтобы увидеть список устройств для проверки на месте.
+  </p>
+
   {% for group in site_devices_groups %}
-  <section class="card" style="margin-top:16px;" id="site-object-{{ loop.index }}">
-    <h2 class="card-section-title" style="margin:0 0 12px;">{{ group.object_name }}</h2>
-
-  {% if group.nvrs or group.ip_cameras or group.analog_cameras %}
-    <h3 class="text-secondary" style="font-size:14px;margin:16px 0 8px;">Найдено при опросе</h3>
-
-    {% if group.nvrs %}
-    <h4 style="font-size:13px;margin:12px 0 6px;">Видеорегистраторы</h4>
-    <div class="table-wrap">
-      <table class="table table-compact">
-        <thead>
-          <tr>
-            <th>Имя / IP</th>
-            <th>Модель (опрос)</th>
-            <th>Модель (CMDB)</th>
-            <th>MAC</th>
-            <th>Статус</th>
-            <th>CMDB</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in group.nvrs %}
-          <tr>
-            <td>
-              <div>{{ row.name }}</div>
-              <div class="text-secondary mono" style="font-size:12px;">{{ row.host }}</div>
-            </td>
-            <td>{{ row.model or "—" }}</td>
-            <td>{{ row.cmdb_model or "—" }}</td>
-            <td class="mono">{{ row.mac or "—" }}</td>
-            <td><span class="status-badge-label--{{ row.health_status }}">{{ row.health_label }}</span></td>
-            <td><span class="status-badge-label--{% if row.match_status == 'ok' %}ok{% elif row.match_status == 'extra' %}warn{% else %}unknown{% endif %}">{{ row.match_label }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <details class="site-object-details card">
+    <summary class="site-object-summary">
+      <span class="site-object-chevron" aria-hidden="true">▼</span>
+      <span class="site-object-title">{{ group.object_name }}</span>
+      <span class="site-object-meta text-secondary">
+        NVR {{ group.nvrs|length }},
+        IP-камеры {{ group.ip_cameras|length }},
+        аналог. {{ group.analog_cameras|length }},
+        вспом. {{ group.auxiliary|length }},
+        не найдено {{ group.missing|length }}
+      </span>
+    </summary>
+    <div class="site-object-body">
+      {% include "partials/site_devices_object_body.html" %}
     </div>
-    {% endif %}
-
-    {% if group.ip_cameras %}
-    <h4 style="font-size:13px;margin:12px 0 6px;">IP-камеры</h4>
-    <div class="table-wrap">
-      <table class="table table-compact">
-        <thead>
-          <tr>
-            <th>Канал / имя</th>
-            <th>IP</th>
-            <th>Регистратор</th>
-            <th>Модель (опрос)</th>
-            <th>Модель (CMDB)</th>
-            <th>Статус</th>
-            <th>CMDB</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in group.ip_cameras %}
-          <tr>
-            <td>{{ row.name }}{% if row.channel_no is not none %} <span class="text-secondary">(#{{ row.channel_no + 1 }})</span>{% endif %}</td>
-            <td class="mono">{{ row.host }}</td>
-            <td>
-              <div>{{ row.recorder_name }}</div>
-              <div class="text-secondary mono" style="font-size:12px;">{{ row.recorder_host }}</div>
-            </td>
-            <td>{{ row.model or "—" }}</td>
-            <td>{{ row.cmdb_model or "—" }}</td>
-            <td><span class="status-badge-label--{{ row.health_status }}">{{ row.health_label }}</span></td>
-            <td><span class="status-badge-label--{% if row.match_status == 'ok' %}ok{% elif row.match_status == 'extra' %}warn{% else %}unknown{% endif %}">{{ row.match_label }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-
-    {% if group.analog_cameras %}
-    <h4 style="font-size:13px;margin:12px 0 6px;">Аналоговые камеры</h4>
-    <div class="table-wrap">
-      <table class="table table-compact">
-        <thead>
-          <tr>
-            <th>Канал / имя</th>
-            <th>Регистратор</th>
-            <th>Состояние</th>
-            <th>Статус</th>
-            <th>Примечание</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in group.analog_cameras %}
-          <tr>
-            <td>{{ row.name }}{% if row.channel_no is not none %} <span class="text-secondary">(#{{ row.channel_no + 1 }})</span>{% endif %}</td>
-            <td>
-              <div>{{ row.recorder_name }}</div>
-              <div class="text-secondary mono" style="font-size:12px;">{{ row.recorder_host }}</div>
-            </td>
-            <td>{{ row.source_state or "—" }}</td>
-            <td><span class="status-badge-label--{{ row.health_status }}">{{ row.health_label }}</span></td>
-            <td class="text-secondary">{{ row.note }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-  {% endif %}
-
-    {% if group.auxiliary %}
-    <h3 class="text-secondary" style="font-size:14px;margin:20px 0 8px;">Вспомогательное оборудование (CMDB)</h3>
-    <p class="text-secondary" style="font-size:13px;margin:0 0 8px;">
-      Устройства для вывода камер на мониторы (SPD-151, SPD-152 и др.) — проверить наличие на объекте.
-    </p>
-    <div class="table-wrap">
-      <table class="table table-compact">
-        <thead>
-          <tr>
-            <th>Тип</th>
-            <th>IP</th>
-            <th>Модель</th>
-            <th>Производитель</th>
-            <th>MAC</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in group.auxiliary %}
-          <tr>
-            <td>{{ row.device_type_label }}</td>
-            <td class="mono">{{ row.host }}</td>
-            <td>{{ row.model or "—" }}</td>
-            <td>{{ row.manufacturer or "—" }}</td>
-            <td class="mono">{{ row.mac or "—" }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-
-    {% if group.missing %}
-    <h3 class="text-secondary" style="font-size:14px;margin:20px 0 8px;">Числится в CMDB, но не найдено при опросе</h3>
-    <div class="table-wrap">
-      <table class="table table-compact">
-        <thead>
-          <tr>
-            <th>Тип</th>
-            <th>IP</th>
-            <th>Модель (CMDB)</th>
-            <th>Производитель</th>
-            <th>MAC</th>
-            <th>Примечание</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in group.missing %}
-          <tr>
-            <td>{{ row.device_type_label }}</td>
-            <td class="mono">{{ row.host }}</td>
-            <td>{{ row.model or "—" }}</td>
-            <td>{{ row.manufacturer or "—" }}</td>
-            <td class="mono">{{ row.mac or "—" }}</td>
-            <td class="text-secondary">{{ row.note }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-  </section>
+  </details>
   {% endfor %}
   {% endif %}
 </div>

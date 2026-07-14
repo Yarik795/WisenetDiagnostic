@@ -45,6 +45,16 @@ class SiteObjectGroup:
             or self.missing
         )
 
+    @property
+    def device_count(self) -> int:
+        return (
+            len(self.nvrs)
+            + len(self.ip_cameras)
+            + len(self.analog_cameras)
+            + len(self.auxiliary)
+            + len(self.missing)
+        )
+
 
 def normalize_ip(value: Optional[str]) -> str:
     return (value or "").strip().lower()
@@ -52,6 +62,10 @@ def normalize_ip(value: Optional[str]) -> str:
 
 def normalize_object_name(value: Optional[str]) -> str:
     return (value or "").strip() or "— Без объекта —"
+
+
+def is_channel_deactive(channel: ChannelRow) -> bool:
+    return (channel.source_state or "").strip().lower() == "deactive"
 
 
 def is_analog_channel(channel: ChannelRow) -> bool:
@@ -245,6 +259,8 @@ def build_site_object_groups(
         group.nvrs.append(_nvr_row(recorder, metrics, cmdb))
 
         for channel in channels_by_recorder.get(recorder.id, []):
+            if is_channel_deactive(channel):
+                continue
             if normalize_ip(channel.camera_ip):
                 cam_ip = normalize_ip(channel.camera_ip)
                 found_camera_ips.add(cam_ip)

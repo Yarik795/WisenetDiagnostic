@@ -1010,6 +1010,69 @@ a:hover {
   background: var(--bg-surface);
 }
 
+.site-object-details {
+  margin-top: 16px;
+}
+
+.site-object-details.card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.site-object-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.site-object-summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-object-chevron {
+  color: var(--text-secondary);
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.site-object-details[open] .site-object-chevron {
+  transform: rotate(180deg);
+}
+
+.site-object-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.site-object-meta {
+  font-size: 13px;
+}
+
+.site-object-body {
+  padding: 0 18px 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.site-object-section-title {
+  font-size: 14px;
+  margin: 16px 0 8px;
+}
+
+.site-object-subtitle {
+  font-size: 13px;
+  margin: 12px 0 6px;
+}
+
+.site-object-hint {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
 .recorder-row {
   display: flex;
   flex-wrap: wrap;

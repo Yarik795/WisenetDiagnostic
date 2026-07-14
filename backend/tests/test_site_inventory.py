@@ -16,6 +16,7 @@ from app.ui.site_inventory import (
     CMDB_TYPE_NVR,
     build_site_object_groups,
     is_analog_channel,
+    is_channel_deactive,
     site_devices_page_context,
 )
 from app.state_store import ChannelRow
@@ -49,6 +50,9 @@ def test_is_analog_channel() -> None:
     assert not is_analog_channel(_channel(camera_ip="10.0.0.5"))
     assert not is_analog_channel(_channel(source_state="Deactive"))
     assert not is_analog_channel(_channel())
+    assert is_channel_deactive(_channel(source_state="Deactive"))
+    assert is_channel_deactive(_channel(source_state="deactive"))
+    assert not is_channel_deactive(_channel(source_state="On"))
 
 
 @pytest.fixture
@@ -189,3 +193,31 @@ def test_site_devices_page_context_search(
     assert ctx["site_devices_has_data"] is True
     assert len(ctx["site_devices_groups"]) == 1
     assert len(ctx["site_devices_groups"][0].ip_cameras) == 1
+
+
+def test_build_site_object_groups_skips_deactive_channels(
+    config_store: ConfigStore,
+    state_store: StateStore,
+) -> None:
+    recorder = config_store.list_recorders()[0]
+    state_store.upsert_channel(
+        recorder.id,
+        0,
+        name="Активная",
+        camera_ip="10.1.1.20",
+        source_state="On",
+        health_status="ok",
+    )
+    state_store.upsert_channel(
+        recorder.id,
+        1,
+        name="Пустой слот",
+        camera_ip="10.1.1.99",
+        source_state="Deactive",
+        health_status="unknown",
+    )
+
+    groups = build_site_object_groups(config_store, state_store)
+    assert len(groups) == 1
+    assert len(groups[0].ip_cameras) == 1
+    assert groups[0].ip_cameras[0]["host"] == "10.1.1.20"
