@@ -24,6 +24,8 @@
 | Отчёт «Анализ повторных РВР», период, XLSX/HTML/email, AI-проверка | `backend/app/rvr_repeat_report.py`, `rvr_ai_analysis.py`, `ui/rvr_repeat_dashboard.py`, `ui/rvr_repeat_export.py`, `state_store.py` | `ai-docs/monitoring-db.md` §pp_requests, §naumen_records, §rvr_ai_analysis |
 | Импорт заявок ПП (файл с «заявки») | `backend/app/pp_import.py`, `data_sources.py`, `state_store.py` | `ai-docs/monitoring-db.md` §pp_requests |
 | Импорт Naumen (`naumen_all.xlsx`) | `backend/app/naumen_import.py`, `data_sources.py`, `state_store.py` | `ai-docs/monitoring-db.md` §naumen_records |
+| Отчёт «Регистраторы по времени», дата пр-ва NVR, drill-down по объектам | `backend/app/ui/equipment_timeline.py`, `ui/recorder_age_dashboard.py`, `ui/recorder_age_export.py` | `ai-docs/monitoring-db.md` §recorder_metrics (`manufacture_date`) |
+| Отчёт «Диски по времени», наработка HDD, drill-down по объектам | `backend/app/ui/equipment_timeline.py`, `ui/disk_wear_dashboard.py`, `ui/disk_wear_export.py` | `ai-docs/monitoring-db.md` §recorder_metrics (`disks_json`) |
 | Импорт АС Арсенал (файл с «паспортам») | `backend/app/arsenal_import.py`, `data_sources.py`, `state_store.py`, `ui/arsenal_dashboard.py`, `ui/arsenal_export.py` | `ai-docs/monitoring-db.md` §arsenal_* |
 | Планировщик, фоновые задачи опроса | `backend/app/scheduler.py`, `poll_jobs.py` | — |
 | Импорт из CMDB | `backend/app/cmdb_sync.py`, `scripts/sync_config_from_cmdb.py`, `scripts/cmdb_reader.py` | — |

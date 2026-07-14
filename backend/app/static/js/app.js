@@ -1215,6 +1215,273 @@ if (!window.__arsenalChartsResizeBound) {
   window.addEventListener("resize", resizeArsenalCharts);
 }
 
+const recorderAgeChartStore = new Map();
+const diskWearChartStore = new Map();
+
+function timelineDistributionBarOption(distribution) {
+  const labels = distribution.labels || [];
+  const values = distribution.values || [];
+  const keys = distribution.keys || [];
+  const colors = distribution.colors || {};
+  if (!labels.length || !values.some((val) => val > 0)) {
+    return arsenalEmptyOption();
+  }
+  return {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params) => {
+        const item = params?.[0];
+        if (!item) return "";
+        return `${item.name}: ${item.value}`;
+      },
+    },
+    grid: { left: 48, right: 16, top: 24, bottom: 72 },
+    xAxis: {
+      type: "category",
+      data: labels,
+      axisLabel: { color: "#9aa0a6", rotate: 35 },
+      axisLine: { lineStyle: { color: "#2d323c" } },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: { color: "#9aa0a6" },
+      splitLine: { lineStyle: { color: "#2d323c" } },
+    },
+    series: [
+      {
+        type: "bar",
+        data: values.map((value, idx) => ({
+          value,
+          periodKey: keys[idx],
+          itemStyle: {
+            color: colors[keys[idx]] || "#3b82f6",
+            borderRadius: [4, 4, 0, 0],
+          },
+        })),
+        label: {
+          show: true,
+          position: "top",
+          color: "#e8eaed",
+        },
+      },
+    ],
+  };
+}
+
+function disposeRecorderAgeCharts(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-recorder-age-chart]").forEach((el) => {
+    const chart = echarts.getInstanceByDom(el);
+    if (chart) chart.dispose();
+  });
+  recorderAgeChartStore.clear();
+}
+
+function resolveRecorderAgeDashboard(root) {
+  const scope = root || document;
+  let dashboard = null;
+  if (scope instanceof Element && scope.hasAttribute("data-recorder-age-dashboard")) {
+    dashboard = scope;
+  } else if (scope instanceof Document || scope instanceof Element) {
+    dashboard = scope.querySelector("[data-recorder-age-dashboard]");
+  }
+  if (!dashboard) {
+    dashboard = document.querySelector("[data-recorder-age-dashboard]");
+  }
+  if (dashboard && !dashboard.isConnected) {
+    dashboard = document.querySelector("[data-recorder-age-dashboard]");
+  }
+  return dashboard;
+}
+
+function collectRecorderAgeFilterParams() {
+  const form = document.querySelector("[data-recorder-age-filters]");
+  if (!form) return new URLSearchParams();
+  return new URLSearchParams(new FormData(form));
+}
+
+function loadRecorderAgeDetail(extraParams) {
+  if (typeof htmx === "undefined") return;
+  const params = collectRecorderAgeFilterParams();
+  Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+  const panel = document.getElementById("recorder-age-detail-panel");
+  if (panel) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  htmx.ajax("GET", `/recorders-age/partials/detail?${params.toString()}`, {
+    target: "#recorder-age-detail-panel",
+    swap: "innerHTML",
+  });
+}
+
+function initRecorderAgeCharts(root) {
+  if (typeof echarts === "undefined") return;
+  const dashboard = resolveRecorderAgeDashboard(root);
+  if (!dashboard) return;
+
+  disposeRecorderAgeCharts(dashboard);
+  const scriptEl = dashboard.querySelector("[data-recorder-age-charts]");
+  if (!scriptEl) return;
+
+  let chartData;
+  try {
+    chartData = JSON.parse(scriptEl.textContent || "{}");
+  } catch (err) {
+    console.error("[wisenet] recorder-age chart data parse error", err);
+    return;
+  }
+
+  const el = dashboard.querySelector('[data-recorder-age-chart="distribution"]');
+  if (!el) return;
+  const distribution = chartData.distribution || {};
+  const chart = echarts.init(el, null, { renderer: "canvas" });
+  chart.setOption(timelineDistributionBarOption(distribution), true);
+  chart.on("click", (params) => {
+    const periodKey =
+      params?.data?.periodKey ||
+      (distribution.keys || [])[params?.dataIndex];
+    if (!periodKey) return;
+    loadRecorderAgeDetail({ period: periodKey });
+  });
+  recorderAgeChartStore.set("distribution", chart);
+}
+
+function resizeRecorderAgeCharts() {
+  recorderAgeChartStore.forEach((chart) => chart.resize());
+}
+
+function initRecorderAgeExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-recorder-age-export]").forEach((btn) => {
+    if (btn.dataset.recorderAgeExportBound === "1") return;
+    btn.dataset.recorderAgeExportBound = "1";
+    btn.addEventListener("click", () => {
+      const params = collectRecorderAgeFilterParams();
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/recorders-age/export.html?${qs}`
+        : "/recorders-age/export.html";
+    });
+  });
+}
+
+function disposeDiskWearCharts(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-disk-wear-chart]").forEach((el) => {
+    const chart = echarts.getInstanceByDom(el);
+    if (chart) chart.dispose();
+  });
+  diskWearChartStore.clear();
+}
+
+function resolveDiskWearDashboard(root) {
+  const scope = root || document;
+  let dashboard = null;
+  if (scope instanceof Element && scope.hasAttribute("data-disk-wear-dashboard")) {
+    dashboard = scope;
+  } else if (scope instanceof Document || scope instanceof Element) {
+    dashboard = scope.querySelector("[data-disk-wear-dashboard]");
+  }
+  if (!dashboard) {
+    dashboard = document.querySelector("[data-disk-wear-dashboard]");
+  }
+  if (dashboard && !dashboard.isConnected) {
+    dashboard = document.querySelector("[data-disk-wear-dashboard]");
+  }
+  return dashboard;
+}
+
+function collectDiskWearFilterParams() {
+  const form = document.querySelector("[data-disk-wear-filters]");
+  if (!form) return new URLSearchParams();
+  return new URLSearchParams(new FormData(form));
+}
+
+function loadDiskWearDetail(extraParams) {
+  if (typeof htmx === "undefined") return;
+  const params = collectDiskWearFilterParams();
+  Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+  const panel = document.getElementById("disk-wear-detail-panel");
+  if (panel) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  htmx.ajax("GET", `/disks-wear/partials/detail?${params.toString()}`, {
+    target: "#disk-wear-detail-panel",
+    swap: "innerHTML",
+  });
+}
+
+function initDiskWearCharts(root) {
+  if (typeof echarts === "undefined") return;
+  const dashboard = resolveDiskWearDashboard(root);
+  if (!dashboard) return;
+
+  disposeDiskWearCharts(dashboard);
+  const scriptEl = dashboard.querySelector("[data-disk-wear-charts]");
+  if (!scriptEl) return;
+
+  let chartData;
+  try {
+    chartData = JSON.parse(scriptEl.textContent || "{}");
+  } catch (err) {
+    console.error("[wisenet] disk-wear chart data parse error", err);
+    return;
+  }
+
+  const el = dashboard.querySelector('[data-disk-wear-chart="distribution"]');
+  if (!el) return;
+  const distribution = chartData.distribution || {};
+  const chart = echarts.init(el, null, { renderer: "canvas" });
+  chart.setOption(timelineDistributionBarOption(distribution), true);
+  chart.on("click", (params) => {
+    const bucketKey =
+      params?.data?.periodKey ||
+      (distribution.keys || [])[params?.dataIndex];
+    if (!bucketKey) return;
+    loadDiskWearDetail({ bucket_key: bucketKey });
+  });
+  diskWearChartStore.set("distribution", chart);
+}
+
+function resizeDiskWearCharts() {
+  diskWearChartStore.forEach((chart) => chart.resize());
+}
+
+function initDiskWearExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-disk-wear-export]").forEach((btn) => {
+    if (btn.dataset.diskWearExportBound === "1") return;
+    btn.dataset.diskWearExportBound = "1";
+    btn.addEventListener("click", () => {
+      const params = collectDiskWearFilterParams();
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/disks-wear/export.html?${qs}`
+        : "/disks-wear/export.html";
+    });
+  });
+}
+
+if (!window.__recorderAgeChartsResizeBound) {
+  window.__recorderAgeChartsResizeBound = true;
+  window.addEventListener("resize", resizeRecorderAgeCharts);
+}
+
+if (!window.__diskWearChartsResizeBound) {
+  window.__diskWearChartsResizeBound = true;
+  window.addEventListener("resize", resizeDiskWearCharts);
+}
+
 const PAYMENTS_SECTION_KEYS = ["az_mb", "az_ca", "vsp_mb", "vsp_ca"];
 
 function collectPaymentsEmailParams() {
@@ -1525,6 +1792,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initPaymentsPage();
   initArsenalCharts();
   initArsenalExportActions();
+  initRecorderAgeCharts();
+  initRecorderAgeExportActions();
+  initDiskWearCharts();
+  initDiskWearExportActions();
   initRvrRepeatActions();
   if (typeof htmx === "undefined") {
     showToast(
@@ -1556,7 +1827,12 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsTables(e.detail?.target);
   initPaymentsCharts(e.detail?.target);
   initArsenalCharts(e.detail?.target);
+  initRecorderAgeCharts(e.detail?.target);
+  initDiskWearCharts(e.detail?.target);
   initPaymentsExportActions(e.detail?.target);
+  initArsenalExportActions(e.detail?.target);
+  initRecorderAgeExportActions(e.detail?.target);
+  initDiskWearExportActions(e.detail?.target);
   initRvrRepeatActions(e.detail?.target);
   scrollToHighlightedCategory();
 });

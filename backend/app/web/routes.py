@@ -73,6 +73,24 @@ from ..ui.arsenal_export import (
     render_arsenal_email_body,
     render_arsenal_export_html,
 )
+from ..ui.recorder_age_dashboard import (
+    recorder_age_detail_context,
+    recorder_age_page_context,
+)
+from ..ui.recorder_age_export import (
+    build_recorder_age_export_context,
+    recorder_age_export_filename,
+    render_recorder_age_export_html,
+)
+from ..ui.disk_wear_dashboard import (
+    disk_wear_detail_context,
+    disk_wear_page_context,
+)
+from ..ui.disk_wear_export import (
+    build_disk_wear_export_context,
+    disk_wear_export_filename,
+    render_disk_wear_export_html,
+)
 from ..ui.rvr_repeat_dashboard import rvr_repeat_page_context
 from ..ui.rvr_repeat_export import (
     XLSX_MIME,
@@ -596,6 +614,284 @@ def arsenal_export_html(
 ) -> Response:
     return _arsenal_export_html_response(
         request, state, object_type=object_type
+    )
+
+
+@router.get("/recorders-age", response_class=HTMLResponse)
+def recorders_age_page(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "recorder_age.html",
+        {
+            "active_nav": "recorders_age",
+            "toast": _toast_from_query(request),
+            **recorder_age_page_context(
+                store,
+                state,
+                date_from=date_from,
+                date_to=date_to,
+                grouping=grouping,
+                model=model,
+            ),
+        },
+    )
+
+
+@router.get("/recorders-age/partials/dashboard", response_class=HTMLResponse)
+def recorders_age_dashboard_partial(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/recorder_age_dashboard.html",
+        recorder_age_page_context(
+            store,
+            state,
+            date_from=date_from,
+            date_to=date_to,
+            grouping=grouping,
+            model=model,
+        ),
+    )
+
+
+@router.get("/recorders-age/partials/detail", response_class=HTMLResponse)
+def recorders_age_detail_partial(
+    request: Request,
+    period: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/recorder_age_detail.html",
+        recorder_age_detail_context(
+            store,
+            state,
+            period=period,
+            date_from=date_from,
+            date_to=date_to,
+            grouping=grouping,
+            model=model,
+        ),
+    )
+
+
+def _recorders_age_export_html_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+) -> Response:
+    page_ctx = recorder_age_page_context(
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+    )
+    if not page_ctx.get("recorder_age_has_data"):
+        return _redirect(
+            "/recorders-age",
+            "error",
+            "Нет данных для экспорта отчёта по регистраторам",
+            request=request,
+        )
+    export_ctx = build_recorder_age_export_context(
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+    )
+    filename = recorder_age_export_filename()
+    html = render_recorder_age_export_html(export_ctx)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/recorders-age/export.html", include_in_schema=False)
+def recorders_age_export_html(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _recorders_age_export_html_response(
+        request,
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+    )
+
+
+@router.get("/disks-wear", response_class=HTMLResponse)
+def disks_wear_page(
+    request: Request,
+    bucket: str = "1",
+    min_years: str = "",
+    max_years: str = "",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "disk_wear.html",
+        {
+            "active_nav": "disks_wear",
+            "toast": _toast_from_query(request),
+            **disk_wear_page_context(
+                store,
+                state,
+                bucket=bucket,
+                min_years=min_years,
+                max_years=max_years,
+                model=model,
+            ),
+        },
+    )
+
+
+@router.get("/disks-wear/partials/dashboard", response_class=HTMLResponse)
+def disks_wear_dashboard_partial(
+    request: Request,
+    bucket: str = "1",
+    min_years: str = "",
+    max_years: str = "",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/disk_wear_dashboard.html",
+        disk_wear_page_context(
+            store,
+            state,
+            bucket=bucket,
+            min_years=min_years,
+            max_years=max_years,
+            model=model,
+        ),
+    )
+
+
+@router.get("/disks-wear/partials/detail", response_class=HTMLResponse)
+def disks_wear_detail_partial(
+    request: Request,
+    bucket_key: str = "",
+    bucket: str = "1",
+    min_years: str = "",
+    max_years: str = "",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/disk_wear_detail.html",
+        disk_wear_detail_context(
+            store,
+            state,
+            bucket_key=bucket_key,
+            bucket=bucket,
+            min_years=min_years,
+            max_years=max_years,
+            model=model,
+        ),
+    )
+
+
+def _disks_wear_export_html_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    bucket: str = "1",
+    min_years: str = "",
+    max_years: str = "",
+    model: str = "",
+) -> Response:
+    page_ctx = disk_wear_page_context(
+        store,
+        state,
+        bucket=bucket,
+        min_years=min_years,
+        max_years=max_years,
+        model=model,
+    )
+    if not page_ctx.get("disk_wear_has_data"):
+        return _redirect(
+            "/disks-wear",
+            "error",
+            "Нет данных для экспорта отчёта по дискам",
+            request=request,
+        )
+    export_ctx = build_disk_wear_export_context(
+        store,
+        state,
+        bucket=bucket,
+        min_years=min_years,
+        max_years=max_years,
+        model=model,
+    )
+    filename = disk_wear_export_filename()
+    html = render_disk_wear_export_html(export_ctx)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/disks-wear/export.html", include_in_schema=False)
+def disks_wear_export_html(
+    request: Request,
+    bucket: str = "1",
+    min_years: str = "",
+    max_years: str = "",
+    model: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _disks_wear_export_html_response(
+        request,
+        store,
+        state,
+        bucket=bucket,
+        min_years=min_years,
+        max_years=max_years,
+        model=model,
     )
 
 

@@ -1,0 +1,48 @@
+<div id="recorder-age-dashboard-root" data-recorder-age-dashboard>
+  {% if not recorder_age_has_data %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет данных о дате производства регистраторов. Убедитесь, что NVR опрошены и серийные номера распознаны.
+    </p>
+  </section>
+  {% else %}
+  <script type="application/json" data-recorder-age-charts>{{ recorder_age_charts | tojson }}</script>
+
+  <section class="fleet-overview card" aria-label="Показатели регистраторов">
+    <div class="fleet-kpi-grid">
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_age_kpi.total_recorders }}</span>
+        <span class="fleet-kpi-label">Регистраторов (ТСВ)</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--ok">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ recorder_age_kpi.with_date }}</span>
+        <span class="fleet-kpi-label">С датой пр-ва</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--warn">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ recorder_age_kpi.without_date }}</span>
+        <span class="fleet-kpi-label">Без даты пр-ва</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_age_kpi.oldest }}</span>
+        <span class="fleet-kpi-label">Самый старый</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_age_kpi.newest }}</span>
+        <span class="fleet-kpi-label">Самый новый</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card arsenal-chart-card" style="margin-top:16px;">
+    <h3 class="card-section-title">Распределение по дате производства</h3>
+    <p class="text-secondary" style="margin:0 0 8px;font-size:13px;">
+      Нажмите на столбец, чтобы увидеть объекты и регистраторы в периоде.
+    </p>
+    <div class="arsenal-chart" data-recorder-age-chart="distribution" style="height:360px;"></div>
+  </section>
+
+  <div id="recorder-age-detail-panel" style="margin-top:16px;"></div>
+  {% endif %}
+</div>

@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+{% block title %}Регистраторы по времени — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Регистраторы по времени{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Распределение видеорегистраторов (NVR) по дате производства, выведенной из серийного номера.
+  Клик по столбцу графика покажет объекты и устройства в выбранном периоде.
+</p>
+
+<form
+  class="toolbar"
+  style="flex-wrap:wrap;gap:8px;margin-bottom:16px;"
+  hx-get="/recorders-age/partials/dashboard"
+  hx-target="#recorder-age-dashboard-root"
+  hx-swap="outerHTML"
+  hx-trigger="change from:select, change from:input, submit"
+  data-recorder-age-filters
+>
+  <label class="text-secondary" for="recorder-age-from">Период с</label>
+  <input
+    id="recorder-age-from"
+    type="month"
+    name="date_from"
+    class="input"
+    value="{{ recorder_age_date_from }}"
+    style="min-width:140px;"
+  />
+  <label class="text-secondary" for="recorder-age-to">по</label>
+  <input
+    id="recorder-age-to"
+    type="month"
+    name="date_to"
+    class="input"
+    value="{{ recorder_age_date_to }}"
+    style="min-width:140px;"
+  />
+  <label class="text-secondary" for="recorder-age-grouping">Группировка</label>
+  <select id="recorder-age-grouping" name="grouping" class="select" style="min-width:140px;">
+    <option value="month" {% if recorder_age_grouping == 'month' %}selected{% endif %}>По месяцам</option>
+    <option value="quarter" {% if recorder_age_grouping == 'quarter' %}selected{% endif %}>По кварталам</option>
+    <option value="year" {% if recorder_age_grouping == 'year' %}selected{% endif %}>По годам</option>
+  </select>
+  <label class="text-secondary" for="recorder-age-model">Модель NVR</label>
+  <select id="recorder-age-model" name="model" class="select" style="min-width:180px;">
+    <option value="">Все модели</option>
+    {% for option in recorder_age_model_options %}
+    <option value="{{ option }}" {% if recorder_age_model == option %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+  {% if recorder_age_has_data %}
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-recorder-age-export
+    title="Скачать HTML текущей выборки"
+  >Экспорт в HTML</button>
+  {% endif %}
+</form>
+
+{% include "partials/recorder_age_dashboard.html" %}
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/echarts.min.js?v=5.5.1"></script>
+{{ super() }}
+{% endblock %}

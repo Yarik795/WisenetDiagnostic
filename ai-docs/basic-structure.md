@@ -115,7 +115,7 @@
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/recorders-age` — распределение NVR по дате производства (`GET /recorders-age/export.html`); `/disks-wear` — распределение HDD по наработке (`GET /disks-wear/export.html`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -142,6 +142,11 @@
 | `source_imports.py` | Контекст страницы источников данных (импорты `inputData/`) |
 | `arsenal_dashboard.py` | Дашборд АС Арсенал: KPI, ECharts, drill-down и карточка паспорта |
 | `arsenal_export.py` | HTML-экспорт и email текущей выборки дашборда Арсенал (inline SVG) |
+| `equipment_timeline.py` | Общая агрегация для отчётов «по времени»: дата пр-ва NVR, наработка HDD, drill-down по `object_name` |
+| `recorder_age_dashboard.py` | Дашборд «Регистраторы по времени»: распределение NVR по `manufacture_date`, ECharts, drill-down |
+| `recorder_age_export.py` | HTML-экспорт отчёта «Регистраторы по времени» (inline SVG + таблицы объектов) |
+| `disk_wear_dashboard.py` | Дашборд «Диски по времени»: распределение HDD по `PowerOnDuration`, ECharts, drill-down |
+| `disk_wear_export.py` | HTML-экспорт отчёта «Диски по времени» (inline SVG + таблицы объектов) |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
 #### Шаблоны и статика
@@ -149,9 +154,9 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `disk_wear.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
-- `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, повторные РВР)
+- `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, регистраторы/диски по времени, повторные РВР)
 
 `backend/app/static/`:
 

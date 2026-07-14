@@ -1,0 +1,44 @@
+<div id="disk-wear-dashboard-root" data-disk-wear-dashboard>
+  {% if not disk_wear_has_data %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет данных о наработке дисков. Убедитесь, что NVR опрошены и storageinfo возвращает PowerOnDuration.
+    </p>
+  </section>
+  {% else %}
+  <script type="application/json" data-disk-wear-charts>{{ disk_wear_charts | tojson }}</script>
+
+  <section class="fleet-overview card" aria-label="Показатели дисков">
+    <div class="fleet-kpi-grid">
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ disk_wear_kpi.total_disks }}</span>
+        <span class="fleet-kpi-label">Слотов дисков</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--ok">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ disk_wear_kpi.with_wear }}</span>
+        <span class="fleet-kpi-label">С наработкой</span>
+      </div>
+      <div class="fleet-kpi fleet-kpi--warn">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ disk_wear_kpi.without_wear }}</span>
+        <span class="fleet-kpi-label">Без наработки</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ disk_wear_kpi.avg_years }}</span>
+        <span class="fleet-kpi-label">Средняя наработка, лет</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card arsenal-chart-card" style="margin-top:16px;">
+    <h3 class="card-section-title">Распределение по наработке</h3>
+    <p class="text-secondary" style="margin:0 0 8px;font-size:13px;">
+      Нажмите на столбец, чтобы увидеть объекты и диски в интервале наработки.
+    </p>
+    <div class="arsenal-chart" data-disk-wear-chart="distribution" style="height:360px;"></div>
+  </section>
+
+  <div id="disk-wear-detail-panel" style="margin-top:16px;"></div>
+  {% endif %}
+</div>

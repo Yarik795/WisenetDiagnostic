@@ -74,10 +74,24 @@ def test_removed_detail_routes_return_404(client: TestClient) -> None:
 
 
 def test_placeholder_sections(client: TestClient) -> None:
-    for path in ("/budget", "/arsenal", "/smartview"):
+    for path in ("/budget", "/smartview"):
         r = client.get(path)
         assert r.status_code == 200
         assert "в разработке" in r.text.lower()
+
+
+def test_recorders_age_page_renders(client: TestClient) -> None:
+    r = client.get("/recorders-age")
+    assert r.status_code == 200
+    assert "Регистраторы по времени" in r.text
+    assert "data-recorder-age-dashboard" in r.text or "Нет данных" in r.text
+
+
+def test_disks_wear_page_renders(client: TestClient) -> None:
+    r = client.get("/disks-wear")
+    assert r.status_code == 200
+    assert "Диски по времени" in r.text
+    assert "data-disk-wear-dashboard" in r.text or "Нет данных" in r.text
 
 
 def test_rvr_repeat_page_renders(client: TestClient) -> None:

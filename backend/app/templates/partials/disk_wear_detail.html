@@ -1,0 +1,49 @@
+<section class="card arsenal-detail-panel" data-disk-wear-detail>
+  <div class="arsenal-detail-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+    <div>
+      <h3 class="card-section-title" style="margin:0;">{{ disk_wear_detail_title }}</h3>
+      <p class="text-secondary" style="margin:4px 0 0;">
+        {{ disk_wear_detail_count }} дисков — объекты, где установлено оборудование
+      </p>
+    </div>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      onclick="document.getElementById('disk-wear-detail-panel').innerHTML=''"
+      aria-label="Закрыть панель"
+    >Закрыть</button>
+  </div>
+
+  {% if disk_wear_detail_rows %}
+  <div class="table-wrap" style="max-height:480px;overflow:auto;">
+    <table class="table table-compact">
+      <thead>
+        <tr>
+          <th>Объект</th>
+          <th>Регистратор</th>
+          <th>IP</th>
+          <th>Модель NVR</th>
+          <th>Слот</th>
+          <th>Модель диска</th>
+          <th>Наработка</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in disk_wear_detail_rows %}
+        <tr>
+          <td>{{ row.object_name }}</td>
+          <td>{{ row.recorder_name }}</td>
+          <td class="mono text-secondary">{{ row.host }}</td>
+          <td>{{ row.nvr_model }}</td>
+          <td>{{ row.disk_slot }}</td>
+          <td>{{ row.disk_model }}</td>
+          <td>{{ row.metric_value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-secondary" style="margin:0;">Нет дисков для выбранного интервала.</p>
+  {% endif %}
+</section>

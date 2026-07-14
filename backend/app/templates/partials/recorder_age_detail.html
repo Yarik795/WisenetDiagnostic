@@ -1,0 +1,47 @@
+<section class="card arsenal-detail-panel" data-recorder-age-detail>
+  <div class="arsenal-detail-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+    <div>
+      <h3 class="card-section-title" style="margin:0;">{{ recorder_age_detail_title }}</h3>
+      <p class="text-secondary" style="margin:4px 0 0;">
+        {{ recorder_age_detail_count }} регистраторов — объекты, где установлено оборудование
+      </p>
+    </div>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm"
+      onclick="document.getElementById('recorder-age-detail-panel').innerHTML=''"
+      aria-label="Закрыть панель"
+    >Закрыть</button>
+  </div>
+
+  {% if recorder_age_detail_rows %}
+  <div class="table-wrap" style="max-height:480px;overflow:auto;">
+    <table class="table table-compact">
+      <thead>
+        <tr>
+          <th>Объект</th>
+          <th>Устройство</th>
+          <th>IP</th>
+          <th>Модель NVR</th>
+          <th>S/N</th>
+          <th>Дата пр-ва</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in recorder_age_detail_rows %}
+        <tr>
+          <td>{{ row.object_name }}</td>
+          <td>{{ row.recorder_name }}</td>
+          <td class="mono text-secondary">{{ row.host }}</td>
+          <td>{{ row.model }}</td>
+          <td class="mono text-secondary" style="font-size:12px;">{{ row.serial_number }}</td>
+          <td>{{ row.metric_value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-secondary" style="margin:0;">Нет регистраторов для выбранного периода.</p>
+  {% endif %}
+</section>
