@@ -1540,6 +1540,51 @@ function initPaymentsExportActions(root) {
   });
 }
 
+function initSiteDevicesExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-site-devices-export]").forEach((btn) => {
+    if (btn.dataset.siteDevicesExportBound === "1") return;
+    btn.dataset.siteDevicesExportBound = "1";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const searchInput = document.getElementById("site-devices-search");
+      const search = searchInput ? searchInput.value : "";
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/site-devices/export.html?${qs}`
+        : "/site-devices/export.html";
+    });
+  });
+  scope.querySelectorAll("[data-site-devices-email]").forEach((btn) => {
+    if (btn.dataset.siteDevicesEmailBound === "1") return;
+    btn.dataset.siteDevicesEmailBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const searchInput = document.getElementById("site-devices-search");
+        const search = searchInput ? searchInput.value : "";
+        const body = new URLSearchParams();
+        if (search) body.set("search", search);
+        const res = await fetch("/site-devices/report/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
+        });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить отчёт на почту");
+        console.error("[wisenet] site-devices email error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function initArsenalExportActions(root) {
   const scope = root || document;
   scope.querySelectorAll("[data-arsenal-export]").forEach((btn) => {
@@ -1792,6 +1837,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPaymentsPage();
   initArsenalCharts();
   initArsenalExportActions();
+  initSiteDevicesExportActions();
   initRecorderAgeCharts();
   initRecorderAgeExportActions();
   initDiskWearCharts();
@@ -1831,6 +1877,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initDiskWearCharts(e.detail?.target);
   initPaymentsExportActions(e.detail?.target);
   initArsenalExportActions(e.detail?.target);
+  initSiteDevicesExportActions(e.detail?.target);
   initRecorderAgeExportActions(e.detail?.target);
   initDiskWearExportActions(e.detail?.target);
   initRvrRepeatActions(e.detail?.target);

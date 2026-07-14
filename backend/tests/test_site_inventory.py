@@ -19,6 +19,10 @@ from app.ui.site_inventory import (
     is_channel_deactive,
     site_devices_page_context,
 )
+from app.ui.site_inventory_export import (
+    build_site_devices_export_context,
+    render_site_devices_export_html,
+)
 from app.state_store import ChannelRow
 
 
@@ -229,6 +233,41 @@ def test_site_devices_page_context_ping_results(
     missing = ctx["site_devices_groups"][0].missing[0]
     assert missing["ping_status"] == "ok"
     assert "5" in missing["ping_label"]
+
+
+def test_site_devices_export_includes_ping_results(
+    config_store: ConfigStore,
+    state_store: StateStore,
+) -> None:
+    _write_cmdb(
+        state_store,
+        [
+            CmdbRecordRow(
+                host="10.1.1.30",
+                functional_type=CMDB_TYPE_CAMERA,
+                manufacturer="Hanwha",
+                object_name="Объект 1",
+                model_name="XNO-6080R",
+                mac=None,
+                device_kind=None,
+                source_row=1,
+            ),
+        ],
+    )
+    export_ctx = build_site_devices_export_context(
+        config_store,
+        state_store,
+        ping_results={
+            "10.1.1.30": {
+                "reachable": False,
+                "rtt_ms": None,
+                "error": "timeout",
+            }
+        },
+    )
+    html = render_site_devices_export_html(export_ctx)
+    assert "Недоступен" in html
+    assert "<th>Ping</th>" in html
 
 
 def test_build_site_object_groups_skips_deactive_channels(

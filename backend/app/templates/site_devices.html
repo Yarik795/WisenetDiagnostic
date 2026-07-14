@@ -33,9 +33,16 @@
   {% if site_devices_has_data %}
   <a
     class="btn btn-ghost btn-sm"
+    data-site-devices-export
     href="/site-devices/export.html{% if site_devices_search %}?search={{ site_devices_search | urlencode }}{% endif %}"
     title="Скачать HTML текущей выборки"
   >Экспорт в HTML</a>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-site-devices-email
+    title="Отправить HTML-отчёт на адреса из config.email_report"
+  >Отправить на почту</button>
   {% if site_devices_zombie_count > 0 %}
   <form
     style="display:inline;"

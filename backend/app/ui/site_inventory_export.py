@@ -17,8 +17,14 @@ def build_site_devices_export_context(
     state: StateStore,
     *,
     search: str = "",
+    ping_results: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    page_ctx = site_devices_page_context(store, state, search=search)
+    page_ctx = site_devices_page_context(
+        store,
+        state,
+        search=search,
+        ping_results=ping_results,
+    )
     generated_at = format_for_display(datetime.now(timezone.utc), "%d.%m.%Y %H:%M") or "—"
     filter_label = f"Поиск: {search}" if search.strip() else "Все объекты"
     return {
@@ -28,6 +34,25 @@ def build_site_devices_export_context(
         "kpi": page_ctx.get("site_devices_kpi") or {},
         "groups": page_ctx.get("site_devices_groups") or [],
     }
+
+
+def render_site_devices_email_body(context: dict[str, Any]) -> str:
+    kpi = context.get("kpi") or {}
+    return (
+        '<html><body style="font-family:system-ui,sans-serif;color:#1a1d21;">'
+        f"<p>Отчёт <strong>Устройства на объекте</strong> — {context['filter_label']}.</p>"
+        f"<p>Сформирован: {context['generated_at']}</p>"
+        f"<p>Объектов: <strong>{kpi.get('objects', 0)}</strong>, "
+        f"в CMDB не найдено при опросе: <strong>{kpi.get('missing', 0)}</strong>.</p>"
+        "<p>Полный отчёт во вложении (HTML).</p>"
+        "</body></html>"
+    )
+
+
+def site_devices_email_subject(search: str = "") -> str:
+    stamp = format_for_display(datetime.now(timezone.utc), "%d.%m.%Y %H:%M") or ""
+    label = f"поиск: {search}" if search.strip() else "все объекты"
+    return f"Устройства на объекте ({label}) — {stamp}"
 
 
 def render_site_devices_export_html(context: dict[str, Any]) -> str:

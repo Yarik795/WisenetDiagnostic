@@ -96,7 +96,9 @@ from ..ui.disk_wear_export import (
 from ..ui.site_inventory import site_devices_page_context
 from ..ui.site_inventory_export import (
     build_site_devices_export_context,
+    render_site_devices_email_body,
     render_site_devices_export_html,
+    site_devices_email_subject,
     site_devices_export_filename,
 )
 from ..ui.rvr_repeat_dashboard import rvr_repeat_page_context
@@ -1046,8 +1048,14 @@ def _site_devices_export_html_response(
     state: StateStore,
     *,
     search: str = "",
+    ping_results: dict | None = None,
 ) -> Response:
-    page_ctx = site_devices_page_context(store, state, search=search)
+    page_ctx = site_devices_page_context(
+        store,
+        state,
+        search=search,
+        ping_results=ping_results,
+    )
     if not page_ctx.get("site_devices_has_data"):
         return _redirect(
             "/site-devices",
@@ -1055,7 +1063,12 @@ def _site_devices_export_html_response(
             "Нет данных для экспорта отчёта по устройствам на объекте",
             request=request,
         )
-    export_ctx = build_site_devices_export_context(store, state, search=search)
+    export_ctx = build_site_devices_export_context(
+        store,
+        state,
+        search=search,
+        ping_results=ping_results,
+    )
     filename = site_devices_export_filename()
     html = render_site_devices_export_html(export_ctx)
     response = HTMLResponse(content=html)
@@ -1069,13 +1082,81 @@ def site_devices_export_html(
     search: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
 ) -> Response:
     return _site_devices_export_html_response(
         request,
         store,
         state,
         search=search,
+        ping_results=ping_jobs.latest_results(),
     )
+
+
+@router.post("/site-devices/report/email", include_in_schema=False)
+def site_devices_report_email(
+    request: Request,
+    search: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    ping_results = ping_jobs.latest_results()
+    page_ctx = site_devices_page_context(
+        store,
+        state,
+        search=search,
+        ping_results=ping_results,
+    )
+    if not page_ctx.get("site_devices_has_data"):
+        return JSONResponse(
+            {"ok": False, "message": "Нет данных для отправки отчёта по устройствам на объекте"},
+            status_code=400,
+        )
+
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: "
+                + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+
+    export_ctx = build_site_devices_export_context(
+        store,
+        state,
+        search=search,
+        ping_results=ping_results,
+    )
+    attachment_html = render_site_devices_export_html(export_ctx)
+    filename = site_devices_export_filename()
+    body_html = render_site_devices_email_body(export_ctx)
+    subject = site_devices_email_subject(search)
+
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            attachments=[(filename, attachment_html)],
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
 
 
 @router.post("/arsenal/report/email", include_in_schema=False)

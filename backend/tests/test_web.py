@@ -158,6 +158,13 @@ def test_site_devices_ping_zombies_returns_panel(
         app.dependency_overrides.clear()
 
 
+def test_site_devices_report_email_requires_data(client: TestClient) -> None:
+    r = client.post("/site-devices/report/email", data={"search": ""})
+    assert r.status_code == 400
+    data = r.json()
+    assert data["ok"] is False
+
+
 def test_rvr_repeat_page_renders(client: TestClient) -> None:
     r = client.get("/rvr-repeat")
     assert r.status_code == 200
