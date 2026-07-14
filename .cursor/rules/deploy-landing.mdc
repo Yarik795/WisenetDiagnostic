@@ -1,0 +1,37 @@
+---
+description: После изменений в landing/ сразу публиковать на GitHub Pages
+alwaysApply: true
+---
+
+# Деплой лендинга на GitHub Pages
+
+Если в задаче **изменены файлы в `landing/`** (HTML, CSS, JS, assets, README лендинга), после коммита **обязательно** опубликуй обновление на GitHub Pages. Не оставляй правки только в ветке — сайт обновляется только из `main`.
+
+Публичный URL: `https://yarik795.github.io/WisenetDiagnostic/`
+
+Workflow: `.github/workflows/deploy-landing.yml` (триггер — push в `main` с изменениями в `landing/**`).
+
+## Обязательные шаги агента
+
+1. Закоммить и запушить изменения.
+2. Убедиться, что они в **`main`**:
+   - если работаешь в feature-ветке — смержить в `main` (PR или merge + push);
+   - если PR уже открыт — смержить его.
+3. Дождаться успешного workflow **Deploy landing to GitHub Pages**:
+   ```bash
+   gh run watch $(gh run list --workflow=deploy-landing.yml --limit 1 --json databaseId -q '.[0].databaseId')
+   ```
+   При необходимости запустить вручную: **Actions → Deploy landing to GitHub Pages → Run workflow**.
+4. Проверить, что на живом сайте появились правки (например, `curl` по ключевой фразе из изменений).
+5. В ответе пользователю указать URL и подтвердить, что деплой прошёл.
+
+## Если деплой не сработал
+
+- **Settings → Pages → Source** должен быть **GitHub Actions**.
+- Workflow должен завершиться со статусом **success**; при ошибке — прочитать лог и исправить.
+- Браузер может кэшировать старую версию; для проверки использовать `curl` или жёсткое обновление (`Ctrl+Shift+R`).
+
+## Чего не делать
+
+- Не считать задачу по лендингу завершённой, пока изменения не в `main` и workflow не успешен.
+- Не просить пользователя вручную мержить/деплоить, если у агента есть доступ к git и GitHub CLI.

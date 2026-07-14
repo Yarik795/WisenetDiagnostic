@@ -33,6 +33,7 @@
 | Отчёт об ошибках (HTML-экспорт) | `backend/app/ui/error_report.py`, `error_report_render.py` | — |
 | Аналитика устранённых инцидентов (HTML-отчёт) | `scripts/resolved_incidents_report.py`, `scripts/episode_parser.py` | `ai-docs/monitoring-db.md` §4–§5 (`status_history`, `category_status_history`) |
 | Чат с AI, LLM, SQL-agent, история диалогов | `backend/app/llm/`, `chat_store.py`, `web/ai_chat.py` | `ai-docs/services.md` §Чат с AI |
+| Лендинг конкурса, GitHub Pages | `landing/`, `.github/workflows/deploy-landing.yml` | `.cursor/rules/deploy-landing.mdc`, `landing/README.md` |
 | Бизнес-смысл, термины, scope этапов | — | `ai-docs/business-logic.md` |
 | Структура проекта целиком | — | `ai-docs/basic-structure.md` |
 | Запланированные функции, перспективы разработки | — | `ai-docs/roadmap.md` |
