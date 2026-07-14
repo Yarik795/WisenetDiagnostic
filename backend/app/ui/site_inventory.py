@@ -374,14 +374,51 @@ def _build_kpi(groups: list[SiteObjectGroup]) -> dict[str, int]:
     return kpi
 
 
+def _apply_ping_results_to_groups(
+    groups: list[SiteObjectGroup],
+    ping_results: dict[str, dict[str, Any]],
+) -> None:
+    for group in groups:
+        for row in group.missing:
+            ip = normalize_ip(row.get("host"))
+            entry = ping_results.get(ip) if ip else None
+            if not entry:
+                row["ping_status"] = ""
+                row["ping_label"] = ""
+                row["ping_rtt"] = None
+                row["ping_error"] = ""
+                continue
+            if entry.get("reachable"):
+                row["ping_status"] = "ok"
+                rtt = entry.get("rtt_ms")
+                row["ping_label"] = f"Доступен{f' ({rtt:.0f} мс)' if rtt is not None else ''}"
+                row["ping_rtt"] = rtt
+                row["ping_error"] = ""
+            else:
+                row["ping_status"] = "error"
+                row["ping_label"] = "Недоступен"
+                row["ping_rtt"] = None
+                row["ping_error"] = entry.get("error") or ""
+
+
+def _count_zombies(groups: list[SiteObjectGroup]) -> int:
+    return sum(len(group.missing) for group in groups)
+
+
 def site_devices_page_context(
     store: ConfigStore,
     state: StateStore,
     *,
     search: str = "",
+    ping_results: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     all_groups = build_site_object_groups(store, state)
+    zombie_count = _count_zombies(all_groups)
+    results = ping_results or {}
+    _apply_ping_results_to_groups(all_groups, results)
     groups = _filter_groups(all_groups, search)
+    if search:
+        _apply_ping_results_to_groups(groups, results)
     kpi = _build_kpi(groups)
     has_data = bool(all_groups)
     return {
@@ -389,4 +426,5 @@ def site_devices_page_context(
         "site_devices_has_data": has_data,
         "site_devices_groups": groups,
         "site_devices_kpi": kpi,
+        "site_devices_zombie_count": zombie_count,
     }

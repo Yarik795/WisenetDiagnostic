@@ -1,0 +1,85 @@
+<div
+  id="site-ping-panel"
+  class="poll-job-panel poll-job-panel--compact card{% if job.is_active %} poll-job-panel--running{% endif %}"
+  {% if job.is_active %}
+  hx-get="/site-devices/ping-jobs/{{ job.job_id }}?search={{ site_devices_search|urlencode }}"
+  hx-trigger="every 1s"
+  hx-swap="outerHTML"
+  {% elif job.status.value == 'completed' and refresh_url %}
+  hx-get="{{ refresh_url }}"
+  hx-target="#site-devices-list-root"
+  hx-swap="outerHTML"
+  hx-trigger="load"
+  {% endif %}
+>
+  <div class="poll-job-body">
+    <div class="poll-job-status-row">
+      <span class="poll-job-status poll-job-status--{{ job.status.value }}">
+        {% if job.status.value == 'pending' %}Запуск…
+        {% elif job.status.value == 'running' %}Ping выполняется
+        {% elif job.status.value == 'completed' %}Завершён
+        {% elif job.status.value == 'failed' %}Ошибка
+        {% elif job.status.value == 'cancelled' %}Прерван
+        {% else %}{{ job.status.value }}{% endif %}
+      </span>
+      {% if job.status.value == 'running' and job.total > 0 %}
+      <span class="poll-job-counter">{{ job.done }}/{{ job.total }}</span>
+      {% endif %}
+      {% if job.total > 0 %}
+      <span class="poll-job-percent">{{ job.percent }}%</span>
+      {% endif %}
+    </div>
+
+    {% if job.status.value in ('pending', 'running', 'completed', 'failed') %}
+    <div class="poll-job-progress" role="progressbar" aria-valuenow="{{ job.percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="poll-job-progress-bar" style="width: {{ job.percent }}%;"></div>
+    </div>
+    {% endif %}
+
+    <p class="poll-job-line{% if job.status.value in ('failed',) %} poll-job-line--error{% elif job.status.value == 'cancelled' %} poll-job-line--warn{% elif job.status.value == 'completed' and job.failed %} poll-job-line--warn{% endif %}">
+      {% if job.status.value == 'running' %}
+        {% if job.total > 0 %}
+        ✓{{ job.success }}{% if job.failed %} · ✗{{ job.failed }}{% endif %}
+        {% else %}
+        Нет устройств для ping
+        {% endif %}
+      {% elif job.status.value in ('completed', 'failed', 'skipped', 'cancelled') %}
+        {% if job.message %}{{ job.message }}{% elif job.total == 0 %}Нет устройств для ping{% endif %}
+      {% elif job.status.value == 'pending' %}
+        {% if job.total > 0 %}Подготовка…{% else %}Нет устройств для ping{% endif %}
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="poll-job-actions">
+    {% if job.is_active %}
+    <form
+      class="poll-job-form poll-job-form--cancel"
+      hx-post="/site-devices/ping/cancel"
+      hx-target="#site-ping-panel"
+      hx-swap="outerHTML"
+    >
+      <input type="hidden" name="search" value="{{ site_devices_search }}">
+      <button
+        type="submit"
+        class="btn btn-outline btn-sm poll-job-btn poll-job-btn--cancel"
+        title="Прервать текущий ping"
+      >Остановить ping</button>
+    </form>
+    {% endif %}
+    <form
+      class="poll-job-form"
+      hx-post="/site-devices/ping-zombies"
+      hx-target="#site-ping-panel"
+      hx-swap="outerHTML"
+    >
+      <input type="hidden" name="search" value="{{ site_devices_search }}">
+      <button
+        type="submit"
+        class="btn btn-outline btn-sm poll-job-btn"
+        {% if job.is_active %}disabled{% endif %}
+        title="ICMP ping всех устройств из CMDB, не найденных при опросе"
+      >Ping всех зомби</button>
+    </form>
+  </div>
+</div>

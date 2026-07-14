@@ -195,6 +195,42 @@ def test_site_devices_page_context_search(
     assert len(ctx["site_devices_groups"][0].ip_cameras) == 1
 
 
+def test_site_devices_page_context_ping_results(
+    config_store: ConfigStore,
+    state_store: StateStore,
+) -> None:
+    _write_cmdb(
+        state_store,
+        [
+            CmdbRecordRow(
+                host="10.1.1.30",
+                functional_type=CMDB_TYPE_CAMERA,
+                manufacturer="Hanwha",
+                object_name="Объект 1",
+                model_name="XNO-6080R",
+                mac=None,
+                device_kind=None,
+                source_row=1,
+            ),
+        ],
+    )
+    ctx = site_devices_page_context(
+        config_store,
+        state_store,
+        ping_results={
+            "10.1.1.30": {
+                "reachable": True,
+                "rtt_ms": 5.0,
+                "error": None,
+            }
+        },
+    )
+    assert ctx["site_devices_zombie_count"] == 1
+    missing = ctx["site_devices_groups"][0].missing[0]
+    assert missing["ping_status"] == "ok"
+    assert "5" in missing["ping_label"]
+
+
 def test_build_site_object_groups_skips_deactive_channels(
     config_store: ConfigStore,
     state_store: StateStore,

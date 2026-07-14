@@ -32,8 +32,30 @@
     href="/site-devices/export.html{% if site_devices_search %}?search={{ site_devices_search | urlencode }}{% endif %}"
     title="Скачать HTML текущей выборки"
   >Экспорт в HTML</a>
+  {% if site_devices_zombie_count > 0 %}
+  <form
+    style="display:inline;"
+    hx-post="/site-devices/ping-zombies"
+    hx-target="#site-ping-panel"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="search" value="{{ site_devices_search }}">
+    <button
+      type="submit"
+      class="btn btn-outline btn-sm"
+      {% if site_ping_job and site_ping_job.is_active %}disabled{% endif %}
+      title="ICMP ping всех устройств из CMDB, не найденных при опросе ({{ site_devices_zombie_count }})"
+    >Ping всех зомби</button>
+  </form>
+  {% endif %}
   {% endif %}
 </form>
+
+{% if site_ping_job %}
+{% include "partials/site_ping_job_panel.html" %}
+{% else %}
+<div id="site-ping-panel" style="margin-bottom:16px;"></div>
+{% endif %}
 
 {% include "partials/site_devices_list.html" %}
 {% endblock %}

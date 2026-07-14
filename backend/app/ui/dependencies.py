@@ -3,6 +3,7 @@ from functools import lru_cache
 from fastapi import Request
 
 from ..config_store import ConfigStore
+from ..ping_jobs import PingJobManager
 from ..poll_jobs import PollJobManager
 from ..report_jobs import ReportJobManager
 from ..scheduler import MonitoringScheduler
@@ -27,6 +28,14 @@ def get_chat_store() -> "ChatStore":
 
 def get_store() -> ConfigStore:
     return ConfigStore()
+
+
+def get_ping_job_manager(request: Request) -> PingJobManager:
+    mgr = getattr(request.app.state, "ping_job_manager", None)
+    if mgr is None:
+        mgr = PingJobManager()
+        request.app.state.ping_job_manager = mgr
+    return mgr
 
 
 def get_poll_job_manager(request: Request) -> PollJobManager:

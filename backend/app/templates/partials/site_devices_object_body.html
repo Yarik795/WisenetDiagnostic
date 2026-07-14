@@ -144,6 +144,7 @@
           <th>Производитель</th>
           <th>MAC</th>
           <th>Примечание</th>
+          <th>Ping</th>
         </tr>
       </thead>
       <tbody>
@@ -155,6 +156,16 @@
           <td>{{ row.manufacturer or "—" }}</td>
           <td class="mono">{{ row.mac or "—" }}</td>
           <td class="text-secondary">{{ row.note }}</td>
+          <td>
+            {% if row.ping_status %}
+            <span
+              class="status-badge-label--{{ row.ping_status }}"
+              {% if row.ping_error %}title="{{ row.ping_error }}"{% elif row.ping_rtt is not none %}title="{{ row.ping_rtt }} мс"{% endif %}
+            >{{ row.ping_label }}</span>
+            {% else %}
+            <span class="text-secondary">—</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

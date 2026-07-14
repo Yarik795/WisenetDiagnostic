@@ -24,6 +24,7 @@ from ..cashflow_report import (
     load_report_artifact,
     requests_file_path,
 )
+from ..ping_jobs import PingJob, PingJobManager
 from ..poll_jobs import PollJob, PollJobManager
 from ..report_jobs import ReportJob, ReportJobManager
 from ..scheduler import MonitoringScheduler
@@ -31,6 +32,7 @@ from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
 from ..ui.dependencies import (
     get_monitoring_scheduler,
+    get_ping_job_manager,
     get_poll_job_manager,
     get_report_job_manager,
     get_state_store,
@@ -907,14 +909,22 @@ def site_devices_page(
     search: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
 ) -> HTMLResponse:
+    active_ping = ping_jobs.get_active_job()
     return templates.TemplateResponse(
         request,
         "site_devices.html",
         {
             "active_nav": "site_devices",
             "toast": _toast_from_query(request),
-            **site_devices_page_context(store, state, search=search),
+            "site_ping_job": active_ping,
+            **site_devices_page_context(
+                store,
+                state,
+                search=search,
+                ping_results=ping_jobs.latest_results(),
+            ),
         },
     )
 
@@ -925,12 +935,108 @@ def site_devices_list_partial(
     search: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "partials/site_devices_list.html",
-        site_devices_page_context(store, state, search=search),
+        site_devices_page_context(
+            store,
+            state,
+            search=search,
+            ping_results=ping_jobs.latest_results(),
+        ),
     )
+
+
+def _site_ping_job_panel_response(
+    request: Request,
+    job: PingJob,
+    *,
+    search: str = "",
+) -> HTMLResponse:
+    refresh_url = job.refresh_url or f"/site-devices/partials/list?search={search}"
+    return templates.TemplateResponse(
+        request,
+        "partials/site_ping_job_panel.html",
+        {
+            "job": job,
+            "site_devices_search": search,
+            "refresh_url": refresh_url,
+        },
+    )
+
+
+@router.post("/site-devices/ping-zombies", response_class=HTMLResponse)
+async def site_devices_ping_zombies(
+    request: Request,
+    search: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
+) -> HTMLResponse:
+    refresh_url = f"/site-devices/partials/list?search={search}"
+    job = ping_jobs.start_ping_zombies(
+        store,
+        state,
+        refresh_url=refresh_url,
+    )
+    return _site_ping_job_panel_response(request, job, search=search)
+
+
+@router.get("/site-devices/ping-jobs/{job_id}", response_class=HTMLResponse)
+def site_devices_ping_job_status(
+    request: Request,
+    job_id: str,
+    search: str = "",
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
+) -> HTMLResponse:
+    job = ping_jobs.get_job(job_id)
+    if not job:
+        return HTMLResponse("Задача не найдена", status_code=404)
+    return _site_ping_job_panel_response(
+        request,
+        job,
+        search=search or request.query_params.get("search", ""),
+    )
+
+
+@router.post("/site-devices/ping/cancel", response_class=HTMLResponse)
+async def site_devices_ping_cancel(
+    request: Request,
+    search: str = Form(default=""),
+    ping_jobs: PingJobManager = Depends(get_ping_job_manager),
+) -> HTMLResponse:
+    active = ping_jobs.get_active_job()
+    job_id = active.job_id if active else None
+    cancelled = await ping_jobs.cancel_active()
+    if job_id:
+        job = ping_jobs.get_job(job_id)
+        if job:
+            response = _site_ping_job_panel_response(request, job, search=search)
+            if cancelled:
+                response.headers["HX-Trigger"] = json.dumps(
+                    {
+                        "showToast": {
+                            "type": "success",
+                            "message": "Ping остановлен",
+                        }
+                    },
+                    ensure_ascii=True,
+                )
+            return response
+    response = HTMLResponse('<div id="site-ping-panel" style="margin-bottom:16px;"></div>')
+    if cancelled:
+        response.headers["HX-Trigger"] = json.dumps(
+            {
+                "showToast": {
+                    "type": "success",
+                    "message": "Ping остановлен",
+                }
+            },
+            ensure_ascii=True,
+        )
+    return response
 
 
 def _site_devices_export_html_response(

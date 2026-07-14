@@ -70,6 +70,7 @@
 | `health.py` | Перечисление `HealthStatus`, агрегация «худшего» статуса |
 | `scheduler.py` | Фоновый asyncio-цикл: периодический короткий/полный опрос по интервалам из конфига, суточный inventory, тик плановой email-рассылки |
 | `poll_jobs.py` | Менеджер фоновых задач опроса (ручной и по расписанию), статус для UI |
+| `ping_jobs.py` | Фоновый ICMP-ping «зомби»-устройств (CMDB без опроса) для отчёта «Устройства на объекте», прогресс для UI |
 | `serial_manufacture_date.py` | Дата производства устройства по серийному номеру Samsung/Hanwha |
 
 #### Отчёты и рассылка
@@ -116,7 +117,7 @@
 | `templates_env.py` | Jinja2Templates и регистрация глобальных функций форматирования для шаблонов |
 | `validation.py` | Разбор и валидация форм регистраторов |
 
-Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/recorders-age` — распределение NVR по дате производства (`GET /recorders-age/export.html`); `/disks-wear` — распределение HDD по наработке (`GET /disks-wear/export.html`); `/site-devices` — отчёт «Устройства на объекте»: реальные NVR/камеры vs CMDB (`GET /site-devices/export.html`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
+Основные маршруты UI: `/` → редирект на `/summary` (сводка по видам систем); `/monitoring` — ТСВ (дашборды исправности/времени, группы и таблица NVR); `/skud`, `/bio` — устройства СКУД и биотерминалы (ping); `/sources` — источники данных `inputData/`; `/arsenal` — дашборд АС Арсенал (заполнение паспортов, производители систем; `GET /arsenal/export.html`, `POST /arsenal/report/email`); `/recorders-age` — распределение NVR по дате производства (`GET /recorders-age/export.html`); `/disks-wear` — распределение HDD по наработке (`GET /disks-wear/export.html`); `/site-devices` — отчёт «Устройства на объекте»: реальные NVR/камеры vs CMDB, `POST /site-devices/ping-zombies` (`GET /site-devices/export.html`); `/payments` — отчёт «Статус оплаты» (`GET /payments/export.html`, `POST /payments/report/email`); `/rvr-repeat` — отчёт «Анализ повторных РВР» (`GET /rvr-repeat/export.xlsx`, `POST /rvr-repeat/report/email`); `/ai-chat` — чат с LLM по данным мониторинга (SSE, ECharts); `/settings`, `/settings/exclusions`. Legacy-редиректы: `/objects`, `/recorders`, `/time`, `/status`. Действия: `POST /monitoring/poll-all`, отмена/пауза автоопроса, проверка и NTP по регистратору, отправка email-сводки (`POST .../report/email`), `POST /objects/sync-cmdb`, экспорт отчёта об ошибках (`.../export/errors.html`).
 
 #### Логика представления (`backend/app/ui/`)
 
@@ -148,7 +149,7 @@
 | `recorder_age_export.py` | HTML-экспорт отчёта «Регистраторы по времени» (inline SVG + таблицы объектов) |
 | `disk_wear_dashboard.py` | Дашборд «Диски по времени»: распределение HDD по `PowerOnDuration`, ECharts, drill-down |
 | `disk_wear_export.py` | HTML-экспорт отчёта «Диски по времени» (inline SVG + таблицы объектов) |
-| `site_inventory.py` | Отчёт «Устройства на объекте»: реальные NVR/камеры из опроса, сопоставление с CMDB, аналоговые камеры, вспомогательное оборудование |
+| `site_inventory.py` | Отчёт «Устройства на объекте»: реальные NVR/камеры из опроса, сопоставление с CMDB, аналоговые камеры, вспомогательное оборудование, статусы ping зомби |
 | `site_inventory_export.py` | HTML-экспорт отчёта «Устройства на объекте» для выдачи инженеру |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
