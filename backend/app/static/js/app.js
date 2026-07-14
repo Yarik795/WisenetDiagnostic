@@ -1339,6 +1339,65 @@ function updateRvrRepeatLinks() {
       ? `/rvr-repeat/export.xlsx?${qs}`
       : "/rvr-repeat/export.xlsx";
   }
+  const exportHtmlLink = document.getElementById("rvr-export-html-link");
+  if (exportHtmlLink) {
+    exportHtmlLink.href = qs
+      ? `/rvr-repeat/export.html?${qs}`
+      : "/rvr-repeat/export.html";
+  }
+}
+
+async function sendRvrRepeatEmail(endpoint, errorMessage) {
+  const params = collectRvrRepeatParams();
+  const qs = params.toString();
+  const url = qs ? `${endpoint}?${qs}` : endpoint;
+  const res = await fetch(url, { method: "POST" });
+  const data = await res.json();
+  showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+}
+
+function initRvrRepeatToolbarDelegation() {
+  if (document.body.dataset.rvrToolbarDelegated === "1") return;
+  document.body.dataset.rvrToolbarDelegated = "1";
+
+  document.body.addEventListener("click", async (e) => {
+    const htmlBtn = e.target.closest("[data-rvr-email-html]");
+    if (htmlBtn) {
+      if (htmlBtn.disabled) return;
+      e.preventDefault();
+      const defaultLabel = htmlBtn.textContent || "Отправить HTML на почту";
+      htmlBtn.disabled = true;
+      htmlBtn.textContent = "Отправка…";
+      try {
+        await sendRvrRepeatEmail("/rvr-repeat/report/email.html", "HTML");
+      } catch (err) {
+        showToast("error", "Не удалось отправить HTML-отчёт на почту");
+        console.error("[wisenet] rvr-repeat email html error", err);
+      } finally {
+        htmlBtn.disabled = false;
+        htmlBtn.textContent = defaultLabel;
+      }
+      return;
+    }
+
+    const xlsxBtn = e.target.closest("[data-rvr-email-xlsx]");
+    if (xlsxBtn) {
+      if (xlsxBtn.disabled) return;
+      e.preventDefault();
+      const defaultLabel = xlsxBtn.textContent || "Отправить XLSX на почту";
+      xlsxBtn.disabled = true;
+      xlsxBtn.textContent = "Отправка…";
+      try {
+        await sendRvrRepeatEmail("/rvr-repeat/report/email", "XLSX");
+      } catch (err) {
+        showToast("error", "Не удалось отправить XLSX-отчёт на почту");
+        console.error("[wisenet] rvr-repeat email xlsx error", err);
+      } finally {
+        xlsxBtn.disabled = false;
+        xlsxBtn.textContent = defaultLabel;
+      }
+    }
+  });
 }
 
 function closeAllRvrRepeatDetails(scope) {
@@ -1421,6 +1480,7 @@ function initRvrRepeatActions(root) {
   const scope = root || document;
   updateRvrRepeatLinks();
   initRvrRepeatMatrix();
+  initRvrRepeatToolbarDelegation();
 
   const form = document.getElementById("rvr-repeat-filters");
   if (form && form.dataset.rvrFiltersBound !== "1") {
@@ -1450,71 +1510,6 @@ function initRvrRepeatActions(root) {
     });
   });
 
-  scope.querySelectorAll("[data-rvr-export-html]").forEach((btn) => {
-    if (btn.dataset.rvrExportHtmlBound === "1") return;
-    btn.dataset.rvrExportHtmlBound = "1";
-    btn.addEventListener("click", () => {
-      const params = collectRvrRepeatParams();
-      const qs = params.toString();
-      window.location.href = qs
-        ? `/rvr-repeat/export.html?${qs}`
-        : "/rvr-repeat/export.html";
-    });
-  });
-
-  scope.querySelectorAll("[data-rvr-email-html]").forEach((btn) => {
-    if (btn.dataset.rvrEmailHtmlBound === "1") return;
-    btn.dataset.rvrEmailHtmlBound = "1";
-    const defaultLabel = btn.textContent || "Отправить HTML на почту";
-    btn.addEventListener("click", async () => {
-      if (btn.disabled) return;
-      btn.disabled = true;
-      btn.textContent = "Отправка…";
-      try {
-        const params = collectRvrRepeatParams();
-        const qs = params.toString();
-        const url = qs
-          ? `/rvr-repeat/report/email.html?${qs}`
-          : "/rvr-repeat/report/email.html";
-        const res = await fetch(url, { method: "POST" });
-        const data = await res.json();
-        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
-      } catch (err) {
-        showToast("error", "Не удалось отправить HTML-отчёт на почту");
-        console.error("[wisenet] rvr-repeat email html error", err);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = defaultLabel;
-      }
-    });
-  });
-
-  scope.querySelectorAll("[data-rvr-email-xlsx]").forEach((btn) => {
-    if (btn.dataset.rvrEmailXlsxBound === "1") return;
-    btn.dataset.rvrEmailXlsxBound = "1";
-    const defaultLabel = btn.textContent || "Отправить XLSX на почту";
-    btn.addEventListener("click", async () => {
-      if (btn.disabled) return;
-      btn.disabled = true;
-      btn.textContent = "Отправка…";
-      try {
-        const params = collectRvrRepeatParams();
-        const qs = params.toString();
-        const url = qs
-          ? `/rvr-repeat/report/email?${qs}`
-          : "/rvr-repeat/report/email";
-        const res = await fetch(url, { method: "POST" });
-        const data = await res.json();
-        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
-      } catch (err) {
-        showToast("error", "Не удалось отправить XLSX-отчёт на почту");
-        console.error("[wisenet] rvr-repeat email xlsx error", err);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = defaultLabel;
-      }
-    });
-  });
 }
 
 function initPaymentsPage(root) {

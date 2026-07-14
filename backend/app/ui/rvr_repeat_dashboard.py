@@ -366,6 +366,7 @@ def rvr_repeat_page_context(
         "rvr_latest_naumen_import": latest_naumen,
         "rvr_query_string": query_string,
         "rvr_export_url": f"/rvr-repeat/export.xlsx?{query_string}",
+        "rvr_export_html_url": f"/rvr-repeat/export.html?{query_string}",
         "rvr_llm_enabled": llm_cfg.enabled and bool(llm_cfg.api_key),
     }
 
