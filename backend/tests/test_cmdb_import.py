@@ -220,3 +220,73 @@ def test_import_cmdb_full_replace(state: StateStore, tmp_path: Path) -> None:
         ).fetchone()
     assert row["host"] == "10.2.2.2"
     assert row["functional_type"] == FUNCTIONAL_TYPE_AUX
+
+
+def test_import_cmdb_dedupes_duplicate_pk(state: StateStore, tmp_path: Path) -> None:
+    grid = _grid_with_data(
+        [
+            "1",
+            "Оборудование ТСО",
+            "10.1.1.1",
+            "",
+            "",
+            "Старый адрес",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Hanwha",
+            "HRX-1620",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            FUNCTIONAL_TYPE_VIDEO,
+        ],
+        [
+            "2",
+            "Оборудование ТСО",
+            "10.1.1.1",
+            "",
+            "",
+            "Новый адрес",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Hanwha",
+            "HRX-1620",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            FUNCTIONAL_TYPE_VIDEO,
+        ],
+    )
+    path = tmp_path / "cmdb_dup.xlsx"
+    _write_cmdb_xlsx(path, grid)
+
+    count = import_cmdb_xlsx(path, state)
+    assert count == 1
+    assert state.count_cmdb_records() == 1
+
+    with state._connect() as conn:
+        row = conn.execute(
+            "SELECT object_name, model_name FROM cmdb_records WHERE host = ?",
+            ("10.1.1.1",),
+        ).fetchone()
+    assert row["object_name"] == "Новый адрес"

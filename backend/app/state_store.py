@@ -283,7 +283,7 @@ class CmdbReplaceSession:
         imported_at = self._imported_at
         conn.executemany(
             """
-            INSERT INTO cmdb_records (
+            INSERT OR REPLACE INTO cmdb_records (
                 host, functional_type, manufacturer, object_name, model_name,
                 mac, device_kind, source_row, imported_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

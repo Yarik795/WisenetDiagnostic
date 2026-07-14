@@ -124,6 +124,22 @@ def _count_key_for_row(func_type: str, device_kind: Optional[CmdbDeviceKind]) ->
     return "other"
 
 
+def dedupe_cmdb_rows(rows: list[CmdbDeviceRow]) -> list[CmdbDeviceRow]:
+    """Оставляет одну строку на PK (host, functional_type, manufacturer); последняя в файле выигрывает."""
+    by_key: dict[tuple[str, str, str], CmdbDeviceRow] = {}
+    for row in rows:
+        by_key[(row.host, row.functional_type, row.manufacturer)] = row
+    return sorted(by_key.values(), key=lambda item: item.source_row)
+
+
+def _counts_by_kind(rows: list[CmdbDeviceRow]) -> dict[str, int]:
+    counts: dict[str, int] = {"tsv": 0, "skud": 0, "bio": 0}
+    for row in rows:
+        key = _count_key_for_row(row.functional_type, row.device_kind)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 @dataclass(frozen=True)
 class CmdbDeviceRow:
     host: str
@@ -209,6 +225,9 @@ def parse_cmdb_grid(rows: list[list[Any]]) -> CmdbParseResult:
             )
         )
         counts_by_kind[count_key] = counts_by_kind.get(count_key, 0) + 1
+
+    result_rows = dedupe_cmdb_rows(result_rows)
+    counts_by_kind = _counts_by_kind(result_rows)
 
     return CmdbParseResult(
         rows=result_rows,
