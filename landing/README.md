@@ -12,6 +12,22 @@ python -m http.server 8080
 # → http://localhost:8080
 ```
 
+## Деплой на GitHub Pages
+
+Репозиторий настроен на автоматический деплой папки `landing/` через GitHub Actions (`.github/workflows/deploy-landing.yml`).
+
+### Первичная настройка (один раз)
+
+1. На GitHub откройте **Settings → Pages**.
+2. В **Build and deployment → Source** выберите **GitHub Actions** (не «Deploy from a branch»).
+3. Смержите workflow в `main` или запустите вручную: **Actions → Deploy landing to GitHub Pages → Run workflow**.
+
+После успешного деплоя сайт будет доступен по адресу:
+
+`https://yarik795.github.io/WisenetDiagnostic/`
+
+Обновление: любой push в `main`, затрагивающий файлы в `landing/`, пересобирает сайт автоматически.
+
 ## Деплой на Netlify
 
 1. Загрузите содержимое папки `landing/` как сайт (drag-and-drop или Git).
