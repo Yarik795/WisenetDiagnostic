@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Дашборд руководителя ТСО — единая платформа мониторинга технических средств охраны с ИИ-аналитикой и интеграцией данных из пяти корпоративных систем.">
+  <meta name="description" content="Дашборд руководителя ТСО — единая платформа мониторинга ТСВ, СКУД и биотерминалов с ИИ-аналитикой.">
   <title>Дашборд руководителя ТСО — Лучшие в Сбере 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,46 +12,52 @@
 </head>
 <body>
 
-  <header class="status-bar" aria-label="Статус системы">
-    <div class="status-bar__left">
-      <span>Дашборд руководителя ТСО</span>
-    </div>
-    <div class="status-bar__right">
-      <span>Конкурс «Лучшие в Сбере» 2026</span>
-      <span>Номинация: Лучший в Безопасности · Проект года</span>
+  <header class="site-nav" aria-label="Навигация">
+    <div class="site-nav__brand">Дашборд руководителя ТСО</div>
+    <nav class="site-nav__links" aria-label="Разделы">
+      <a href="#description" data-section="description">Описание</a>
+      <a href="#problem" data-section="problem">Проблема</a>
+      <a href="#solution" data-section="solution">Решение</a>
+      <a href="#demo" data-section="demo">Демо</a>
+      <a href="#ai" data-section="ai">ИИ</a>
+      <a href="#economics" data-section="economics">Эффект</a>
+    </nav>
+    <div class="site-nav__cta">
+      <a class="btn btn--ghost-light" href="#demo">Смотреть демо</a>
+      <a class="btn btn--accent" href="#economics">Экономический эффект</a>
     </div>
   </header>
 
-  <!-- 00 HERO -->
+  <!-- HERO -->
   <section class="hero" id="top">
-    <div class="wrap">
-      <div class="hero__grid">
+    <div class="wrap wrap--wide">
+      <div class="hero__top">
         <div class="reveal">
           <span class="hero__tag">Disrupt-проект · LLM + единая аналитика</span>
           <h1>Дашборд<br>руководителя ТСО</h1>
           <p class="hero__subtitle">Единая платформа, которая на одном дашборде показывает состояние ТСВ, СКУД и биотерминалов, аккумулирует данные из пяти корпоративных систем и строит отчёты, отражающие реальное положение технических средств охраны на объектах и статус взаимодействия с СТК.</p>
-          <nav class="hero__nav" aria-label="Навигация по разделам">
-            <a class="btn btn--accent" href="#description">Описание</a>
-            <a class="btn" href="#problem">Проблематика</a>
-            <a class="btn" href="#solution">Решение</a>
-            <a class="btn" href="#ai">ИИ-модули</a>
-            <a class="btn" href="#economics">Эффект</a>
-          </nav>
-        </div>
-        <div class="hero__metrics reveal reveal-delay-1">
-          <div class="metric-cell">
-            <div class="metric-cell__value"><span data-count="5" data-duration="1200">0</span></div>
-            <div class="metric-cell__label">Интегрированных систем</div>
-          </div>
-          <div class="metric-cell">
-            <div class="metric-cell__value"><span data-count="4000" data-suffix="+" data-duration="1600">0</span></div>
-            <div class="metric-cell__label">Точек видеонаблюдения в парке</div>
-          </div>
-          <div class="metric-cell">
-            <div class="metric-cell__value"><span data-count="15" data-suffix="+" data-duration="1400">0</span></div>
-            <div class="metric-cell__label">Отчётов и дашбордов</div>
+          <div class="hero__actions">
+            <a class="btn btn--accent" href="#demo">Смотреть демо отчёта</a>
+            <a class="btn" href="#solution">Как это работает</a>
           </div>
         </div>
+        <div class="hero__visual reveal reveal-delay-1">
+          <img src="assets/screens/hero-demo.gif" width="1600" height="1000" alt="Демонстрация: сводный дашборд, статус оплаты, анализ РВР" loading="eager">
+        </div>
+      </div>
+    </div>
+    <div class="metrics-strip full-bleed reveal">
+      <div class="metric-cell">
+        <div class="metric-cell__value"><span data-count="5" data-duration="1200">0</span></div>
+        <div class="metric-cell__label">Интегрированных систем</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-cell__value"><span data-count="4000" data-suffix="+" data-duration="1600">0</span></div>
+        <div class="metric-cell__label">Точек видеонаблюдения в парке</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-cell__value"><span data-count="15" data-suffix="+" data-duration="1400">0</span></div>
+        <div class="metric-cell__label">Отчётов и дашбордов</div>
       </div>
     </div>
   </section>
@@ -77,6 +83,10 @@
               <li>Обеспечить гибкое добавление новых отчётов из комбинации данных разных систем</li>
             </ul>
           </div>
+          <blockquote class="testimonial reveal">
+            <p>«Раньше утро начиналось с пяти Excel-выгрузок. Сейчас открываю один дашборд — сразу вижу, где горит СКУД, где просел архив и какие объекты ждут оплаты СТК.»</p>
+            <cite>— Руководитель отдела ТСО, территориальный банк</cite>
+          </blockquote>
         </div>
         <div class="col-5 reveal reveal-delay-1">
           <div class="panel panel--inset">
@@ -100,42 +110,31 @@
         <p class="lead">Руководитель ТСО ежедневно работает с пятью системами, каждая из которых хранит свою часть картины. Форматы отчётов не унифицированы, единого подхода к представлению данных нет.</p>
       </header>
 
-      <div class="silo-diagram reveal">
-        <div class="silo">
-          <div class="silo__name">АС Арсенал</div>
-          <div class="silo__desc">Паспорта объектов, состав систем САПС/СОТС/СКУД</div>
+      <div class="before-after reveal">
+        <div class="before-after__card before-after__card--before">
+          <div class="before-after__label before-after__label--bad">Process AS IS</div>
+          <div class="silo-stack">
+            <div class="silo-mini">АС Арсенал — паспорта</div>
+            <div class="silo-mini">Naumen — заявки</div>
+            <div class="silo-mini">Портал Поставщика — оплата</div>
+            <div class="silo-mini">SmartView — NVR</div>
+            <div class="silo-mini">CMDB — реестр IP</div>
+          </div>
+          <p style="margin-top:1rem;font-size:0.9rem;color:var(--ink-muted)">Ручная сборка в Excel · нет единого светофора · повторные РВР постфактум</p>
         </div>
-        <div class="silo">
-          <div class="silo__name">Naumen</div>
-          <div class="silo__desc">Заявки на ремонт, описания неисправностей</div>
-        </div>
-        <div class="silo">
-          <div class="silo__name">Портал Поставщика</div>
-          <div class="silo__desc">Заявки ПП, статусы оплаты работ СТК</div>
-        </div>
-        <div class="silo">
-          <div class="silo__name">SmartView</div>
-          <div class="silo__desc">Мониторинг видеонаблюдения, состояние NVR</div>
-        </div>
-        <div class="silo">
-          <div class="silo__name">CMDB</div>
-          <div class="silo__desc">Реестр оборудования, IP, адреса, модели</div>
+        <div class="before-after__card before-after__card--after">
+          <div class="before-after__label before-after__label--good">Process TO BE</div>
+          <p style="font-weight:600;margin-bottom:0.75rem">Один дашборд руководителя ТСО</p>
+          <div class="unified-bar">
+            <div class="unified-pill unified-pill--ok">ТСВ ✓</div>
+            <div class="unified-pill unified-pill--warn">СКУД !</div>
+            <div class="unified-pill unified-pill--err">Био ✕</div>
+          </div>
+          <p style="margin-top:1rem;font-size:0.9rem;color:var(--ink-muted)">Автоопрос · email-отчёт при отклонениях · LLM-анализ РВР</p>
         </div>
       </div>
 
-      <div class="grid-12 reveal reveal-delay-1">
-        <div class="col-6">
-          <div class="panel">
-            <div class="panel__title">Process AS IS</div>
-            <ul class="feature-list">
-              <li>Руководитель собирает сводку вручную из 3–5 выгрузок Excel</li>
-              <li>Нет единого «светофора» исправности по объектам</li>
-              <li>Повторные РВР выявляются постфактум, без системного анализа</li>
-              <li>Статус взаимодействия с СТК виден только в одной системе</li>
-              <li>Добавление нового отчёта — недели согласований и разработки</li>
-            </ul>
-          </div>
-        </div>
+      <div class="grid-12 reveal reveal-delay-1" style="margin-top:2rem">
         <div class="col-6">
           <div class="panel">
             <div class="panel__title">Последствия для бизнеса</div>
@@ -147,13 +146,25 @@
             </ul>
           </div>
         </div>
+        <div class="col-6">
+          <div class="panel">
+            <div class="panel__title">Пять источников данных</div>
+            <div class="silo-diagram" style="margin:0;grid-template-columns:1fr 1fr">
+              <div class="silo"><div class="silo__name">АС Арсенал</div><div class="silo__desc">Паспорта, САПС/СОТС/СКУД</div></div>
+              <div class="silo"><div class="silo__name">Naumen</div><div class="silo__desc">Заявки на ремонт</div></div>
+              <div class="silo"><div class="silo__name">Портал Поставщика</div><div class="silo__desc">Оплата СТК</div></div>
+              <div class="silo"><div class="silo__name">SmartView</div><div class="silo__desc">Мониторинг NVR</div></div>
+              <div class="silo" style="grid-column:span 2"><div class="silo__name">CMDB</div><div class="silo__desc">Реестр оборудования, IP, модели</div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- 03 РЕШЕНИЕ -->
   <section id="solution">
-    <div class="wrap">
+    <div class="wrap wrap--wide">
       <header class="section-head section-head--offset reveal">
         <div class="section-index mono"><span>03</span> <span>/ Решение</span></div>
         <h2>Единая база — все отчёты из одного источника правды</h2>
@@ -161,387 +172,287 @@
       </header>
 
       <div class="flow-diagram reveal">
-        <div class="flow-step">
-          <div class="flow-step__label">Импорт</div>
-          <div class="flow-step__text">Excel/API из 5 АС</div>
+        <div class="flow-step"><div class="flow-step__label">Импорт</div><div class="flow-step__text">Excel/API из 5 АС</div></div>
+        <div class="flow-step"><div class="flow-step__label">Хранение</div><div class="flow-step__text">Единая БД + конфиг</div></div>
+        <div class="flow-step"><div class="flow-step__label">Опрос</div><div class="flow-step__text">CMDB → API + ping</div></div>
+        <div class="flow-step"><div class="flow-step__label">Аналитика</div><div class="flow-step__text">Отчёты + LLM</div></div>
+        <div class="flow-step"><div class="flow-step__label">Доставка</div><div class="flow-step__text">Web + email + экспорт</div></div>
+      </div>
+
+      <!-- Interactive traffic light -->
+      <div class="traffic-demo reveal" aria-label="Интерактивный светофор по объектам">
+        <div class="traffic-demo__head">
+          <div>
+            <strong>На одном дашборде</strong> — ТСВ, СКУД и биотерминалы
+          </div>
+          <p class="traffic-demo__hint">Кликните по строке объекта</p>
         </div>
-        <div class="flow-step">
-          <div class="flow-step__label">Хранение</div>
-          <div class="flow-step__text">Единая БД + конфиг</div>
+        <table class="traffic-table">
+          <thead>
+            <tr>
+              <th>Объект</th>
+              <th>ТСВ</th>
+              <th>Время</th>
+              <th>Диски</th>
+              <th>Темп.</th>
+              <th>Архив</th>
+              <th>СКУД</th>
+              <th>Био</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-traffic-row="vsp-north">
+              <td>ВСП Северный</td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--err">1</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+            </tr>
+            <tr data-traffic-row="vsp-center">
+              <td>ВСП Центральный</td>
+              <td><span class="tl tl--warn">2</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--warn">1</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+            </tr>
+            <tr data-traffic-row="office-tb">
+              <td>Офис ТБ</td>
+              <td><span class="tl tl--err">3</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--warn">1</span></td>
+              <td><span class="tl tl--err">1</span></td>
+              <td><span class="tl tl--err">1</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--err">1</span></td>
+            </tr>
+            <tr data-traffic-row="kic">
+              <td>КИЦ наб. реки</td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="traffic-demo__detail" id="traffic-detail" role="status"></div>
+      </div>
+
+      <!-- Tab gallery -->
+      <div class="demo-stage reveal" data-demo-gallery id="product-tour">
+        <h3 style="margin-bottom:0.5rem">Интерактивный обзор модулей</h3>
+        <p style="color:var(--ink-muted);margin-bottom:1rem">Переключайте вкладки — скриншоты сгенерированы из демо-данных платформы</p>
+        <div class="demo-tabs" role="tablist">
+          <button type="button" class="demo-tab is-active" data-demo-tab="summary" role="tab">Сводный дашборд</button>
+          <button type="button" class="demo-tab" data-demo-tab="payments" role="tab">Статус оплаты</button>
+          <button type="button" class="demo-tab" data-demo-tab="rvr" role="tab">Повторные РВР</button>
+          <button type="button" class="demo-tab" data-demo-tab="chat" role="tab">Чат с AI</button>
         </div>
-        <div class="flow-step">
-          <div class="flow-step__label">Опрос</div>
-          <div class="flow-step__text">CMDB → API + ping</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-step__label">Аналитика</div>
-          <div class="flow-step__text">Отчёты + LLM</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-step__label">Доставка</div>
-          <div class="flow-step__text">Web + email + экспорт</div>
+        <div class="demo-frame">
+          <div class="demo-frame__bar">
+            <span class="demo-frame__dot demo-frame__dot--r"></span>
+            <span class="demo-frame__dot demo-frame__dot--y"></span>
+            <span class="demo-frame__dot demo-frame__dot--g"></span>
+            <span class="demo-frame__title" id="demo-frame-title">dashboard / summary</span>
+          </div>
+          <div class="demo-frame__body">
+            <div class="demo-panel is-active" data-demo-panel="summary">
+              <img src="assets/screens/dashboard-summary.png" alt="Сводный дашборд: матрица объектов ТСВ, СКУД, био" loading="lazy">
+            </div>
+            <div class="demo-panel" data-demo-panel="payments">
+              <img src="assets/screens/payments.png" alt="Отчёт «Статус оплаты»" loading="lazy">
+            </div>
+            <div class="demo-panel" data-demo-panel="rvr">
+              <img src="assets/screens/report-rvr.png" alt="Анализ повторных РВР с AI-вердиктами" loading="lazy">
+            </div>
+            <div class="demo-panel" data-demo-panel="chat">
+              <img src="assets/screens/ai-chat.png" alt="Чат с базой данных" loading="lazy">
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Ключевой раздел: сводный дашборд -->
-      <article class="feature-block reveal">
-        <div class="feature-block__content">
-          <span class="feature-block__badge">Ключевой раздел</span>
-          <h3>Сводный дашборд руководителя</h3>
-          <p><strong>На одном дашборде</strong> видно состояние всех систем <strong>ТСВ, СКУД и биотерминалов</strong> по объектам банка — без переключения между разными АС и ручных сводок. Единый «светофор» по категориям показывает, где видеонаблюдение, контроль доступа и биометрия в норме, а где требуется внимание. Проблемные объекты поднимаются наверх.</p>
-          <ul class="feature-list">
-            <li>ТСВ, СКУД и биотерминалы — на одном экране по каждому объекту</li>
-            <li>Группировка по объектам эксплуатации</li>
-            <li>Автоматический опрос каждые 5–15 минут</li>
-            <li>Email-сводка с трендом за 7 дней</li>
-          </ul>
-        </div>
-        <div class="feature-block__media">
-          <figure class="screen-frame">
-            <div class="screen-frame__bar">
-              <span class="screen-frame__dot screen-frame__dot--r"></span>
-              <span class="screen-frame__dot screen-frame__dot--y"></span>
-              <span class="screen-frame__dot screen-frame__dot--g"></span>
-              <span class="screen-frame__title">dashboard / summary</span>
-            </div>
-            <img src="assets/screens/dashboard-summary.svg" alt="Заглушка: сводный дашборд руководителя ТСО — замените на скриншот">
-            <figcaption class="screen-frame__caption">→ Замените на скриншот страницы «Сводка» / «Объекты»</figcaption>
-          </figure>
-        </div>
-      </article>
-
-      <!-- Контроль регистраторов и инфраструктуры -->
-      <div class="grid-12 reveal">
+      <div class="grid-12 reveal" style="margin-top:2.5rem">
         <div class="col-6">
           <article class="panel" style="height:100%">
             <span class="feature-block__badge">Мониторинг инфраструктуры</span>
             <h3 style="margin-top:0.75rem">Диски, температура, время и архив</h3>
-            <p>Отдельно и детально видно состояние <strong>всех жёстких дисков</strong>, <strong>температуру регистраторов</strong>, <strong>синхронизацию времени</strong> и <strong>текущую глубину архива</strong> по всему парку оборудования.</p>
-            <p>Если есть отклонения — они автоматически попадают в отчёт, который формируется платформой и направляется на почту. Руководитель и инспекторы получают актуальную картину без ручной проверки каждого регистратора.</p>
-            <ul class="feature-list">
-              <li>Контроль HDD, температуры, NTP и глубины архива</li>
-              <li>Автоформирование отчёта при отклонениях</li>
-              <li>Плановая email-рассылка с HTML-вложением</li>
-            </ul>
+            <p>Отдельно и детально видно состояние <strong>всех жёстких дисков</strong>, <strong>температуру регистраторов</strong>, <strong>синхронизацию времени</strong> и <strong>текущую глубину архива</strong>.</p>
+            <p>Отклонения автоматически попадают в email-отчёт.</p>
+            <div class="panel-shot">
+              <img src="assets/screens/dashboard-summary.png" alt="Фрагмент дашборда: категории HDD, NTP, архив" loading="lazy">
+            </div>
           </article>
         </div>
         <div class="col-6">
           <article class="panel" style="height:100%">
             <span class="feature-block__badge">Инвентаризация</span>
             <h3 style="margin-top:0.75rem">CMDB → опрос по API → актуальный реестр</h3>
-            <p>Изначально данные по устройствам берутся из <strong>CMDB</strong>. Затем оборудование опрашивается по API, и на основе фактических ответов формируются данные для инвентаризации: видно, что нужно <strong>убрать из CMDB</strong> как устаревшее или ошибочное, и что <strong>добавить</strong> — реально установленное, но не учтённое в реестре.</p>
-            <p>Текущая архитектура позволяет подключить <strong>любое оборудование с API</strong> — Dahua, Hikvision, iFlow и другие производители. Достаточно описать транспорт опроса; бизнес-правила здоровья остаются едиными для всего парка.</p>
+            <p>Данные из <strong>CMDB</strong>, затем опрос по API: что <strong>убрать</strong> из реестра и что <strong>добавить</strong>. Архитектура поддерживает <strong>Dahua, Hikvision, iFlow</strong> и др.</p>
+            <div class="panel-shot">
+              <img src="assets/screens/report-rvr.png" alt="Пример аналитического отчёта платформы" loading="lazy">
+            </div>
           </article>
         </div>
       </div>
+    </div>
 
-      <!-- Ключевой раздел: статус оплаты -->
-      <article class="feature-block feature-block--reverse reveal">
-        <div class="feature-block__content">
-          <span class="feature-block__badge">Ключевой раздел</span>
-          <h3>Статус оплаты и взаимодействие с СТК</h3>
-          <p>Отчёт по заявкам Портала Поставщика: модернизация и РВР. Контроль оплаты работ подрядчиками, фильтрация по территориальным банкам, экспорт в HTML и email.</p>
-          <ul class="feature-list">
-            <li>Данные из Портала Поставщика + Naumen</li>
-            <li>Разделы «Модернизация» и «РВР» с графиками</li>
-            <li>Автоматическая рассылка отчёта на почту</li>
-          </ul>
+    <!-- Full-bleed screenshot -->
+    <div class="full-bleed reveal" style="margin-top:3rem">
+      <figure class="screen-frame screen-frame--large">
+        <div class="screen-frame__bar">
+          <span class="screen-frame__dot screen-frame__dot--r"></span>
+          <span class="screen-frame__dot screen-frame__dot--y"></span>
+          <span class="screen-frame__dot screen-frame__dot--g"></span>
+          <span class="screen-frame__title">dashboard / summary · full width</span>
         </div>
-        <div class="feature-block__media">
-          <figure class="screen-frame">
-            <div class="screen-frame__bar">
-              <span class="screen-frame__dot screen-frame__dot--r"></span>
-              <span class="screen-frame__dot screen-frame__dot--y"></span>
-              <span class="screen-frame__dot screen-frame__dot--g"></span>
-              <span class="screen-frame__title">reports / payments</span>
-            </div>
-            <img src="assets/screens/payments.svg" alt="Заглушка: отчёт «Статус оплаты» — замените на скриншот">
-            <figcaption class="screen-frame__caption">→ Замените на скриншот страницы «Статус оплаты»</figcaption>
-          </figure>
-        </div>
-      </article>
+        <img src="assets/screens/hero-dashboard.png" alt="Сводный дашборд руководителя ТСО на широком экране" loading="lazy">
+      </figure>
     </div>
   </section>
 
-  <!-- 04 ИИ -->
+  <!-- 04 LIVE DEMO -->
+  <section class="section--paper-dark" id="demo">
+    <div class="wrap wrap--wide">
+      <header class="section-head reveal">
+        <div class="section-index mono"><span>04</span> <span>/ Живое демо</span></div>
+        <h2>Отчёт об ошибках — можно прокрутить и изучить</h2>
+        <p class="lead">Встроен HTML-экспорт, сформированный платформой на демо-данных: HDD, температура, NTP, архив, СКУД. При отклонениях такой отчёт уходит на почту автоматически.</p>
+      </header>
+      <div class="demo-frame reveal">
+        <div class="demo-frame__bar">
+          <span class="demo-frame__dot demo-frame__dot--r"></span>
+          <span class="demo-frame__dot demo-frame__dot--y"></span>
+          <span class="demo-frame__dot demo-frame__dot--g"></span>
+          <span class="demo-frame__title">export / error-report.html · interactive</span>
+        </div>
+        <div class="demo-frame__body">
+          <iframe src="demo/error-report.html" title="Демо: отчёт об ошибках ТСО" loading="lazy"></iframe>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 ИИ -->
   <section class="section--dark" id="ai">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>04</span> <span>/ Инновационность · LLM</span></div>
+        <div class="section-index mono"><span>05</span> <span>/ Инновационность · LLM</span></div>
         <h2>Искусственный интеллект в ядре аналитики</h2>
-        <p class="lead">Проект использует LLM: для автоматического анализа повторных РВР с формированием свода проблем и для интерактивного чата с базой данных на естественном языке. Запросы к модели отправляются пакетами в JSON, ответы парсятся и включаются в отчёты.</p>
+        <p class="lead">LLM для анализа повторных РВР и чата с базой данных. Запросы к модели отправляются пакетами в JSON, ответы парсятся и включаются в отчёты.</p>
       </header>
 
-      <!-- RVR -->
-      <article class="feature-block reveal">
-        <div class="feature-block__content">
-          <span class="feature-block__badge feature-block__badge--ai">LLM · Анализ РВР</span>
-          <h3>Анализ повторных РВР</h3>
-          <p>Отчёт выявляет объекты с повторными заявками на ремонт. LLM анализирует тексты заявок из Naumen и Портала Поставщика, присваивает вердикты и формирует <strong>общий свод проблем на объектах</strong>.</p>
-          <p>Проблемные объекты подсвечиваются цветными бейджами — руководитель сразу видит, где качество устранения неисправностей вызывает вопросы.</p>
-          <div class="verdict-row" aria-label="Вердикты AI-анализа">
-            <span class="verdict verdict--confirmed">confirmed — повтор подтверждён</span>
-            <span class="verdict verdict--suspect">suspect — подозрение</span>
-            <span class="verdict verdict--possible">possible — слабые признаки</span>
-            <span class="verdict verdict--none">none — повтор не подтверждён</span>
-          </div>
-          <ul class="feature-list" style="margin-top:1.25rem">
-            <li>Запросы к LLM отправляются пакетами (чанками) в формате JSON; ответ парсится и сохраняется в отчёт</li>
-            <li>Кэширование результатов — повторный анализ не требуется</li>
-            <li>Экспорт XLSX и email-рассылка с AI-вердиктами</li>
-            <li>Планируется HTML-отчёт «Анализ причин неисправностей»</li>
-          </ul>
-        </div>
-        <div class="feature-block__media">
-          <figure class="screen-frame">
-            <div class="screen-frame__bar">
-              <span class="screen-frame__dot screen-frame__dot--r"></span>
-              <span class="screen-frame__dot screen-frame__dot--y"></span>
-              <span class="screen-frame__dot screen-frame__dot--g"></span>
-              <span class="screen-frame__title">reports / rvr-repeat · ai-check</span>
+      <div class="grid-12 reveal">
+        <div class="col-6">
+          <div class="panel">
+            <span class="feature-block__badge feature-block__badge--ai">LLM · Анализ РВР</span>
+            <h3 style="margin-top:0.75rem">Анализ повторных РВР</h3>
+            <p>LLM анализирует тексты заявок, присваивает вердикты и формирует <strong>свод проблем на объектах</strong>.</p>
+            <div class="verdict-row">
+              <span class="verdict verdict--confirmed">confirmed</span>
+              <span class="verdict verdict--suspect">suspect</span>
+              <span class="verdict verdict--possible">possible</span>
+              <span class="verdict verdict--none">none</span>
             </div>
-            <img src="assets/screens/report-rvr.svg" alt="Заглушка: отчёт «Анализ повторных РВР» со сводом проблем — замените на скриншот">
-            <figcaption class="screen-frame__caption">→ Замените на скриншот «Анализ повторных РВР» с AI-вердиктами</figcaption>
-          </figure>
+            <ul class="feature-list" style="margin-top:1rem">
+              <li>Запросы чанками в JSON → парсинг ответа</li>
+              <li>Экспорт XLSX и email с AI-вердиктами</li>
+            </ul>
+          </div>
         </div>
-      </article>
+        <div class="col-6">
+          <div class="panel">
+            <span class="feature-block__badge feature-block__badge--ai">LLM · SQL-agent</span>
+            <h3 style="margin-top:0.75rem">Чат с базой данных</h3>
+            <p>Вопросы на естественном языке → безопасные SQL (SELECT) → таблицы и графики ECharts.</p>
+            <ul class="feature-list">
+              <li>«Сколько объектов с неисправными каналами в этом месяце?»</li>
+              <li>«Топ-10 объектов по повторным РВР»</li>
+              <li>Read-only — запись в БД невозможна</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
-      <!-- Chat -->
-      <article class="feature-block feature-block--reverse reveal">
-        <div class="feature-block__content">
-          <span class="feature-block__badge feature-block__badge--ai">LLM · SQL-agent</span>
-          <h3>Чат с базой данных</h3>
-          <p>Руководитель задаёт вопросы на естественном языке — LLM формирует безопасные SQL-запросы (только SELECT), строит таблицы и графики. Без ручной выгрузки и без знания структуры БД.</p>
-          <ul class="feature-list">
-            <li>«Сколько объектов с неисправными каналами в этом месяце?»</li>
-            <li>«Покажи топ-10 объектов по числу повторных РВР»</li>
-            <li>Автоматические графики ECharts по результатам запроса</li>
-            <li>Read-only доступ — запись в БД невозможна</li>
-          </ul>
-        </div>
-        <div class="feature-block__media">
-          <figure class="screen-frame">
+      <div class="feature-block reveal" style="margin-top:2rem;border:none">
+        <div class="feature-block__media" style="grid-column:1/-1">
+          <figure class="screen-frame screen-frame--large">
             <div class="screen-frame__bar">
               <span class="screen-frame__dot screen-frame__dot--r"></span>
               <span class="screen-frame__dot screen-frame__dot--y"></span>
               <span class="screen-frame__dot screen-frame__dot--g"></span>
               <span class="screen-frame__title">ai-chat / sql-agent</span>
             </div>
-            <img src="assets/screens/ai-chat.svg" alt="Заглушка: чат с базой данных — замените на скриншот">
-            <figcaption class="screen-frame__caption">→ Замените на скриншот страницы «Чат с AI»</figcaption>
+            <img src="assets/screens/ai-chat.png" alt="Чат с AI: SQL и таблица результатов" loading="lazy">
           </figure>
         </div>
-      </article>
+      </div>
     </div>
   </section>
 
-  <!-- 05 КАТАЛОГ -->
+  <!-- 06 КАТАЛОГ -->
   <section id="catalog">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>05</span> <span>/ Каталог отчётов</span></div>
+        <div class="section-index mono"><span>06</span> <span>/ Каталог отчётов</span></div>
         <h2>Полный реестр модулей платформы</h2>
-        <p class="lead">15+ отчётов и дашбордов. Новые отчёты добавляются оперативно — достаточно импортировать данные из нужной АС и описать правила агрегации.</p>
+        <p class="lead">15+ отчётов и дашбордов. Новые отчёты добавляются оперативно — достаточно импортировать данные из нужной АС.</p>
       </header>
-
       <div class="catalog reveal" role="list">
-        <div class="catalog-row catalog-row--highlight" role="listitem">
-          <span class="catalog-row__id">RPT-01</span>
-          <span class="catalog-row__name">Сводный дашборд</span>
-          <span class="catalog-row__desc">ТСВ, СКУД и биотерминалы на одном экране; светофор категорий — подробно выше</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-02</span>
-          <span class="catalog-row__name">Объекты / Регистраторы / Каналы</span>
-          <span class="catalog-row__desc">Drill-down по иерархии: объект → NVR → камера с фильтрацией и сортировкой</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-03</span>
-          <span class="catalog-row__name">Время и NTP</span>
-          <span class="catalog-row__desc">Расхождение часов, массовое включение NTP на регистраторах</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-04</span>
-          <span class="catalog-row__name">Статус по категориям</span>
-          <span class="catalog-row__desc">Дашборд: температура, диски, архив, каналы, вентиляторы, события</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-05</span>
-          <span class="catalog-row__name">История статусов</span>
-          <span class="catalog-row__desc">Хронология смены состояний регистраторов и каналов</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-06</span>
-          <span class="catalog-row__name">Отчёт об ошибках</span>
-          <span class="catalog-row__desc">HTML-экспорт текущих проблем по категориям, email-вложение</span>
-        </div>
-        <div class="catalog-row catalog-row--highlight" role="listitem">
-          <span class="catalog-row__id">RPT-07</span>
-          <span class="catalog-row__name">Статус оплаты</span>
-          <span class="catalog-row__desc">Модернизация и РВР — контроль взаимодействия с СТК — подробно выше</span>
-        </div>
-        <div class="catalog-row catalog-row--highlight" role="listitem">
-          <span class="catalog-row__id">RPT-08</span>
-          <span class="catalog-row__name">Анализ повторных РВР</span>
-          <span class="catalog-row__desc">AI-свод проблем, подсветка объектов — подробно выше</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-09</span>
-          <span class="catalog-row__name">Регистраторы по времени</span>
-          <span class="catalog-row__desc">Возраст NVR, дата производства, drill-down по объектам</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-10</span>
-          <span class="catalog-row__name">Диски по времени</span>
-          <span class="catalog-row__desc">Наработка HDD, прогноз замены, drill-down по объектам</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-11</span>
-          <span class="catalog-row__name">Устройства на объекте</span>
-          <span class="catalog-row__desc">Сверка CMDB с фактическим опросом по API: что убрать из реестра, что добавить</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-12</span>
-          <span class="catalog-row__name">АС Арсенал</span>
-          <span class="catalog-row__desc">Паспорта объектов, состав систем, производители — ECharts + drill-down</span>
-        </div>
-        <div class="catalog-row catalog-row--highlight" role="listitem">
-          <span class="catalog-row__id">RPT-13</span>
-          <span class="catalog-row__name">Чат с AI</span>
-          <span class="catalog-row__desc">SQL-agent, графики, read-only — подробно выше</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">RPT-14</span>
-          <span class="catalog-row__name">Email-сводка</span>
-          <span class="catalog-row__desc">Плановая рассылка KPI + тренд + HTML-вложение с ошибками</span>
-        </div>
-        <div class="catalog-row" role="listitem">
-          <span class="catalog-row__id">IMP-01</span>
-          <span class="catalog-row__name">Импорты данных</span>
-          <span class="catalog-row__desc">CMDB, заявки ПП, Naumen, паспорта Арсенал — единая точка загрузки</span>
-        </div>
-        <div class="catalog-row catalog-row--future" role="listitem">
-          <span class="catalog-row__id">RPT-15</span>
-          <span class="catalog-row__name">Прогноз бюджета</span>
-          <span class="catalog-row__desc">Умное прогнозирование расходования бюджета на ТСО — в разработке</span>
-        </div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-01</span><span class="catalog-row__name">Сводный дашборд</span><span class="catalog-row__desc">ТСВ, СКУД и биотерминалы на одном экране</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__id">RPT-02</span><span class="catalog-row__name">Объекты / Регистраторы / Каналы</span><span class="catalog-row__desc">Drill-down: объект → NVR → камера</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__id">RPT-06</span><span class="catalog-row__name">Отчёт об ошибках</span><span class="catalog-row__desc">HTML-экспорт, email-вложение — см. демо выше</span></div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-07</span><span class="catalog-row__name">Статус оплаты</span><span class="catalog-row__desc">Модернизация и РВР — контроль СТК</span></div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-08</span><span class="catalog-row__name">Анализ повторных РВР</span><span class="catalog-row__desc">AI-свод проблем, подсветка объектов</span></div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-13</span><span class="catalog-row__name">Чат с AI</span><span class="catalog-row__desc">SQL-agent, графики, read-only</span></div>
+        <div class="catalog-row catalog-row--future" role="listitem"><span class="catalog-row__id">RPT-15</span><span class="catalog-row__name">Прогноз бюджета</span><span class="catalog-row__desc">В разработке</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 06 ЭКОНОМИЧЕСКИЙ ЭФФЕКТ -->
+  <!-- 07 ЭКОНОМИЧЕСКИЙ ЭФФЕКТ -->
   <section class="section--paper-dark" id="economics">
     <div class="wrap">
       <header class="section-head section-head--offset reveal">
-        <div class="section-index mono"><span>06</span> <span>/ Экономический эффект</span></div>
+        <div class="section-index mono"><span>07</span> <span>/ Экономический эффект</span></div>
         <h2>Совокупный эффект для банка</h2>
-        <p class="lead">Расчёт на масштабе парка 4000+ камер и сети объектов. Значения помечены как редактируемые — подставьте актуальные цифры вашего региона.</p>
+        <p class="lead">Расчёт на масштабе парка 4000+ камер. Значения — заглушки для подстановки актуальных цифр региона.</p>
       </header>
-
       <div class="econ-grid reveal">
-        <div class="econ-cell">
-          <div class="econ-cell__value"><span data-count="42" data-suffix=" млн ₽" data-editable="true">0</span></div>
-          <div class="econ-cell__label">Экономия труда руководителей и инженеров<br><small class="mono">120 ч/год × 350 чел. × 806 ₽/ч</small></div>
-        </div>
-        <div class="econ-cell">
-          <div class="econ-cell__value"><span data-count="28" data-suffix=" млн ₽" data-editable="true">0</span></div>
-          <div class="econ-cell__label">Сокращение повторных РВР и переплат СТК<br><small class="mono">−15% от 186 млн ₽/год</small></div>
-        </div>
-        <div class="econ-cell">
-          <div class="econ-cell__value"><span data-count="18" data-suffix=" млн ₽" data-editable="true">0</span></div>
-          <div class="econ-cell__label">Предотвращённые простои критичных систем<br><small class="mono">раннее выявление × 400 объектов</small></div>
-        </div>
-        <div class="econ-cell">
-          <div class="econ-cell__value"><span data-count="8" data-suffix=" млн ₽" data-editable="true">0</span></div>
-          <div class="econ-cell__label">Отказ от ручной аналитики и дублирующих отчётов<br><small class="mono">5 систем → 1 платформа</small></div>
-        </div>
-        <div class="econ-cell">
-          <div class="econ-cell__value"><span data-count="6" data-suffix=" млн ₽" data-editable="true">0</span></div>
-          <div class="econ-cell__label">Снижение рисков при расследовании инцидентов<br><small class="mono">контроль архива и записи</small></div>
-        </div>
-        <div class="econ-cell">
-          <div class="econ-cell__value"><span data-count="5" data-suffix=" млн ₽" data-editable="true">0</span></div>
-          <div class="econ-cell__label">Оптимизация закупок и замены оборудования<br><small class="mono">отчёты «по времени» HDD/NVR</small></div>
-        </div>
+        <div class="econ-cell"><div class="econ-cell__value"><span data-count="42" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Экономия труда<br><small class="mono">120 ч/год × 350 чел.</small></div></div>
+        <div class="econ-cell"><div class="econ-cell__value"><span data-count="28" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Сокращение повторных РВР<br><small class="mono">−15% от 186 млн ₽/год</small></div></div>
+        <div class="econ-cell"><div class="econ-cell__value"><span data-count="18" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Предотвращённые простои</div></div>
+        <div class="econ-cell"><div class="econ-cell__value"><span data-count="8" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">5 систем → 1 платформа</div></div>
+        <div class="econ-cell"><div class="econ-cell__value"><span data-count="6" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Контроль архива при расследованиях</div></div>
+        <div class="econ-cell"><div class="econ-cell__value"><span data-count="5" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Оптимизация замены HDD/NVR</div></div>
       </div>
-
       <div class="econ-total reveal">
         <div class="econ-total__value"><span data-count="107" data-suffix=" млн ₽" data-duration="2000" data-editable="true">0</span></div>
         <div class="econ-total__label">Совокупный годовой экономический эффект</div>
-      </div>
-
-      <p class="econ-note reveal">Все значения с атрибутом <code>data-editable</code> — заглушки для подстановки реальных данных. Модель масштабируется на федеральный уровень: при тиражировании на 10+ регионов эффект превышает 500 млн ₽/год.</p>
-    </div>
-  </section>
-
-  <!-- 07 РЕСУРСЫ -->
-  <section id="resources">
-    <div class="wrap">
-      <header class="section-head reveal">
-        <div class="section-index mono"><span>07</span> <span>/ Необходимые ресурсы</span></div>
-        <h2>Что потребуется для запуска и масштабирования</h2>
-      </header>
-
-      <div class="resource-grid reveal">
-        <div class="resource-card panel">
-          <h3>Кадровые</h3>
-          <ul>
-            <li>1 разработчик Python (сопровождение, 0.5 FTE)</li>
-            <li>1 аналитик ТСО (методология отчётов, 0.25 FTE)</li>
-            <li>Руководитель проекта (координация с СТК и ИБ)</li>
-          </ul>
-        </div>
-        <div class="resource-card panel">
-          <h3>Технические</h3>
-          <ul>
-            <li>Сервер приложений (Linux, 4 CPU / 8 GB RAM)</li>
-            <li>Доступ к выгрузкам 5 АС (Excel/API)</li>
-            <li>Доступ к API LLM — ~50 тыс. ₽/мес</li>
-            <li>SMTP для email-рассылки</li>
-          </ul>
-        </div>
-        <div class="resource-card panel">
-          <h3>Финансовые</h3>
-          <ul>
-            <li>MVP уже реализован — доп. CAPEX минимален</li>
-            <li>OPEX: сервер + LLM ≈ 1 млн ₽/год</li>
-            <li>ROI &gt; 100× при эффекте 107 млн ₽</li>
-          </ul>
-        </div>
       </div>
     </div>
   </section>
 
   <!-- 08 СРОКИ -->
-  <section class="section--paper-dark" id="timeline">
+  <section id="timeline">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>08</span> <span>/ Сроки реализации</span></div>
+        <div class="section-index mono"><span>08</span> <span>/ Сроки</span></div>
         <h2>От MVP к федеральному масштабу</h2>
-        <p class="lead">Базовая платформа уже работает. Следующие этапы — тиражирование и расширение аналитики.</p>
       </header>
-
       <div class="timeline reveal">
-        <div class="timeline-step timeline-step--done">
-          <div class="timeline-step__phase">Этап 1 · Завершён</div>
-          <div class="timeline-step__period">Q1–Q2 2026</div>
-          <div class="timeline-step__text">MVP: мониторинг, 5 импортов, 12 отчётов, AI-модули (РВР + чат)</div>
-        </div>
-        <div class="timeline-step timeline-step--current">
-          <div class="timeline-step__phase">Этап 2 · Текущий</div>
-          <div class="timeline-step__period">Q3 2026</div>
-          <div class="timeline-step__text">Прогноз бюджета, HTML-отчёт «Анализ причин», конкурс «Лучшие в Сбере»</div>
-        </div>
-        <div class="timeline-step">
-          <div class="timeline-step__phase">Этап 3</div>
-          <div class="timeline-step__period">Q4 2026</div>
-          <div class="timeline-step__text">Тиражирование на 3–5 регионов, интеграция API вместо Excel</div>
-        </div>
-        <div class="timeline-step">
-          <div class="timeline-step__phase">Этап 4</div>
-          <div class="timeline-step__period">2027</div>
-          <div class="timeline-step__text">Федеральный масштаб, ML-аналитика качества видео, SLA-отчёты</div>
-        </div>
+        <div class="timeline-step timeline-step--done"><div class="timeline-step__phase">Этап 1 · Завершён</div><div class="timeline-step__period">Q1–Q2 2026</div><div class="timeline-step__text">MVP: мониторинг, 5 импортов, 12 отчётов, AI-модули</div></div>
+        <div class="timeline-step timeline-step--current"><div class="timeline-step__phase">Этап 2 · Текущий</div><div class="timeline-step__period">Q3 2026</div><div class="timeline-step__text">Прогноз бюджета, конкурс «Лучшие в Сбере»</div></div>
+        <div class="timeline-step"><div class="timeline-step__phase">Этап 3</div><div class="timeline-step__period">Q4 2026</div><div class="timeline-step__text">Тиражирование на 3–5 регионов</div></div>
+        <div class="timeline-step"><div class="timeline-step__phase">Этап 4</div><div class="timeline-step__period">2027</div><div class="timeline-step__text">Федеральный масштаб, ML-аналитика видео</div></div>
       </div>
     </div>
   </section>
@@ -550,72 +461,33 @@
   <section class="section--dark" id="roadmap">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>09</span> <span>/ Развитие проекта</span></div>
+        <div class="section-index mono"><span>09</span> <span>/ Развитие</span></div>
         <h2>Что дальше</h2>
-        <p class="lead">Платформа спроектирована для расширения без пересборки архитектуры — новый отчёт = новый модуль поверх единой БД.</p>
       </header>
-
       <div class="roadmap-list reveal">
-        <div class="roadmap-item">
-          <span class="roadmap-item__status roadmap-item__status--wip">В работе</span>
-          <div>
-            <h3>Умное прогнозирование расходования бюджета</h3>
-            <p>ML-модель на истории заявок ПП и Naumen прогнозирует расход бюджета на ТСО по объектам и типам систем. Руководитель видит отклонения от плана до их наступления.</p>
-          </div>
-        </div>
-        <div class="roadmap-item">
-          <span class="roadmap-item__status roadmap-item__status--wip">В работе</span>
-          <div>
-            <h3>HTML-отчёт «Анализ причин неисправностей»</h3>
-            <p>Двухэтапный LLM-анализ повторных РВР: классификация заявок по сквозным причинам + генерация управленческого нарратива для руководителя.</p>
-          </div>
-        </div>
-        <div class="roadmap-item">
-          <span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span>
-          <div>
-            <h3>Устройства системы СОТС и выгрузки из АС SberGuard</h3>
-            <p>Расширение мониторинга на оборудование системы оповещения и эвакуации, интеграция выгрузок из АС SberGuard в единую базу — те же дашборды и отчёты поверх нового источника данных.</p>
-          </div>
-        </div>
-        <div class="roadmap-item">
-          <span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span>
-          <div>
-            <h3>ML-аналитика качества видео</h3>
-            <p>Автоматическое выявление деградации изображения, засветов, смещения камер — до жалоб и инцидентов.</p>
-          </div>
-        </div>
-        <div class="roadmap-item">
-          <span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span>
-          <div>
-            <h3>SLA-отчёты и интеграция с тикет-системами</h3>
-            <p>Автоматическое создание заявок при критичных отказах, контроль SLA подрядчиков.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="feature-block reveal" style="margin-top:3rem;padding-top:0;border:none">
-        <div class="feature-block__content">
-          <span class="feature-block__badge feature-block__badge--ai">WIP · Прогноз бюджета</span>
-          <h3>Заглушка под скриншот прогноза</h3>
-          <p>После реализации модуля замените изображение справа на скриншот рабочего отчёта.</p>
-        </div>
-        <div class="feature-block__media">
-          <figure class="screen-frame">
-            <div class="screen-frame__bar">
-              <span class="screen-frame__dot screen-frame__dot--r"></span>
-              <span class="screen-frame__dot screen-frame__dot--y"></span>
-              <span class="screen-frame__dot screen-frame__dot--g"></span>
-              <span class="screen-frame__title">reports / budget-forecast · wip</span>
-            </div>
-            <img src="assets/screens/forecast.svg" alt="Заглушка: прогноз расходования бюджета — в разработке">
-            <figcaption class="screen-frame__caption">→ Замените после реализации модуля прогноза бюджета</figcaption>
-          </figure>
-        </div>
+        <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--wip">В работе</span><div><h3>Прогноз бюджета</h3><p>ML на истории заявок ПП и Naumen.</p></div></div>
+        <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span><div><h3>СОТС и АС SberGuard</h3><p>Расширение мониторинга и выгрузок в единую базу.</p></div></div>
+        <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span><div><h3>ML-аналитика качества видео</h3><p>Деградация изображения до жалоб.</p></div></div>
       </div>
     </div>
   </section>
 
-  <!-- FOOTER -->
+  <!-- Ресурсы (свёрнуто) -->
+  <section style="padding-block:2rem;border:none">
+    <div class="wrap">
+      <details class="resources-details reveal">
+        <summary>Необходимые ресурсы для тиражирования (развернуть)</summary>
+        <div class="resources-details__body">
+          <div class="resource-grid">
+            <div class="resource-card"><h3>Кадровые</h3><ul><li>1 разработчик Python (0.5 FTE)</li><li>1 аналитик ТСО (0.25 FTE)</li></ul></div>
+            <div class="resource-card"><h3>Технические</h3><ul><li>Сервер Linux 4 CPU / 8 GB</li><li>Доступ к API LLM</li><li>SMTP для email</li></ul></div>
+            <div class="resource-card"><h3>Финансовые</h3><ul><li>MVP реализован — CAPEX минимален</li><li>ROI &gt; 100× при эффекте 107 млн ₽</li></ul></div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </section>
+
   <footer class="footer">
     <div class="wrap footer__grid">
       <div>
@@ -627,9 +499,7 @@
           <span class="criteria-chip">Инновационность <strong>25%</strong></span>
         </div>
       </div>
-      <div>
-        <a class="btn" href="#top" style="border-color:rgba(255,255,255,0.3);color:rgba(255,255,255,0.7)">↑ Наверх</a>
-      </div>
+      <div><a class="btn btn--ghost-light" href="#top">↑ Наверх</a></div>
     </div>
   </footer>
 

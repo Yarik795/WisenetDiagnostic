@@ -30,6 +30,19 @@ python -m http.server 8080
 
 **Для агента:** после правок в `landing/` обязательно смержить в `main`, дождаться workflow и проверить живой URL — см. `.cursor/rules/deploy-landing.mdc`.
 
+## Генерация скриншотов и демо-HTML
+
+Скриншоты (`assets/screens/*.png`) и интерактивные демо (`demo/*.html`) генерируются из кода платформы:
+
+```bash
+cd backend
+pip install pydantic jinja2 playwright
+python -m playwright install chromium
+python ../scripts/generate_landing_assets.py
+```
+
+Скрипт строит демо-данные (CMDB → API → матрица объектов), рендерит HTML-отчёт об ошибках и снимает PNG/GIF через Playwright.
+
 ## Деплой на Netlify
 
 1. Загрузите содержимое папки `landing/` как сайт (drag-and-drop или Git).

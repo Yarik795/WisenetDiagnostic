@@ -1,0 +1,42 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+    <title>Повторные РВР</title><style>
+:root{--bg-base:#0b0e14;--bg-surface:#12161f;--bg-elevated:#1a2030;--border-subtle:#2a3348;--text-primary:#e8ecf4;--text-secondary:#8b95a8;--text-muted:#5c6678;--accent:#3b82f6;--status-ok:#22c55e;--status-warn:#eab308;--status-error:#ef4444;--status-unknown:#6b7280;--sidebar-width:220px}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--text-primary);background:var(--bg-base)}
+.app-shell{display:flex;min-height:100vh}.sidebar{width:var(--sidebar-width);background:#0d1119;border-right:1px solid var(--border-subtle);padding:20px 12px}
+.sidebar-brand{font-size:14px;font-weight:600;margin-bottom:20px;padding:0 8px}.sidebar-nav a{display:block;padding:8px 10px;border-radius:8px;color:var(--text-secondary);text-decoration:none;margin-bottom:2px}
+.sidebar-nav a.active,.sidebar-nav a:hover{background:var(--bg-elevated);color:var(--text-primary)}
+.main{flex:1;padding:24px 28px;overflow:auto}.page-title{font-size:22px;font-weight:600;margin:0 0 4px}.page-lead{color:var(--text-secondary);margin:0 0 20px}
+.card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi{padding:14px;border:1px solid var(--border-subtle);border-radius:8px;background:var(--bg-elevated)}
+.kpi .v{font-size:22px;font-weight:700}.kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border-subtle);text-align:left}
+th{color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.matrix-col-narrow{width:52px;text-align:center}
+.matrix-cell{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600}
+.matrix-cell--ok{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3);color:var(--status-ok)}
+.matrix-cell--warn{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.35);color:var(--status-warn)}
+.matrix-cell--error,.matrix-cell--offline{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:var(--status-error)}
+.object-matrix-object a{color:var(--text-primary);text-decoration:none;font-weight:500}
+.object-matrix-problems{font-size:11px;color:var(--text-muted);display:block}
+.chart-bar{height:8px;border-radius:4px;background:var(--bg-elevated);overflow:hidden;margin-top:6px}
+.chart-bar span{display:block;height:100%;border-radius:4px}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge--confirmed{background:rgba(239,68,68,.15);color:#f87171}
+.badge--suspect{background:rgba(234,179,8,.15);color:#fbbf24}
+.chat{display:flex;flex-direction:column;gap:12px}.bubble{padding:12px 14px;border-radius:10px;max-width:85%}
+.bubble--user{align-self:flex-end;background:#1e3a5f;border:1px solid #2563eb}
+.bubble--ai{align-self:flex-start;background:var(--bg-elevated);border:1px solid var(--border-subtle)}
+.sql{font-family:ui-monospace,monospace;font-size:12px;background:#0d1119;padding:10px;border-radius:6px;color:#93c5fd;margin-top:8px}
+</style></head><body>
+    <div class="app-shell"><aside class="sidebar"><div class="sidebar-brand">Дашборд руководителя ТСО</div>
+    <nav class="sidebar-nav"><a href='#' class=''>Сводка</a><a href='#' class=''>Объекты</a><a href='#' class=''>Статус оплаты</a><a href='#' class='active'>Повторные РВР</a><a href='#' class=''>Чат с AI</a></nav></aside>
+    <main class="main"><h1 class="page-title">Анализ повторных РВР</h1>
+    <p class="page-lead">LLM-вердикты и свод проблем по объектам</p>
+    <section class="card"><table><thead><tr><th>Объект</th><th>РВР</th><th>AI-вердикт</th><th>Свод проблем</th></tr></thead>
+    <tbody>
+      <tr><td>Офис ТБ · Красный пр.</td><td>5</td><td><span class="badge badge--confirmed">confirmed</span></td><td>Повторный отказ HDD, некачественное устранение</td></tr>
+      <tr><td>ВСП Центральный</td><td>3</td><td><span class="badge badge--suspect">suspect</span></td><td>Расхождение времени, повтор канала 7</td></tr>
+      <tr><td>ВСП Северный</td><td>2</td><td><span class="badge badge--possible" style="background:rgba(107,114,128,.15);color:#9ca3af">possible</span></td><td>Схожие формулировки в заявках</td></tr>
+    </tbody></table></section></main></div></body></html>
