@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-label="03;CH:0: A2>4=K9 40H1>@4">
+  <rect width="1280" height="800" fill="#14171b"/>
+  <rect x="40" y="40" width="300" height="720" fill="#1e2329" stroke="#2a3038" stroke-width="1"/>
+  <rect x="360" y="40" width="880" height="80" fill="#1e2329" stroke="#2a3038" stroke-width="1"/>
+  <rect x="360" y="140" width="420" height="200" fill="#1a5c5a" opacity="0.15" stroke="#1a5c5a" stroke-width="1"/>
+  <rect x="800" y="140" width="440" height="200" fill="#c47a1a" opacity="0.1" stroke="#c47a1a" stroke-width="1"/>
+  <rect x="360" y="360" width="880" height="400" fill="#1e2329" stroke="#2a3038" stroke-width="1"/>
+  <text x="640" y="420" fill="#4a5058" font-family="monospace" font-size="14" text-anchor="middle">PLACEHOLDER</text>
+  <text x="640" y="450" fill="#7a828c" font-family="sans-serif" font-size="22" text-anchor="middle" font-weight="600">!2>4=K9 40H1>@4 @C:>2>48B5;O</text>
+  <text x="640" y="480" fill="#4a5058" font-family="sans-serif" font-size="14" text-anchor="middle">0<5=8B5 =0 A:@8=H>B AB@0=8FK «!2>4:0» / «1J5:BK»</text>
+  <circle cx="200" cy="120" r="6" fill="#2d6a4f"/>
+  <circle cx="200" cy="160" r="6" fill="#b8860b"/>
+  <circle cx="200" cy="200" r="6" fill="#9b2335"/>
+</svg>

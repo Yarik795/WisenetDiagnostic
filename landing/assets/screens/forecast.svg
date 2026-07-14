@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-label="03;CH:0: ?@>3=>7 1N465B0">
+  <rect width="1280" height="800" fill="#14171b"/>
+  <rect x="40" y="40" width="1200" height="60" fill="#1e2329" stroke="#2a3038"/>
+  <rect x="40" y="120" width="1200" height="50" fill="#252a30" stroke="#b8860b" stroke-width="1"/>
+  <text x="60" y="152" fill="#b8860b" font-family="monospace" font-size="12">WIP ·    "</text>
+  <rect x="40" y="190" width="780" height="400" fill="#1e2329" stroke="#2a3038"/>
+  <polyline points="80,520 200,480 320,450 440,420 560,380 680,360 800,340" fill="none" stroke="#c47a1a" stroke-width="2" stroke-dasharray="8 4"/>
+  <polyline points="80,520 200,500 320,470 440,440 560,400 680,390 800,370" fill="none" stroke="#1a5c5a" stroke-width="2"/>
+  <rect x="840" y="190" width="400" height="400" fill="#1e2329" stroke="#2a3038"/>
+  <text x="1040" y="380" fill="#4a5058" font-family="monospace" font-size="14" text-anchor="middle">FORECAST</text>
+  <rect x="40" y="610" width="1200" height="150" fill="#1e2329" stroke="#2a3038"/>
+  <text x="640" y="680" fill="#7a828c" font-family="sans-serif" font-size="22" text-anchor="middle" font-weight="600">@>3=>7 @0AE>4>20=8O 1N465B0</text>
+  <text x="640" y="710" fill="#4a5058" font-family="monospace" font-size="12" text-anchor="middle">’ 0<5=8B5 ?>A;5 @50;870F88 <>4C;O</text>
+</svg>
