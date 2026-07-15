@@ -303,7 +303,7 @@
             <p>Отдельно и детально видно состояние <strong>всех жёстких дисков</strong>, <strong>температуру регистраторов</strong>, <strong>синхронизацию времени</strong> и <strong>текущую глубину архива</strong>.</p>
             <p>Отклонения автоматически попадают в email-отчёт.</p>
             <div class="panel-shot">
-              <img src="assets/screens/dashboard-summary.png" alt="Фрагмент дашборда: категории HDD, NTP, архив" loading="lazy">
+              <img src="demo/disk.png" alt="Мониторинг дисков, температуры, времени и глубины архива" loading="lazy">
             </div>
           </article>
         </div>
@@ -313,7 +313,7 @@
             <h3 style="margin-top:0.75rem">CMDB → опрос по API → актуальный реестр</h3>
             <p>Данные из <strong>CMDB</strong>, затем опрос по API: что <strong>убрать</strong> из реестра и что <strong>добавить</strong>. Архитектура поддерживает <strong>Dahua, Hikvision, iFlow</strong> и др.</p>
             <div class="panel-shot">
-              <img src="assets/screens/dashboard-summary.png" alt="Сводный дашборд: объекты и категории мониторинга" loading="lazy">
+              <img src="demo/cmdb.png" alt="Сверка CMDB с результатами опроса по API" loading="lazy">
             </div>
           </article>
         </div>
@@ -445,10 +445,9 @@
         <div class="catalog-group" role="presentation">Аналитика</div>
         <div class="catalog-row catalog-row--future" role="listitem"><span class="catalog-row__name">Бюджет</span><span class="catalog-row__desc">Прогноз расходов — в разработке</span></div>
         <div class="catalog-row" role="listitem"><span class="catalog-row__name">Арсенал</span><span class="catalog-row__desc">Паспорта АС Арсенал: системы, производители, drill-down</span></div>
-        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Регистраторы по времени</span><span class="catalog-row__desc">Возраст NVR по дате производства, тренды</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Регистраторы по времени</span><span class="catalog-row__desc">Возраст NVR по дате производства, drill-down по объектам</span></div>
         <div class="catalog-row" role="listitem"><span class="catalog-row__name">Диски по времени</span><span class="catalog-row__desc">Наработка HDD, износ, drill-down по объектам</span></div>
         <div class="catalog-row" role="listitem"><span class="catalog-row__name">Устройства на объекте</span><span class="catalog-row__desc">CMDB vs реальный опрос, ping «зомби»-устройств</span></div>
-        <div class="catalog-row catalog-row--future" role="listitem"><span class="catalog-row__name">Smartview</span><span class="catalog-row__desc">Интеграция с Smartview — заглушка</span></div>
         <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Статус оплаты</span><span class="catalog-row__desc">Заявки Портала Поставщика: модернизация и РВР, графики по СТК</span></div>
         <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Повторные РВР</span><span class="catalog-row__desc">Группировка заявок, AI-вердикты, раскрытие текстов по клику</span></div>
         <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Чат с AI</span><span class="catalog-row__desc">SQL-agent, графики ECharts, read-only доступ к БД</span></div>
@@ -457,7 +456,7 @@
         <div class="catalog-row" role="listitem"><span class="catalog-row__name">Исходные данные</span><span class="catalog-row__desc">Импорт CMDB, заявок ПП, Naumen, паспортов Арсенал</span></div>
 
         <div class="catalog-group" role="presentation">Администрирование</div>
-        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Настройки</span><span class="catalog-row__desc">Пороги мониторинга, LLM, SMTP, учётные данные, исключения</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Настройки</span><span class="catalog-row__desc">Пороги мониторинга, LLM, исключения объектов и устройств</span></div>
       </div>
     </div>
   </section>
@@ -500,8 +499,8 @@
         <summary>Необходимые ресурсы для тиражирования (развернуть)</summary>
         <div class="resources-details__body">
           <div class="resource-grid">
-            <div class="resource-card"><h3>Кадровые</h3><ul><li>1 разработчик Python (0.5 FTE)</li><li>1 аналитик ТСО (0.25 FTE)</li></ul></div>
-            <div class="resource-card"><h3>Технические</h3><ul><li>Сервер Linux 4 CPU / 8 GB</li><li>Доступ к API LLM</li><li>SMTP для email</li></ul></div>
+            <div class="resource-card"><h3>Кадровые</h3><ul><li>1 разработчик Python (0.5 FTE)</li><li>1 аналитик ТСО (0.25 FTE)</li><li>DevOps (0.25 FTE) — CI/CD и выкладка новых отчётов</li></ul></div>
+            <div class="resource-card"><h3>Технические</h3><ul><li>Сервер Linux 4 CPU / 8 GB</li><li>Доступ к API LLM</li><li>Конвейер CI/CD для оперативного добавления отчётов без ручного деплоя</li></ul></div>
             <div class="resource-card"><h3>Финансовые</h3><ul><li>MVP реализован — CAPEX минимален</li><li>Развёртывание на одном сервере Linux</li></ul></div>
           </div>
         </div>
