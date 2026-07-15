@@ -1,0 +1,2409 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Анализ повторных РВР — Wisenet Диагностика</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --bg-base: #fff;
+      --bg-elevated: #f8fafc;
+      --text: #1a1d21;
+      --text-secondary: #5c6370;
+      --text-muted: #9ca3af;
+      --border: #d8dce3;
+      --border-subtle: #e5e7eb;
+      --accent: #1a5fb4;
+      --status-ok: #16a34a;
+      --status-warn: #ca8a04;
+      --status-error: #dc2626;
+      --status-unknown: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .report {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    .meta { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; }
+    .meta p { margin: 4px 0; }
+    .text-secondary { color: var(--text-secondary); }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .kpi-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px; }
+    .kpi-value { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--bg-base);
+    }
+    .object-health-matrix { margin-bottom: 20px; }
+    .object-health-matrix-header { margin-bottom: 12px; }
+    .object-health-matrix-title { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+    .object-health-matrix-hint { margin: 0; font-size: 12px; color: var(--text-secondary); }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    th { background: #eef0f4; font-weight: 600; }
+    td.num, .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .object-matrix-object { text-align: left !important; min-width: 160px; }
+    .matrix-col-narrow { width: 52px; min-width: 48px; }
+    .matrix-cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      min-height: 28px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid transparent;
+    }
+    .matrix-cell--ok, .matrix-cell--online {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.3);
+      color: var(--status-ok);
+    }
+    .matrix-cell--warn {
+      background: rgba(234, 179, 8, 0.12);
+      border-color: rgba(234, 179, 8, 0.35);
+      color: var(--status-warn);
+    }
+    .matrix-cell--error, .matrix-cell--offline {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: var(--status-error);
+    }
+    .matrix-cell--unknown {
+      background: rgba(107, 114, 128, 0.15);
+      border-color: rgba(107, 114, 128, 0.35);
+      color: var(--status-unknown);
+    }
+    .matrix-cell--disabled {
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+    .rvr-repeat-matrix .rvr-matrix-object {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      align-items: flex-start;
+      min-width: 180px;
+      max-width: 280px;
+    }
+    .rvr-matrix-address { font-weight: 600; line-height: 1.3; }
+    .rvr-matrix-type { font-size: 11px; }
+    .rvr-matrix-repeats { font-weight: 700; }
+    .rvr-matrix-cell-btn {
+      cursor: pointer;
+      font: inherit;
+      transition: box-shadow 0.15s ease, transform 0.1s ease;
+    }
+    .rvr-matrix-cell-btn:hover,
+    .rvr-matrix-cell-btn:focus-visible {
+      box-shadow: 0 0 0 2px var(--accent);
+      outline: none;
+    }
+    .rvr-matrix-cell-btn[aria-expanded="true"] {
+      box-shadow: 0 0 0 2px var(--accent);
+      transform: scale(1.05);
+    }
+    .rvr-repeat-matrix-table .object-matrix-row--warn th,
+    .rvr-repeat-matrix-table .object-matrix-row--warn td {
+      background: rgba(234, 179, 8, 0.04);
+    }
+    .rvr-repeat-matrix-table .object-matrix-row--error th,
+    .rvr-repeat-matrix-table .object-matrix-row--error td {
+      background: rgba(239, 68, 68, 0.05);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > td {
+      background-color: rgba(185, 28, 28, 0.22);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-confirmed > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="confirmed"] > th.rvr-matrix-object {
+      border-left: 4px solid #dc2626;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > td,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > td {
+      background-color: rgba(234, 88, 12, 0.2);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-suspect > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="suspect"] > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-repeat > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="repeat"] > th.rvr-matrix-object {
+      border-left: 4px solid #ea580c;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > td {
+      background-color: rgba(234, 179, 8, 0.2);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-possible > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="possible"] > th.rvr-matrix-object {
+      border-left: 4px solid #ca8a04;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > td,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > td {
+      background-color: rgba(22, 163, 74, 0.18);
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none > th.rvr-matrix-object,
+    .rvr-repeat-matrix-table .object-matrix-row[data-ai-verdict="none"] > th.rvr-matrix-object {
+      border-left: 4px solid #16a34a;
+    }
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none .matrix-cell--warn,
+    .rvr-repeat-matrix-table .rvr-matrix-row--ai-none .matrix-cell--error {
+      background: rgba(107, 114, 128, 0.14);
+      border-color: rgba(107, 114, 128, 0.28);
+      color: var(--text-secondary);
+    }
+    .rvr-repeat-detail td {
+      padding: 0 !important;
+      border-top: none;
+      background: var(--bg-elevated);
+    }
+    .rvr-repeat-detail-inner {
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .rvr-kind-detail-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+    .rvr-kind-detail-count { font-weight: 500; color: var(--text-secondary); }
+    .rvr-ticket-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .rvr-ticket-card {
+      padding: 10px 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--bg-base);
+    }
+    .rvr-ticket-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+    .rvr-ticket-num { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rvr-ticket-date { font-size: 12px; }
+    .rvr-ticket-desc {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .rvr-matrix-analysis { font-size: 12px; max-width: 220px; text-align: left !important; }
+    .rvr-matrix-description { font-size: 12px; max-width: 220px; line-height: 1.4; text-align: left !important; }
+    .rvr-matrix-analysis-text { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
+    .rvr-ai-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .rvr-ai-badge--confirmed { background: rgba(185, 28, 28, 0.18); color: #991b1b; }
+    .rvr-ai-badge--suspect, .rvr-ai-badge--repeat { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+    .rvr-ai-badge--possible { background: rgba(234, 179, 8, 0.18); color: #a16207; }
+    .rvr-ai-badge--none { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+    .rvr-ai-badge--stale, .rvr-ai-badge--unchecked { background: rgba(100, 116, 139, 0.12); color: var(--text-secondary); }
+    .empty-state { color: var(--text-secondary); padding: 16px 0; }
+    footer { margin-top: 20px; font-size: 0.8rem; color: var(--text-secondary); }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .report { border: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="report">
+    <h1>Анализ повторных РВР</h1>
+    <div class="meta">
+      <p><strong>Период:</strong> 01.06.2026 — 15.06.2026 (UTC)</p>
+      <p><strong>Порог:</strong> Сводка (≥2)</p>
+      
+      <p><strong>Фильтры:</strong> Отбор: «Вид работ» = РВР; фильтр по «Территориальный банк» не применяется; статус без подстроки «отозвана»; вид систем не «УС»; колонка «Описание» — фрагмент из Naumen (Комментарий ВК … ФИО ВК).</p>
+      
+      <p><strong>Сформирован:</strong> 15.07.2026 11:01</p>
+      <p><strong>Исходные данные:</strong> заявки: 13.07.2026 19:20 (45558 записей); Naumen: 13.07.2026 18:31</p>
+    </div>
+    <div id="rvr-repeat-report-root">
+      
+      <p class="text-secondary" style="font-size:0.9rem;margin-bottom:12px;">Отбор: «Вид работ» = РВР; фильтр по «Территориальный банк» не применяется; статус без подстроки «отозвана»; вид систем не «УС»; колонка «Описание» — фрагмент из Naumen (Комментарий ВК … ФИО ВК).</p>
+      
+      <div class="kpi-grid" style="margin-bottom:20px;">
+  <div class="kpi-card">
+    <div class="kpi-label">Групп с повторами</div>
+    <div class="kpi-value">11</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Всего повторов</div>
+    <div class="kpi-value">26</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Заявок в выборке</div>
+    <div class="kpi-value">76</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Топ-объект</div>
+    <div class="kpi-value" style="font-size:1rem;line-height:1.3;">г. Москва, ул. Макетная, д. 18 (АДЗ)</div>
+  </div>
+</div>
+<section class="object-health-matrix rvr-repeat-matrix card" aria-label="Проблемные объекты">
+  <div class="object-health-matrix-header">
+    <h2 class="object-health-matrix-title">Проблемные объекты</h2>
+    <p class="object-health-matrix-hint">Клик по числу в ячейке — заявки выбранного вида системы.</p>
+  </div>
+  <div class="table-wrap object-health-matrix-wrap rvr-repeat-matrix-wrap">
+    <table class="data-table data-table--compact object-health-matrix-table rvr-repeat-matrix-table">
+      <thead>
+        <tr>
+          <th scope="col">Объект</th>
+          <th scope="col" class="matrix-col-narrow">Повторы</th>
+          
+          <th scope="col" class="matrix-col-narrow" title="САПС">САПС</th>
+          
+          <th scope="col" class="matrix-col-narrow" title="СКУД">СКУД</th>
+          
+          <th scope="col" class="matrix-col-narrow" title="СОТС">СОТС</th>
+          
+          <th scope="col" class="matrix-col-narrow" title="СОУЭ">СОУЭ</th>
+          
+          <th scope="col" class="matrix-col-narrow" title="ТСВ">ТСВ</th>
+          
+          <th scope="col">Анализ</th>
+          <th scope="col">Описание проблем</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-confirmed"
+          data-rvr-matrix-row="rvr-f92775a4aaee"
+          data-ai-verdict="confirmed"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Макетная, д. 18</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">7</td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-f92775a4aaee"
+              data-kind="СКУД"
+              title="СКУД: 10001001 (01.06.2026), 10001002 (02.06.2026), 10001003 (02.06.2026), 10001004 (02.06.2026), 10001005 (09.06.2026), 10001006 (11.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-f92775a4aaee"
+            >6</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--warn rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-f92775a4aaee"
+              data-kind="СОТС"
+              title="СОТС: 10001007 (01.06.2026), 10001008 (09.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-f92775a4aaee"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--warn rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-f92775a4aaee"
+              data-kind="ТСВ"
+              title="ТСВ: 10001009 (04.06.2026), 10001010 (09.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-f92775a4aaee"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--confirmed">Повтор</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повтор. Две заявки (01.06, 09.06) по неисправности объемного извещателя в служебном помещении на одном из этажей. Это указывает на неполное устранение проблемы при первом выезде. Также есть подозрение на повторяющиеся проблемы с СКУД в лифтовых холлах (01.06, 09.06, 11.06).</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На одном из этажей постоянно выходит из строя объемный извещатель в служебном помещении. В СКУД наблюдаются частые проблемы с работой в лифтовых холлах (кнопки разблокировки, картоприёмники, контроллеры). Также были отдельные инциденты с ПО СКУД, биотерминалами и точками доступа, а также разовые настройки камер ТСВ.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-f92775a4aaee"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-f92775a4aaee"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-f92775a4aaee">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-f92775a4aaee"
+                  data-kind="СКУД"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(6)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001011</span>
+                        <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">В кнопках УРД (разблокировки дверей) на точках СКУД в лифтовых холлах на минусовых этажах парковки (на подземных этажах) на втором контакте по каждой кнопке отсутствует связь с контроллером СКУД. Требуется проверить трассы от кнопок до контроллеров СКУД, включая коммутационные коробки и восстановить связь. Прошу направить инженера для выполнения работ.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001012</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">02.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">На биотерминалах, список ниже, необходимо осуществить до 17.06.26: 1) Замену машинных сертификатов. 2) Установить приложение MDM и его активировать. Необходимые для этого файлы будут переданы на флэш-карте. Для получения кода активации MDM инженерам необходимо в момент проведения работ обращаться к ответственному специалисту Список биометрических терминалов: TERM-*** ******** объект, один из этажей, Северный лифты холл, Вход, FS8 TERM-*** ******** объект,</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001013</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">02.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">На проходной поста охраны ул. Макетная, д. 18 перестала запускаться программа ПО СКУД с выбросом фото. Требуется переустановка ПО СКУД. Предположительно - работает актуальная версия ПО СКУД от 27.04.2026г. Прошу направить инженера для выполнения работ.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001014</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">02.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">на одном из этажей неисправна точка СКУД на двери входа в служебное помещение. Дверь открывается без домофона. Прошу направить инженера для восстановления работы точки СКУД.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001015</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">09.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">на подземном этаже в лифтовом холле парковочных лифтов не срабатывает СКУД на двери при опускании карты СКУД в картоприемник у выхода из лифтового холла. Требуется разобрать картоприемник и проверить подключение информационных и питающих кабелей. При необходимости, устранить неисправность. Прошу направить инженера для проведения работ.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001016</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">11.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">на подземном этаже ул. Макетная, д. 18, на двери лифтового холла парковочных лифтов не работает СКУД. Предположительно требуется перезагрузка контроллера СКУД / считывателя. Прошу направить инженера для восстановления работы точки СКУД на подземном этаже.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-f92775a4aaee"
+                data-kind="СОТС"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СОТС <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001017</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">По сообщению пульта централизованного наблюдения по пультовому объекта в служебном помещении на одном из этажах присутствует неисправность объемного извещателя. Прошу направить инженера для выполнения работ.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001018</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">09.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">на одном из этажей ул. Макетная, д. 18 в служебном помещении (пультовой объекта) неисправен объемный извещатель. Сообщение с пульта наблюдения о неисправности датчика в зоне охраны. Прошу направить инженера для восстановления работы охранной сигнализации служебного помещения.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-f92775a4aaee"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001019</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">на одном из этажей ул. Макетная, д. 18 в/камера контроля доступа (IP 203.0.113.30) не видит рабочий стол сотрудника. Требуется настроить угол обзора в/камеры так, чтобы камера &#34;выдела&#34; действия сотрудника при контроле доступа. Прошу направить инженера для настройки угла обзора в/камеры.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001020</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">09.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">на одном из этажей требуется настройка в/камеры. В/камера (203.0.113.10 ) в углу коридора, перед входом в служебное помещение. Смотрит на лифт. Требуется повернуть ее влево (убрать стену из кадра) и поднять немного вверх (чтобы на потолке видеть оповещатель на потолке), чтобы видеть момент постановки помещения под охрану и выход персонала. Прошу направить инженера для выполнения</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-none"
+          data-rvr-matrix-row="rvr-1f508a3342c2"
+          data-ai-verdict="none"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, пр-т Демонстрационный, д. 7</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">4</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--warn rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-1f508a3342c2"
+              data-kind="САПС"
+              title="САПС: 10001021 (01.06.2026), 10001022 (04.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-1f508a3342c2"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-1f508a3342c2"
+              data-kind="СКУД"
+              title="СКУД: 10001023 (04.06.2026), 10001024 (04.06.2026), 10001025 (08.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-1f508a3342c2"
+            >3</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-1f508a3342c2"
+              data-kind="СОУЭ"
+              title="СОУЭ: 10001026 (05.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-1f508a3342c2"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--warn rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-1f508a3342c2"
+              data-kind="ТСВ"
+              title="ТСВ: 10001027 (03.06.2026), 10001028 (04.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-1f508a3342c2"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повторов не выявлено. Заявки относятся к разным системам и узлам: участие в тренировках САПС, обслуживание биотерминалов СКУД, замена дверного замка СКУД, замена блока СОУЭ, демонтаж камер и замена HDD в ТСВ.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте проводились противопожарные тренировки и проверки работоспособности систем. В СКУД были работы по замене сертификатов на биотерминалах, восстановление работы дверного замка и конкретного биометрического терминала. По СОУЭ меняли блок контроля линий, по ТСВ демонтировали камеры и меняли жесткий диск. Все заявки носят разовый характер.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-1f508a3342c2"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-1f508a3342c2"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-1f508a3342c2">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-1f508a3342c2"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(2)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001029</span>
+                        <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Прошу направить двух инженеров 02 июня 2026 года к 09:30 для участия в противопожарной тренировки по эвакуации на объекте Банка по адресу: г. Москва, пр-т Демонстрационный, д. 7.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001030</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить инженеров 04.06.2026 к 19:30 для участия в проверке работоспособности систем противопожарной защиты на объекте ЦА в Административное здание по адресу: г. Москва, пр-т Демонстрационный, д. 7.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-1f508a3342c2"
+                data-kind="СКУД"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(3)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001031</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">На биотерминалах, список во вложении, необходимо осуществить до 17.06.26: 1) Замену машинных сертификатов. 2) Установить приложение MDM и его активировать.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001032</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Необходимо восстановить работоспособность ЗМЗ на двери &#34;вход на С3 со стороны В3&#34;.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001033</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">08.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Необходимо восстановить работоспособность биометрического терминала установленного на 9-м турникете на вход.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-1f508a3342c2"
+                data-kind="СОУЭ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СОУЭ <span class="rvr-kind-detail-count">(1)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001034</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">На объекте ЦА по адресу: г. Москва, пр-т Демонстрационный, д. 7, необходимо провести ремонтные работы СОУЭ. В результате перепада напряжения в электросети заменить неисправный блок контроля линий в стойке 1.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-1f508a3342c2"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001035</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">03.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">В связи с переездом отдела документооборота из помещения A.02.004.2 в помещение D3.10 необходимо демонтировать установленные там ранее видеокамеры в количестве 4 шт. Демонтированные камеры сдать на склад службы эксплуатации склад объекта.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001036</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Необходимо заменить вышедший из строя диска на 6 Tb. Видеорегистратор ip 203.0.113.11</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-confirmed"
+          data-rvr-matrix-row="rvr-b2450fc907b7"
+          data-ai-verdict="confirmed"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Складская, д. 9, к. 2, стр. 1</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">3</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-b2450fc907b7"
+              data-kind="САПС"
+              title="САПС: 10001037 (01.06.2026), 10001038 (11.06.2026), 10001039 (15.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-b2450fc907b7"
+            >3</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-b2450fc907b7"
+              data-kind="СКУД"
+              title="СКУД: 10001040 (05.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-b2450fc907b7"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--warn rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-b2450fc907b7"
+              data-kind="ТСВ"
+              title="ТСВ: 10001041 (01.06.2026), 10001042 (01.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-b2450fc907b7"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--confirmed">Повтор</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повтор. Две заявки (01.06, 11.06) по неисправности кольцевого шлейфа пожарной сигнализации на одной из панелей. Это указывает на неполное устранение проблемы. Также зафиксирована аналогичная проблема на другом шлейфе (15.06) той же системы.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            Система САПС испытывает повторяющиеся проблемы с несколькими шлейфами на одной панели, что может указывать на системную уязвимость или некачественное устранение неисправностей. Отдельные заявки по СКУД и ТСВ носят разовый характер.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-b2450fc907b7"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-b2450fc907b7"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-b2450fc907b7">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-b2450fc907b7"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(3)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001043</span>
+                        <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">На панели пожарной сигнализации появилось сообщение об ошибке на кольцевом шлейфе. Прошу произвести проверку и восстановить нормальную работу САПС серверной. Работы выполнять согласно наряд-допуска в количестве не менее двух человек с группой по электробезопасности не менее третьей. О начале работ уведомить инженеров КИПиА, начальника дежурной смены серверной и ведущего инспектора службы эксплуатации.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001044</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">11.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">На панели пожарной сигнализации появилось сообщение об ошибке на кольцевом шлейфе. Прошу произвести проверку и восстановить нормальную работу САПС серверной. Работы выполнять согласно наряд-допуска в количестве не менее двух человек с группой по электробезопасности не менее третьей. О начале работ уведомить инженеров КИПиА, начальника дежурной смены серверной и ведущего инспектора службы эксплуатации.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001045</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">15.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">На панели пожарной сигнализации появилось сообщение о потере связи с извещателями шлейф. Прошу произвести проверку и восстановить нормальную работу САПС серверной. Работы выполнять согласно наряд-допуска в количестве не менее двух человек с группой по электробезопасности не менее третьей. О начале работ уведомить инженеров КИПиА, начальника дежурной смены серверной и ведущего инспектора службы эксплуатации.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-b2450fc907b7"
+                data-kind="СКУД"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(1)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001046</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу восстановить нормальную работу биотерминала в шлюзовой кабине маш.зала 4.1 в серверной.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-b2450fc907b7"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001047</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Требуется замена металлизированной гофры видеокамер расположенных на контейнерах РП-ДГУ1 и РП-ДГУ2. Площадка ДГУ.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001048</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу восстановить работоспособность камеры телевизионной системы видеонаблюдения AS.5.2.5 в маш.зале 5.3.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-none"
+          data-rvr-matrix-row="rvr-a89425808dca"
+          data-ai-verdict="none"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, наб. Условная, д. 3, к. 1</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">3</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-a89425808dca"
+              data-kind="САПС"
+              title="САПС: 10001049 (04.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-a89425808dca"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-a89425808dca"
+              data-kind="СКУД"
+              title="СКУД: 10001050 (04.06.2026), 10001051 (05.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-a89425808dca"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-a89425808dca"
+              data-kind="СОТС"
+              title="СОТС: 10001052 (04.06.2026), 10001053 (05.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-a89425808dca"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-a89425808dca"
+              data-kind="ТСВ"
+              title="ТСВ: 10001054 (04.06.2026), 10001055 (15.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-a89425808dca"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повторов не выявлено. Заявки носят разовый характер: неисправность зоны САПС, блокировка и демонтаж СКУД на дверях, переключение провайдера и демонтаж СОТС, а также перезагрузка видеорегистратора и неисправность камеры ТСВ.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте были инциденты с пожарной сигнализацией в одной из зон, блокировкой СКУД на дверях (с последующим демонтажем оборудования, возможно связанных), а также переключение провайдера для СОТС. По ТСВ производились перезагрузка видеорегистратора и ремонт камеры.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-a89425808dca"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-a89425808dca"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-a89425808dca">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-a89425808dca"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(1)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001056</span>
+                        <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Прошу направить специалиста подрядчикаа в КИЦ &#34;Демо-1&#34; по адресу: наб. Условная, д. 3, к. 1.п/н В***. Неисправность пожарной сигнализации одной из зон. Необходимо устранить неисправность.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-a89425808dca"
+                data-kind="СКУД"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001057</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста подрядчика в КИЦ &#34;Демо-1&#34; по адресу: наб. Условная, д. 3, к. 1.На объекте заблокировалась СКУД двух дверей. Контроллер для перезапуска недоступен. Возможно необходима замена контроллера.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001058</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста СТК в административное здание по адресу: наб. Условная, д. 3, к. 1. Необходимо демонтировать СКУД на 2-х дверях выхода на лестничные клетки одного из этажей.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-a89425808dca"
+                data-kind="СОТС"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СОТС <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001059</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста подрядчика в КИЦ &#34;Демо-1&#34; по адресу: наб. Условная, д. 3, к. 1.Необходимо провести переключение охранной сигнализации хранилища в коммутатор нового провайдера.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001060</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста СТК в административное здание по адресу: наб. Условная, д. 3, к. 1. Необходимо демонтировать охранную сигнализацию с 2-х дверей выхода на лестничные клетки одного из этажей.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-a89425808dca"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001061</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста подрядчика в КИЦ &#34;Демо-1&#34; по адресу: наб. Условная, д. 3, к. 1.Необходимо принудительно перезагрузить видеорегистратор ТСВ (зависает). Настроить работу ТСВ на постах охраны.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001062</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">15.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста подрядчика в КИЦ &#34;Демо-1&#34; по адресу: наб. Условная, д. 3, к. 1. Нет изображения с одной из видеокамер (IP 203.0.113.12) видеорегистратора ТСВ КИЦ (IP 203.0.113.13). Перезагрузка порта результатов не принесла. Возможно необходима замена видеокамеры.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-none"
+          data-rvr-matrix-row="rvr-63a539e2a08d"
+          data-ai-verdict="none"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Северная, д. 6</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">2</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-63a539e2a08d"
+              data-kind="САПС"
+              title="САПС: 10001063 (01.06.2026), 10001064 (02.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-63a539e2a08d"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-63a539e2a08d"
+              data-kind="СКУД"
+              title="СКУД: 10001065 (04.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-63a539e2a08d"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-63a539e2a08d"
+              data-kind="ТСВ"
+              title="ТСВ: 10001066 (04.06.2026), 10001067 (15.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-63a539e2a08d"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повторов не выявлено. Заявки относятся к разным узлам и системам: ложные срабатывания и некорректная эксплуатация извещателей САПС, неисправность двери СКУД на главном входе, перенастройка и отсутствие изображения с камер ТСВ.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте были зафиксированы проблемы с САПС: ложное срабатывание и незащищённый ручной извещатель, а также заклеенный датчик в техническом помещении. СКУД имела проблему с открытием двери на главном входе. По ТСВ проводилась перенастройка камер и восстановление изображения.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-63a539e2a08d"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-63a539e2a08d"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-63a539e2a08d">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-63a539e2a08d"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(2)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001068</span>
+                        <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Административное здание: ул. Северная, д. 6. п/н В***, 29.05.2026 г. в 18-50 в пульт наблюдения, на панели управления пришел сигнал Пожар-1 и Пожар-2. Причина не известна. Предположительно сработал ручной извещатель. Прошу разобраться и сообщить. Кроме того, извещатель не имеет защитного стекла.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001069</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">02.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: ул. Северная, д. 6. В помещении с ИБП извещатель заклеен скотчем. Подробная информация у ответственного сотрудникответственному сотруднику. Прошу так же пройти по всем помещениям КИЦ и устранить подобные замечания.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-63a539e2a08d"
+                data-kind="СКУД"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(1)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001070</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: ул. Северная, д. 6. Стеклянная дверь перед шлюзом главного входа в КИЦ не всегда открывается с карты. Кроме того, прошу проверить индикацию на считывателе. Похожа она или не работает или работает не корректно. Должна загораться зеленым цветом при предоставлении доступа.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-63a539e2a08d"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001071</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: ул. Северная, д. 6. Необходимо перенастроить ракурс 5-ти видеокамер в КИЦ &#34;Демо-2&#34; Подробности у ответственного сотрудника.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001072</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">15.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: ул. Северная, д. 6. Нет изображения с видеокамеры в ОКО КИЦ &#34;Демо-2&#34;.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-possible"
+          data-rvr-matrix-row="rvr-38c57de90c43"
+          data-ai-verdict="possible"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, пр-т Образцовый, вл. 12, к. 3</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">2</td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-38c57de90c43"
+              data-kind="СКУД"
+              title="СКУД: 10001073 (03.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-38c57de90c43"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-38c57de90c43"
+              data-kind="ТСВ"
+              title="ТСВ: 10001074 (04.06.2026), 10001075 (05.06.2026), 10001076 (09.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-38c57de90c43"
+            >3</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--possible">Возможен повтор</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Возможен повтор. Две заявки по ТСВ (04.06, 09.06) касаются отсутствия изображения с видеокамер: сначала одной камеры, затем в целом на рабочем месте оператора, что может указывать на системную проблему. Отдельно зафиксирована проблема с просмотром видеоархива.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте наблюдались проблемы с СКУД в одном из помещений. По ТСВ были проблемы с отсутствием изображения (сначала с одной камеры, затем более общая проблема на рабочем месте), а также с доступом к видеоархиву.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-38c57de90c43"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-38c57de90c43"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-38c57de90c43">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-38c57de90c43"
+                  data-kind="СКУД"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(1)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001077</span>
+                        <span class="rvr-ticket-date text-secondary">03.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Необходимо восстановить работоспособность точек СКУД в одном из помещений</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-38c57de90c43"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(3)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001078</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Необходимо восстановить работоспособность изображение с видеокамеры в помещении поста охраны</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001079</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Необходимо восстановить возможность просмотра видеоархива с видеорегистратора КИЦ</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001080</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">09.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Нет изображения с видеокамер на АРМ ТСВ КИЦ.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-none"
+          data-rvr-matrix-row="rvr-ffe6564163bb"
+          data-ai-verdict="none"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Складская, д. 9, к. 1, стр. 1</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">1</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-ffe6564163bb"
+              data-kind="САПС"
+              title="САПС: 10001081 (03.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-ffe6564163bb"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-ffe6564163bb"
+              data-kind="СКУД"
+              title="СКУД: 10001082 (08.06.2026), 10001083 (10.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-ffe6564163bb"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-ffe6564163bb"
+              data-kind="ТСВ"
+              title="ТСВ: 10001084 (05.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-ffe6564163bb"
+            >1</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повторов не выявлено. Заявки носят разовый характер и касаются различных узлов: участие в тренировке САПС, регулировка электромагнитного замка СКУД, протяжка креплений биотерминалов СКУД и восстановление изображения с камеры ТСВ.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте проводились тренировки по эвакуации. По СКУД выполнялась регулировка электромагнитного замка и протяжка креплений биотерминалов на входной группе. По ТСВ восстанавливалось изображение с камеры в холле лифтов.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-ffe6564163bb"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-ffe6564163bb"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-ffe6564163bb">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-ffe6564163bb"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(1)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001085</span>
+                        <span class="rvr-ticket-date text-secondary">03.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">03.06.2026 в 09:30, будет проведена тренировка по эвакуации. В связи с этим, прошу направить инженера в Административное здание по адресу: г. Москва, ул. Складская, д. 9, к. 1, стр. 1</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-ffe6564163bb"
+                data-kind="СКУД"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001086</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">08.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу произвести регулировку электромагнитного замка тамбурной двери при переходе из тамбура пяти лифтов на одном из этажей первого строения.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001087</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">10.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу произвести протяжку креплений кронштейнов биотерминалов на турникетных тумбах с юстировкой на центральной входной группе.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-ffe6564163bb"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(1)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001088</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Необходимо восстановить работоспособность изображение с видеокамеры в помещении холла 5 лифтов</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-none"
+          data-rvr-matrix-row="rvr-000bb3760ac4"
+          data-ai-verdict="none"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Тестовая, д. 45</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">1</td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-000bb3760ac4"
+              data-kind="ТСВ"
+              title="ТСВ: 10001089 (10.06.2026), 10001090 (15.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-000bb3760ac4"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повторов не выявлено. Заявки по ТСВ относятся к разным проблемам: изменение ракурса одной уличной камеры и неработоспособность пяти других уличных видеокамер.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте проводились работы с ТСВ: настройка ракурса одной уличной камеры и устранение неисправности пяти других уличных видеокамер.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-000bb3760ac4"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-000bb3760ac4"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-000bb3760ac4">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-000bb3760ac4"
+                  data-kind="ТСВ"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001091</span>
+                        <span class="rvr-ticket-date text-secondary">10.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Необходимо изменить ракурс уличной видеокамеры на демонстрационной улице. Направить её на перекрёсток.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001092</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">15.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: ул. Тестовая, д. 45. Не работают 5 уличных видеокамер.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-confirmed"
+          data-rvr-matrix-row="rvr-2b731b12dd08"
+          data-ai-verdict="confirmed"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Выставочная, д. 22</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">1</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-2b731b12dd08"
+              data-kind="САПС"
+              title="САПС: 10001093 (08.06.2026), 10001094 (11.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-2b731b12dd08"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--confirmed">Повтор</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повтор. Две заявки (08.06, 11.06) по неисправности САПС в одном из разделов. Это указывает на неполное устранение проблемы при первом выезде.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте зафиксирована повторяющаяся неисправность системы САПС в одном из разделов, требующая повторного ремонта в короткий срок.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-2b731b12dd08"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-2b731b12dd08"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-2b731b12dd08">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-2b731b12dd08"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(2)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001095</span>
+                        <span class="rvr-ticket-date text-secondary">08.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Прошу направить специалиста подрядчика в административное здание по адресу: ул. Выставочная, д. 22. П/н ***. Неисправность в одном из разделов. Неисправность САПС.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001096</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">11.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Прошу направить специалиста подрядчика в административное здание по адресу: ул. Выставочная, д. 22. П/н ***. Неисправность в одном из разделов. Неисправность САПС.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              
+              
+              
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-none"
+          data-rvr-matrix-row="rvr-c8e19d8dd1c1"
+          data-ai-verdict="none"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, пер. Образцовый, д. 5</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">1</td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-c8e19d8dd1c1"
+              data-kind="САПС"
+              title="САПС: 10001097 (01.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-c8e19d8dd1c1"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-c8e19d8dd1c1"
+              data-kind="СКУД"
+              title="СКУД: 10001098 (04.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-c8e19d8dd1c1"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--neutral rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-c8e19d8dd1c1"
+              data-kind="СОТС"
+              title="СОТС: 10001099 (11.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-c8e19d8dd1c1"
+            >1</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-c8e19d8dd1c1"
+              data-kind="ТСВ"
+              title="ТСВ: 10001100 (01.06.2026), 10001101 (04.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-c8e19d8dd1c1"
+            >2</button>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--none">Нет повтора</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повторов не выявлено. Заявки носят разовый характер и относятся к различным узлам: неисправность датчика САПС, проблема с магнитным замком СКУД, потеря связи с ПКП СОТС и отсутствие изображения с разных камер ТСВ на разных видеорегистраторах.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте были зафиксированы единичные инциденты: неисправность датчика в системе САПС, проблема с креплением магнитного замка СКУД, потеря связи с панелью СОТС. По ТСВ наблюдались разовые проблемы с отсутствием изображения с разных видеокамер, подключенных к разным видеорегистраторам.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-c8e19d8dd1c1"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-c8e19d8dd1c1"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-c8e19d8dd1c1">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-c8e19d8dd1c1"
+                  data-kind="САПС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">САПС <span class="rvr-kind-detail-count">(1)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001102</span>
+                        <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">Административное здание: пер. Образцовый, д. 5. 2. П/н ***, 29.05.2026 г. в 18-50 датчик ушел в неисправность и до сих пор висит на панели управления.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-c8e19d8dd1c1"
+                data-kind="СКУД"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СКУД <span class="rvr-kind-detail-count">(1)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001103</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: пер. Образцовый, д. 5. На посту охраны №2 (дебаркадер) магнитный замок СКУД повис на одном болтике.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-c8e19d8dd1c1"
+                data-kind="СОТС"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">СОТС <span class="rvr-kind-detail-count">(1)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001104</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">11.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: пер. Образцовый, д. 5. 2. П/н ***. Пропала связь с панелью охранной сигнализации.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              <section
+                class="rvr-kind-detail"
+                data-rvr-kind-block="rvr-c8e19d8dd1c1"
+                data-kind="ТСВ"
+                hidden
+              >
+                <h3 class="rvr-kind-detail-title">ТСВ <span class="rvr-kind-detail-count">(2)</span></h3>
+                <ul class="rvr-ticket-list">
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001105</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: пер. Образцовый, д. 5. 2. Пропало изображение с одной из видеокамер (техническое помещение на видеорегистраторе 203.0.113.14 в отделе служебном отделе КИЦ &#34;Демо-3&#34; (серверная на одном из этажей ОИ).</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001106</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">04.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">Административное здание: пер. Образцовый, д. 5. 2. Пропало изображение с одной из видеокамер на видеорегистраторе 203.0.113.15 в ОКО КИЦ &#34;Демо-3&#34;. Удаленная перезагрузка результатов не дала.</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+        <tr
+          class="object-matrix-row rvr-matrix-row--ai-confirmed"
+          data-rvr-matrix-row="rvr-266efe41586d"
+          data-ai-verdict="confirmed"
+        >
+          <th scope="row" class="object-matrix-object rvr-matrix-object">
+            <span class="rvr-matrix-address">г. Москва, ул. Примерная, д. 12</span>
+            <span class="rvr-matrix-type text-secondary">АДЗ</span>
+          </th>
+          <td class="num rvr-matrix-repeats">1</td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <button
+              type="button"
+              class="matrix-cell matrix-cell--error rvr-matrix-cell-btn"
+              data-rvr-cell-toggle
+              data-row-id="rvr-266efe41586d"
+              data-kind="СОТС"
+              title="СОТС: 10001107 (01.06.2026), 10001108 (05.06.2026)"
+              aria-expanded="false"
+              aria-controls="rvr-detail-rvr-266efe41586d"
+            >2</button>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td>
+            
+            <span class="matrix-cell matrix-cell--disabled" aria-hidden="true">—</span>
+            
+          </td>
+          
+          <td class="rvr-matrix-analysis">
+            
+            <span class="rvr-ai-badge rvr-ai-badge--confirmed">Повтор</span>
+            
+            
+            <p class="rvr-matrix-analysis-text">Повтор. Две заявки (01.06, 05.06) по неработоспособности клавиатуры постановки под охрану на посту охраны. Это указывает на неполное устранение проблемы при первом выезде.</p>
+            
+          </td>
+          <td class="rvr-matrix-description text-secondary">
+            На объекте зафиксирована повторяющаяся неисправность клавиатуры на посту охраны, требующая повторного ремонта в короткий срок.
+          </td>
+        </tr>
+        <tr
+            id="rvr-detail-rvr-266efe41586d"
+            class="rvr-repeat-detail"
+            data-rvr-detail-row="rvr-266efe41586d"
+            hidden
+        >
+            <td colspan="9">
+              <div class="rvr-repeat-detail-inner" data-rvr-detail-inner="rvr-266efe41586d">
+                <section
+                  class="rvr-kind-detail"
+                  data-rvr-kind-block="rvr-266efe41586d"
+                  data-kind="СОТС"
+                  hidden
+                >
+                  <h3 class="rvr-kind-detail-title">СОТС <span class="rvr-kind-detail-count">(2)</span></h3>
+                  <ul class="rvr-ticket-list">
+                    <li class="rvr-ticket-card">
+                      <div class="rvr-ticket-header">
+                        <span class="rvr-ticket-num">№ 10001109</span>
+                        <span class="rvr-ticket-date text-secondary">01.06.2026</span>
+                      </div>
+                      <p class="rvr-ticket-desc">административное здание На посту охраны (посту охраны) перестала работать одна из клавиатур постановки под охрану помещений.</p>
+                    
+                  </li>
+                  
+                  <li class="rvr-ticket-card">
+                    <div class="rvr-ticket-header">
+                      <span class="rvr-ticket-num">№ 10001110</span>
+                      
+                      <span class="rvr-ticket-date text-secondary">05.06.2026</span>
+                      
+                    </div>
+                    
+                    <p class="rvr-ticket-desc">административное здание На посту охраны перестала работать одна из клавиатур (посту охраны) сдачи помещений (серверных под охрану).</p>
+                    
+                  </li>
+                  
+                </ul>
+              </section>
+              
+              
+              
+              
+              
+              
+            </div>
+          </td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+</section>
+    </div>
+    <footer>Wisenet Диагностика — дашборд руководителя ТСО</footer>
+  </article>
+  <script>
+    function closeAllRvrRepeatDetails(scope) {
+      const root = scope || document;
+      root.querySelectorAll("[data-rvr-detail-row]").forEach((row) => {
+        row.hidden = true;
+      });
+      root.querySelectorAll("[data-rvr-kind-block]").forEach((block) => {
+        block.hidden = true;
+      });
+      root.querySelectorAll("[data-rvr-cell-toggle]").forEach((btn) => {
+        btn.setAttribute("aria-expanded", "false");
+      });
+    }
+    function openRvrRepeatDetail(rowId, kind, scope) {
+      const root = scope || document;
+      closeAllRvrRepeatDetails(root);
+      const detailRow = root.querySelector('[data-rvr-detail-row="' + rowId + '"]');
+      const kindBlock = root.querySelector(
+        '[data-rvr-kind-block="' + rowId + '"][data-kind="' + kind + '"]'
+      );
+      const toggleBtn = root.querySelector(
+        '[data-rvr-cell-toggle][data-row-id="' + rowId + '"][data-kind="' + kind + '"]'
+      );
+      if (detailRow) detailRow.hidden = false;
+      if (kindBlock) kindBlock.hidden = false;
+      if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+    }
+    document.addEventListener("DOMContentLoaded", function () {
+      const reportRoot = document.getElementById("rvr-repeat-report-root");
+      if (!reportRoot) return;
+      reportRoot.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-rvr-cell-toggle]");
+        if (!btn || !reportRoot.contains(btn)) return;
+        const rowId = btn.dataset.rowId;
+        const kind = btn.dataset.kind;
+        if (!rowId || !kind) return;
+        const isOpen = btn.getAttribute("aria-expanded") === "true";
+        if (isOpen) {
+          closeAllRvrRepeatDetails(reportRoot);
+          return;
+        }
+        openRvrRepeatDetail(rowId, kind, reportRoot);
+      });
+    });
+  </script>
+</body>
+</html>

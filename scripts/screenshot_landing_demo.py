@@ -52,7 +52,7 @@ def main() -> None:
     shots = [
         ("dashboard.html", "dashboard-summary.png", 1440, 920),
         ("payments.html", "payments.png", 1440, 1000),
-        ("rvr-repeat.html", "report-rvr.png", 1440, 820),
+        ("rvr.html", "report-rvr.png", 1440, 900),
         ("ai-chat.html", "ai-chat.png", 1440, 1100),
     ]
     for html_name, png_name, w, h in shots:

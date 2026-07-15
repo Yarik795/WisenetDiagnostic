@@ -20,11 +20,11 @@
       <a href="#solution" data-section="solution">Решение</a>
       <a href="#demo" data-section="demo">Демо</a>
       <a href="#ai" data-section="ai">ИИ</a>
-      <a href="#economics" data-section="economics">Эффект</a>
+      <a href="#catalog" data-section="catalog">Модули</a>
     </nav>
     <div class="site-nav__cta">
       <a class="btn btn--ghost-light" href="#demo">Смотреть демо</a>
-      <a class="btn btn--accent" href="#economics">Экономический эффект</a>
+      <a class="btn btn--accent" href="#ai">ИИ-аналитика</a>
     </div>
   </header>
 
@@ -42,7 +42,7 @@
           </div>
         </div>
         <div class="hero__visual reveal reveal-delay-1">
-          <img src="assets/screens/hero-demo.gif" width="1600" height="1000" alt="Демонстрация: сводный дашборд, статус оплаты, анализ РВР" loading="eager">
+          <img src="assets/screens/ai-chat.png" width="1440" height="1100" alt="Чат с AI: SQL-запросы и графики по данным мониторинга" loading="eager">
         </div>
       </div>
     </div>
@@ -56,8 +56,8 @@
         <div class="metric-cell__label">Регистраторов в мониторинге</div>
       </div>
       <div class="metric-cell">
-        <div class="metric-cell__value"><span data-count="15" data-suffix="+" data-duration="1400">0</span></div>
-        <div class="metric-cell__label">Отчётов и дашбордов</div>
+        <div class="metric-cell__value"><span data-count="16" data-suffix="+" data-duration="1400">0</span></div>
+        <div class="metric-cell__label">Модулей и отчётов</div>
       </div>
     </div>
   </section>
@@ -286,7 +286,7 @@
               <img src="assets/screens/payments.png" alt="Отчёт «Статус оплаты»" loading="lazy">
             </div>
             <div class="demo-panel" data-demo-panel="rvr">
-              <img src="assets/screens/report-rvr.png" alt="Анализ повторных РВР с AI-вердиктами" loading="lazy">
+              <iframe src="demo/rvr.html" title="Интерактивный отчёт повторных РВР" loading="lazy"></iframe>
             </div>
             <div class="demo-panel" data-demo-panel="chat">
               <img src="assets/screens/ai-chat.png" alt="Чат с базой данных" loading="lazy">
@@ -313,7 +313,7 @@
             <h3 style="margin-top:0.75rem">CMDB → опрос по API → актуальный реестр</h3>
             <p>Данные из <strong>CMDB</strong>, затем опрос по API: что <strong>убрать</strong> из реестра и что <strong>добавить</strong>. Архитектура поддерживает <strong>Dahua, Hikvision, iFlow</strong> и др.</p>
             <div class="panel-shot">
-              <img src="assets/screens/report-rvr.png" alt="Пример аналитического отчёта платформы" loading="lazy">
+              <img src="assets/screens/dashboard-summary.png" alt="Сводный дашборд: объекты и категории мониторинга" loading="lazy">
             </div>
           </article>
         </div>
@@ -362,7 +362,7 @@
       <header class="section-head reveal">
         <div class="section-index mono"><span>05</span> <span>/ Инновационность · LLM</span></div>
         <h2>Искусственный интеллект в ядре аналитики</h2>
-        <p class="lead">LLM для анализа повторных РВР и чата с базой данных. Запросы к модели отправляются пакетами в JSON, ответы парсятся и включаются в отчёты.</p>
+        <p class="lead">LLM подсвечивает возможные повторные РВР и отвечает на вопросы к базе данных. Финальное решение — за инспектором: в отчёте можно раскрыть тексты заявок и проверить гипотезы вручную.</p>
       </header>
 
       <div class="grid-12 reveal">
@@ -370,16 +370,16 @@
           <div class="panel">
             <span class="feature-block__badge feature-block__badge--ai">LLM · Анализ РВР</span>
             <h3 style="margin-top:0.75rem">Анализ повторных РВР</h3>
-            <p>LLM анализирует тексты заявок, присваивает вердикты и формирует <strong>свод проблем на объектах</strong>.</p>
+            <p>Модель читает тексты заявок Naumen, присваивает вердикт и формирует <strong>свод проблем на объекте</strong>. Это подсказка, а не приговор — цифры в матрице кликабельны.</p>
             <div class="verdict-row">
-              <span class="verdict verdict--confirmed">confirmed</span>
-              <span class="verdict verdict--suspect">suspect</span>
-              <span class="verdict verdict--possible">possible</span>
-              <span class="verdict verdict--none">none</span>
+              <span class="verdict verdict--confirmed">Повтор</span>
+              <span class="verdict verdict--suspect">Подозрение</span>
+              <span class="verdict verdict--possible">Возможен</span>
+              <span class="verdict verdict--none">Нет повтора</span>
             </div>
             <ul class="feature-list" style="margin-top:1rem">
-              <li>Запросы чанками в JSON → парсинг ответа</li>
-              <li>Экспорт XLSX и email с AI-вердиктами</li>
+              <li>Нажмите на число в ячейке САПС/СКУД/ТСВ — развернутся тексты заявок</li>
+              <li>Экспорт XLSX и HTML, рассылка на почту</li>
             </ul>
           </div>
         </div>
@@ -395,6 +395,19 @@
             </ul>
           </div>
         </div>
+      </div>
+
+      <div class="demo-frame reveal" style="margin-top:2rem">
+        <div class="demo-frame__bar">
+          <span class="demo-frame__dot demo-frame__dot--r"></span>
+          <span class="demo-frame__dot demo-frame__dot--y"></span>
+          <span class="demo-frame__dot demo-frame__dot--g"></span>
+          <span class="demo-frame__title">rvr-repeat / export.html · interactive · клик по цифре в ячейке</span>
+        </div>
+        <div class="demo-frame__body demo-frame__body--tall">
+          <iframe src="demo/rvr.html" title="Демо: анализ повторных РВР с раскрытием заявок" loading="lazy"></iframe>
+        </div>
+        <p class="demo-frame__caption">AI только подсвечивает возможные проблемы (вердикт и цвет строки). Нажмите на число повторов по виду системы — откроются формулировки заявок для глубокого ручного анализа.</p>
       </div>
 
       <div class="feature-block reveal" style="margin-top:2rem;border:none">
@@ -419,48 +432,41 @@
       <header class="section-head reveal">
         <div class="section-index mono"><span>06</span> <span>/ Каталог отчётов</span></div>
         <h2>Полный реестр модулей платформы</h2>
-        <p class="lead">15+ отчётов и дашбордов. Новые отчёты добавляются оперативно — достаточно импортировать данные из нужной АС.</p>
+        <p class="lead">Структура совпадает с боковым меню приложения: мониторинг, аналитика, импорт данных и настройки.</p>
       </header>
       <div class="catalog reveal" role="list">
-        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-01</span><span class="catalog-row__name">Сводный дашборд</span><span class="catalog-row__desc">ТСВ, СКУД и биотерминалы на одном экране</span></div>
-        <div class="catalog-row" role="listitem"><span class="catalog-row__id">RPT-02</span><span class="catalog-row__name">Объекты / Регистраторы / Каналы</span><span class="catalog-row__desc">Drill-down: объект → NVR → камера</span></div>
-        <div class="catalog-row" role="listitem"><span class="catalog-row__id">RPT-06</span><span class="catalog-row__name">Отчёт об ошибках</span><span class="catalog-row__desc">HTML-экспорт, email-вложение — см. демо выше</span></div>
-        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-07</span><span class="catalog-row__name">Статус оплаты</span><span class="catalog-row__desc">Модернизация и РВР — контроль СТК</span></div>
-        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-08</span><span class="catalog-row__name">Анализ повторных РВР</span><span class="catalog-row__desc">AI-свод проблем, подсветка объектов</span></div>
-        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__id">RPT-13</span><span class="catalog-row__name">Чат с AI</span><span class="catalog-row__desc">SQL-agent, графики, read-only</span></div>
-        <div class="catalog-row catalog-row--future" role="listitem"><span class="catalog-row__id">RPT-15</span><span class="catalog-row__name">Прогноз бюджета</span><span class="catalog-row__desc">В разработке</span></div>
+        <div class="catalog-group" role="presentation">Мониторинг</div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Сводка</span><span class="catalog-row__desc">Матрица объектов: ТСВ, СКУД, биотерминалы, категории «светофора»</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">ТСВ</span><span class="catalog-row__desc">Регистраторы и каналы: drill-down по объектам, опрос SUNAPI</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">СКУД</span><span class="catalog-row__desc">Контроллеры Бастион: ping-доступность и статус</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Биотерминалы</span><span class="catalog-row__desc">PocketKey: ping и группировка по объектам</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Отчёт об ошибках</span><span class="catalog-row__desc">HTML-экспорт и email-вложение по всем системам ТСО</span></div>
+
+        <div class="catalog-group" role="presentation">Аналитика</div>
+        <div class="catalog-row catalog-row--future" role="listitem"><span class="catalog-row__name">Бюджет</span><span class="catalog-row__desc">Прогноз расходов — в разработке</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Арсенал</span><span class="catalog-row__desc">Паспорта АС Арсенал: системы, производители, drill-down</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Регистраторы по времени</span><span class="catalog-row__desc">Возраст NVR по дате производства, тренды</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Диски по времени</span><span class="catalog-row__desc">Наработка HDD, износ, drill-down по объектам</span></div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Устройства на объекте</span><span class="catalog-row__desc">CMDB vs реальный опрос, ping «зомби»-устройств</span></div>
+        <div class="catalog-row catalog-row--future" role="listitem"><span class="catalog-row__name">Smartview</span><span class="catalog-row__desc">Интеграция с Smartview — заглушка</span></div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Статус оплаты</span><span class="catalog-row__desc">Заявки Портала Поставщика: модернизация и РВР, графики по СТК</span></div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Повторные РВР</span><span class="catalog-row__desc">Группировка заявок, AI-вердикты, раскрытие текстов по клику</span></div>
+        <div class="catalog-row catalog-row--highlight" role="listitem"><span class="catalog-row__name">Чат с AI</span><span class="catalog-row__desc">SQL-agent, графики ECharts, read-only доступ к БД</span></div>
+
+        <div class="catalog-group" role="presentation">Данные</div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Исходные данные</span><span class="catalog-row__desc">Импорт CMDB, заявок ПП, Naumen, паспортов Арсенал</span></div>
+
+        <div class="catalog-group" role="presentation">Администрирование</div>
+        <div class="catalog-row" role="listitem"><span class="catalog-row__name">Настройки</span><span class="catalog-row__desc">Пороги мониторинга, LLM, SMTP, учётные данные, исключения</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 07 ЭКОНОМИЧЕСКИЙ ЭФФЕКТ -->
-  <section class="section--paper-dark" id="economics">
-    <div class="wrap">
-      <header class="section-head section-head--offset reveal">
-        <div class="section-index mono"><span>07</span> <span>/ Экономический эффект</span></div>
-        <h2>Совокупный эффект для банка</h2>
-        <p class="lead">Расчёт на масштабе парка 4000+ камер. Значения — заглушки для подстановки актуальных цифр региона.</p>
-      </header>
-      <div class="econ-grid reveal">
-        <div class="econ-cell"><div class="econ-cell__value"><span data-count="42" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Экономия труда<br><small class="mono">120 ч/год × 350 чел.</small></div></div>
-        <div class="econ-cell"><div class="econ-cell__value"><span data-count="28" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Сокращение повторных РВР<br><small class="mono">−15% от 186 млн ₽/год</small></div></div>
-        <div class="econ-cell"><div class="econ-cell__value"><span data-count="18" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Предотвращённые простои</div></div>
-        <div class="econ-cell"><div class="econ-cell__value"><span data-count="8" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">5 систем → 1 платформа</div></div>
-        <div class="econ-cell"><div class="econ-cell__value"><span data-count="6" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Контроль архива при расследованиях</div></div>
-        <div class="econ-cell"><div class="econ-cell__value"><span data-count="5" data-suffix=" млн ₽" data-editable="true">0</span></div><div class="econ-cell__label">Оптимизация замены HDD/NVR</div></div>
-      </div>
-      <div class="econ-total reveal">
-        <div class="econ-total__value"><span data-count="107" data-suffix=" млн ₽" data-duration="2000" data-editable="true">0</span></div>
-        <div class="econ-total__label">Совокупный годовой экономический эффект</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 08 СРОКИ -->
+  <!-- 07 СРОКИ -->
   <section id="timeline">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>08</span> <span>/ Сроки</span></div>
+        <div class="section-index mono"><span>07</span> <span>/ Сроки</span></div>
         <h2>От MVP к федеральному масштабу</h2>
       </header>
       <div class="timeline reveal">
@@ -472,11 +478,11 @@
     </div>
   </section>
 
-  <!-- 09 РАЗВИТИЕ -->
+  <!-- 08 РАЗВИТИЕ -->
   <section class="section--dark" id="roadmap">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>09</span> <span>/ Развитие</span></div>
+        <div class="section-index mono"><span>08</span> <span>/ Развитие</span></div>
         <h2>Что дальше</h2>
       </header>
       <div class="roadmap-list reveal">
@@ -496,7 +502,7 @@
           <div class="resource-grid">
             <div class="resource-card"><h3>Кадровые</h3><ul><li>1 разработчик Python (0.5 FTE)</li><li>1 аналитик ТСО (0.25 FTE)</li></ul></div>
             <div class="resource-card"><h3>Технические</h3><ul><li>Сервер Linux 4 CPU / 8 GB</li><li>Доступ к API LLM</li><li>SMTP для email</li></ul></div>
-            <div class="resource-card"><h3>Финансовые</h3><ul><li>MVP реализован — CAPEX минимален</li><li>ROI &gt; 100× при эффекте 107 млн ₽</li></ul></div>
+            <div class="resource-card"><h3>Финансовые</h3><ul><li>MVP реализован — CAPEX минимален</li><li>Развёртывание на одном сервере Linux</li></ul></div>
           </div>
         </div>
       </details>

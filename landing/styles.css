@@ -614,6 +614,19 @@ section.section--paper-dark { background: var(--paper-dark); }
   background: #fff;
 }
 
+.demo-frame__body--tall iframe {
+  height: min(88vh, 960px);
+}
+
+.demo-frame__caption {
+  margin: 0;
+  padding: 0.75rem 1rem 1rem;
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
 .demo-panel { display: none; }
 .demo-panel.is-active { display: block; }
 
@@ -836,11 +849,22 @@ section.section--paper-dark { background: var(--paper-dark); }
 
 .catalog-row {
   display: grid;
-  grid-template-columns: 5rem 1fr 2.5fr;
+  grid-template-columns: minmax(9rem, 1.1fr) 2.4fr;
   gap: 1rem;
   padding: 0.85rem 1.25rem;
   border-bottom: 1px solid var(--line);
   align-items: baseline;
+}
+
+.catalog-group {
+  padding: 0.55rem 1.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: var(--paper-warm);
+  border-bottom: 1px solid var(--line);
 }
 
 .catalog-row:last-child { border-bottom: none; }
@@ -859,7 +883,11 @@ section.section--paper-dark { background: var(--paper-dark); }
 .catalog-row__name { font-weight: 600; font-size: 0.95rem; }
 .catalog-row__desc { font-size: 0.875rem; color: var(--ink-muted); }
 .catalog-row--highlight { background: var(--teal-soft); }
-.catalog-row--future { opacity: 0.75; }
+.section--dark .demo-frame__caption {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
 
 /* Economics */
 .econ-grid {

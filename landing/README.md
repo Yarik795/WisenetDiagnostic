@@ -59,7 +59,7 @@ python ../scripts/generate_landing_assets.py
 | `assets/screens/dashboard-summary.svg` | `/objects` или сводка | Сводный дашборд с объектами и светофором |
 | `assets/screens/payments.svg` | `/payments` | Отчёт «Статус оплаты», вкладки Модернизация/РВР |
 | `assets/screens/report-rvr.svg` | `/rvr-repeat` | Анализ повторных РВР с AI-вердиктами и подсветкой |
-| `assets/screens/ai-chat.svg` | `/ai-chat` | Чат с вопросом, SQL и графиком |
+| `assets/screens/ai-chat.svg` | `/ai-chat` | Чат с вопросом, SQL и графиком (рекомендуется для hero) |
 | `assets/screens/arsenal.svg` | `/arsenal` | Дашборд АС Арсенал (опционально) |
 | `assets/screens/forecast.svg` | — | Прогноз бюджета (после реализации) |
 
@@ -69,13 +69,9 @@ python ../scripts/generate_landing_assets.py
 2. Положите файл в `assets/screens/` с тем же именем, но расширением `.png`.
 3. В `index.html` замените `.svg` на `.png` в соответствующем `<img src="...">`.
 
-## Редактирование цифр экономического эффекта
+## Редактирование цифр на лендинге
 
-В секции `#economics` значения с атрибутом `data-editable="true"` — заглушки. Измените `data-count` у нужных `<span>`:
-
-```html
-<span data-count="107" data-suffix=" млн ₽" data-editable="true">0</span>
-```
+Секция экономического эффекта удалена. Актуальные метрики — в полосе под hero (`data-count` на `<span>`).
 
 ## Структура файлов
 

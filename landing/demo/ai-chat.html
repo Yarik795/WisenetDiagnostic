@@ -66,11 +66,11 @@ table.data th{background:#0d1119;color:var(--text-muted);font-size:10px;text-tra
       <p>Всего в системе <strong>978</strong> регистраторов. Подавляющее большинство работает в нормальном режиме, но есть <strong>73</strong> устройства с проблемами (warn + error).</p>
       <div class="chart-wrap">
         <div class="chart-title">health_status по регистраторам</div>
-        <svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Круговая диаграмма health_status">
-          <path d="M 160 40 A 80 80 0 1 1 45.2 175.6 L 87.1 141.4 A 40 40 0 1 0 160 80 Z" fill="#22c55e"/>
-          <path d="M 45.2 175.6 A 80 80 0 0 1 155.8 39.5 L 157.9 79.7 A 40 40 0 0 0 87.1 141.4 Z" fill="#ef4444"/>
-          <path d="M 155.8 39.5 A 80 80 0 0 1 160 40 L 160 80 A 40 40 0 0 0 157.9 79.7 Z" fill="#eab308"/>
-          <text x="160" y="200" text-anchor="middle" fill="#8b95a8" font-size="11">ok 94,5% · error 5,5% · warn 2,1%</text>
+        <svg xmlns="http://www.w3.org/2000/svg" width="320" height="260" viewBox="0 0 320 260" role="img" aria-label="Круговая диаграмма health_status">
+          <path d="M 160 40 A 80 80 0 1 1 123.84 48.64 L 141.92 84.32 A 40 40 0 1 0 160 80 Z" fill="#22c55e"/>
+          <path d="M 123.84 48.64 A 80 80 0 0 1 149.75 40.66 L 154.87 80.33 A 40 40 0 0 0 141.92 84.32 Z" fill="#ef4444"/>
+          <path d="M 149.75 40.66 A 80 80 0 0 1 160 40 L 160 80 A 40 40 0 0 0 154.87 80.33 Z" fill="#eab308"/>
+          <text x="160" y="232" text-anchor="middle" fill="#8b95a8" font-size="11">ok 94,5% · error 5,5% · warn 2,1%</text>
         </svg>
         <span class="btn-dl">Скачать PNG</span>
       </div>
@@ -85,41 +85,41 @@ table.data th{background:#0d1119;color:var(--text-muted);font-size:10px;text-tra
       <div class="sql">SELECT health_status, COUNT(*) AS count FROM recorder_metrics GROUP BY health_status ORDER BY count DESC</div>
       <div class="msg-meta">15.07.2026 09:54</div>
     </div>
-    <div class="msg msg--user">Сделай столбчатый график: количество систем по типам (ТСВ, СКУД, СОУЭ и т.д.) из arsenal_systems, только где present=1.</div>
+    <div class="msg msg--user">Сделай столбчатый график: количество систем по типам (ТСВ, СКУД, СОУЭ и т.д.) из АС Арсенал.</div>
     <div class="msg msg--ai">
-      <p><strong>График готов!</strong> Распределение систем по типам (всего <strong>8996</strong> активных, present=1):</p>
+      <p><strong>График готов!</strong> Распределение систем по типам (всего <strong>10&nbsp;309</strong> активных):</p>
       <div class="chart-wrap">
         <div class="chart-title">Системы по типам (АС Арсенал)</div>
         <svg xmlns="http://www.w3.org/2000/svg" width="520" height="260" viewBox="0 0 520 260" role="img" aria-label="Столбчатый график систем">
-          <text x="8" y="20" fill="#5c6678" font-size="10">6000</text>
+          <text x="8" y="28" fill="#5c6678" font-size="10">6273</text>
           <line x1="40" y1="24" x2="500" y2="24" stroke="#2a3348"/>
-          <text x="8" y="100" fill="#5c6678" font-size="10">3000</text>
-          <line x1="40" y1="104" x2="500" y2="104" stroke="#2a3348"/>
-          <text x="8" y="180" fill="#5c6678" font-size="10">1000</text>
-          <line x1="40" y1="184" x2="500" y2="184" stroke="#2a3348"/>
-          <rect x="48" y="32" width="56" height="168" fill="#3b82f6" rx="3"/>
-          <text x="76" y="218" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 76 218)">СОТС</text>
-          <rect x="120" y="148" width="56" height="52" fill="#3b82f6" rx="3"/>
-          <text x="148" y="218" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 148 218)">САЗ</text>
-          <rect x="192" y="162" width="56" height="38" fill="#3b82f6" rx="3"/>
-          <text x="220" y="218" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 220 218)">ТСВ</text>
-          <rect x="264" y="168" width="56" height="32" fill="#3b82f6" rx="3"/>
-          <text x="292" y="218" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 292 218)">САПС</text>
-          <rect x="336" y="170" width="56" height="30" fill="#3b82f6" rx="3"/>
-          <text x="364" y="218" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 364 218)">СКУД</text>
-          <rect x="408" y="171" width="56" height="29" fill="#3b82f6" rx="3"/>
-          <text x="436" y="218" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 436 218)">СОУЭ</text>
+          <text x="8" y="88" fill="#5c6678" font-size="10">4182</text>
+          <line x1="40" y1="84" x2="500" y2="84" stroke="#2a3348"/>
+          <text x="8" y="148" fill="#5c6678" font-size="10">2091</text>
+          <line x1="40" y1="144" x2="500" y2="144" stroke="#2a3348"/>
+          <rect x="44" y="24" width="69" height="180" fill="#3b82f6" rx="3"/>
+          <text x="78" y="252" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 78 252)">СОТС</text>
+          <rect x="121" y="136.3" width="69" height="67.7" fill="#3b82f6" rx="3"/>
+          <text x="155" y="252" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 155 252)">ТСВ</text>
+          <rect x="197" y="163.3" width="69" height="40.7" fill="#3b82f6" rx="3"/>
+          <text x="232" y="252" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 232 252)">СОУЭ</text>
+          <rect x="274" y="199.9" width="69" height="4.1" fill="#3b82f6" rx="3"/>
+          <text x="308" y="252" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 308 252)">САЗ</text>
+          <rect x="351" y="202.2" width="69" height="1.8" fill="#3b82f6" rx="3"/>
+          <text x="385" y="252" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 385 252)">СКУД</text>
+          <rect x="427" y="202.5" width="69" height="1.5" fill="#3b82f6" rx="3"/>
+          <text x="462" y="252" text-anchor="middle" fill="#8b95a8" font-size="9" transform="rotate(-20 462 252)">САПС</text>
         </svg>
       </div>
       <table class="data">
         <thead><tr><th>system_type</th><th>count</th></tr></thead>
         <tbody>
-          <tr><td>СОТС</td><td>5963</td></tr>
-          <tr><td>САЗ</td><td>1100</td></tr>
-          <tr><td>ТСВ</td><td>672</td></tr>
-          <tr><td>САПС</td><td>437</td></tr>
-          <tr><td>СКУД</td><td>421</td></tr>
-          <tr><td>СОУЭ</td><td>403</td></tr>
+          <tr><td>СОТС</td><td>6273</td></tr>
+          <tr><td>ТСВ</td><td>2359</td></tr>
+          <tr><td>СОУЭ</td><td>1417</td></tr>
+          <tr><td>САЗ</td><td>143</td></tr>
+          <tr><td>СКУД</td><td>64</td></tr>
+          <tr><td>САПС</td><td>53</td></tr>
         </tbody>
       </table>
       <div class="sql">SELECT system_type, COUNT(*) AS count FROM arsenal_systems WHERE present=1 GROUP BY system_type ORDER BY count DESC</div>
