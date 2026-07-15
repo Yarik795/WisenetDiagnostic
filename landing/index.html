@@ -52,8 +52,8 @@
         <div class="metric-cell__label">Интегрированных систем</div>
       </div>
       <div class="metric-cell">
-        <div class="metric-cell__value"><span data-count="4000" data-suffix="+" data-duration="1600">0</span></div>
-        <div class="metric-cell__label">Точек видеонаблюдения в парке</div>
+        <div class="metric-cell__value"><span data-count="978" data-duration="1600">0</span></div>
+        <div class="metric-cell__label">Регистраторов в мониторинге</div>
       </div>
       <div class="metric-cell">
         <div class="metric-cell__value"><span data-count="15" data-suffix="+" data-duration="1400">0</span></div>
@@ -201,38 +201,53 @@
             </tr>
           </thead>
           <tbody>
-            <tr data-traffic-row="vsp-north">
-              <td>ВСП Северный</td>
+            <tr data-traffic-row="vavilova-199">
+              <td>г. Москва, ул Вавилова, д. 199/33</td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
-              <td><span class="tl tl--ok">✓</span></td>
-              <td><span class="tl tl--err">1</span></td>
-              <td><span class="tl tl--ok">✓</span></td>
-            </tr>
-            <tr data-traffic-row="vsp-center">
-              <td>ВСП Центральный</td>
+              <td><span class="tl tl--warn">7</span></td>
               <td><span class="tl tl--warn">2</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
+            </tr>
+            <tr data-traffic-row="fedosino">
+              <td>г.Москва, ул. Федосьино, д.4, корп.19/16</td>
               <td><span class="tl tl--warn">1</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--warn">1</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--err">4</span></td>
+              <td><span class="tl tl--warn">2</span></td>
+              <td><span class="tl tl--err">1</span></td>
+              <td><span class="tl tl--warn">2</span></td>
+            </tr>
+            <tr data-traffic-row="novodanilovskaya">
+              <td>г. Москва, Новоданиловская наб., 105/12</td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--warn">3</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
             </tr>
-            <tr data-traffic-row="office-tb">
-              <td>Офис ТБ</td>
-              <td><span class="tl tl--err">3</span></td>
+            <tr data-traffic-row="oruzheiny">
+              <td>г. Москва, Оружейный переулок, д. 41</td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--warn">1</span></td>
-              <td><span class="tl tl--err">1</span></td>
-              <td><span class="tl tl--err">1</span></td>
               <td><span class="tl tl--ok">✓</span></td>
-              <td><span class="tl tl--err">1</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
+              <td><span class="tl tl--ok">✓</span></td>
             </tr>
-            <tr data-traffic-row="kic">
-              <td>КИЦ наб. реки</td>
+            <tr data-traffic-row="poklonnaya">
+              <td>ул. Поклонная, д. 3, корп.1 (А)</td>
+              <td><span class="tl tl--warn">1</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
               <td><span class="tl tl--ok">✓</span></td>
@@ -249,7 +264,7 @@
       <!-- Tab gallery -->
       <div class="demo-stage reveal" data-demo-gallery id="product-tour">
         <h3 style="margin-bottom:0.5rem">Интерактивный обзор модулей</h3>
-        <p style="color:var(--ink-muted);margin-bottom:1rem">Переключайте вкладки — скриншоты сгенерированы из демо-данных платформы</p>
+        <p style="color:var(--ink-muted);margin-bottom:1rem">Переключайте вкладки — скриншоты с реальных данных платформы (15.07.2026)</p>
         <div class="demo-tabs" role="tablist">
           <button type="button" class="demo-tab is-active" data-demo-tab="summary" role="tab">Сводный дашборд</button>
           <button type="button" class="demo-tab" data-demo-tab="payments" role="tab">Статус оплаты</button>
@@ -325,7 +340,7 @@
       <header class="section-head reveal">
         <div class="section-index mono"><span>04</span> <span>/ Живое демо</span></div>
         <h2>Отчёт об ошибках — можно прокрутить и изучить</h2>
-        <p class="lead">Встроен HTML-экспорт, сформированный платформой на демо-данных: HDD, температура, NTP, архив, СКУД. При отклонениях такой отчёт уходит на почту автоматически.</p>
+        <p class="lead">Встроен HTML-экспорт на данных июля 2026: 45 проблем (14 критичных), объекты Москвы, Федосьино с отказами архива и СКУД. При отклонениях такой отчёт уходит на почту автоматически.</p>
       </header>
       <div class="demo-frame reveal">
         <div class="demo-frame__bar">
@@ -374,8 +389,8 @@
             <h3 style="margin-top:0.75rem">Чат с базой данных</h3>
             <p>Вопросы на естественном языке → безопасные SQL (SELECT) → таблицы и графики ECharts.</p>
             <ul class="feature-list">
-              <li>«Сколько объектов с неисправными каналами в этом месяце?»</li>
-              <li>«Топ-10 объектов по повторным РВР»</li>
+              <li>«Построй круговую диаграмму health_status по регистраторам»</li>
+              <li>«Сделай столбчатый график систем по типам из АС Арсенал»</li>
               <li>Read-only — запись в БД невозможна</li>
             </ul>
           </div>

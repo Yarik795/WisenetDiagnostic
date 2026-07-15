@@ -3,649 +3,132 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Отчёт о неисправностях ТСО — Wisenet Диагностика</title>
+  <title>Отчёт о неисправностях ТСО</title>
   <style>
-    :root {
-      --bg: #f5f6f8;
-      --card: #fff;
-      --text: #1a1d21;
-      --muted: #5c6370;
-      --border: #d8dce3;
-      --warn: #b8860b;
-      --error: #c0392b;
-      --ok-link: #1a5fb4;
-    }
-    * { box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      margin: 0;
-      padding: 24px;
-      line-height: 1.45;
-    }
-    .report {
-      max-width: 1200px;
-      margin: 0 auto;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 24px 28px;
-    }
-    h1 { margin: 0 0 8px; font-size: 1.5rem; }
-    h2 {
-      margin: 28px 0 12px;
-      font-size: 1.1rem;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 6px;
-    }
-    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
-    .meta p { margin: 4px 0; }
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-      margin: 16px 0 8px;
-    }
-    .summary-card {
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 14px;
-      background: #fafbfc;
-    }
-    .summary-card .value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      line-height: 1.2;
-    }
-    .summary-card .label {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-    .systems-list {
-      margin: 12px 0 0;
-      padding: 0;
-      list-style: none;
-      font-size: 0.9rem;
-    }
-    .systems-list li {
-      padding: 4px 0;
-      border-bottom: 1px dashed var(--border);
-    }
-    .systems-list li:last-child { border-bottom: none; }
-    .systems-list .ok-note { color: var(--muted); font-style: italic; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.875rem;
-      margin-bottom: 8px;
-    }
-    th, td {
-      border: 1px solid var(--border);
-      padding: 8px 10px;
-      text-align: left;
-      vertical-align: top;
-    }
-    th { background: #eef0f4; font-weight: 600; }
-    tr.row--warn { background: #fffdf5; }
-    tr.row--error { background: #fff5f5; }
-    tr.row--offline { background: #fff5f5; }
-    a.device-link {
-      color: var(--ok-link);
-      font-weight: 500;
-      text-decoration: none;
-    }
-    a.device-link:hover { text-decoration: underline; }
-    .host-hint {
-      display: block;
-      color: var(--muted);
-      font-size: 0.8rem;
-      font-family: ui-monospace, monospace;
-      margin-top: 2px;
-    }
-    .section-meta {
-      color: var(--muted);
-      font-size: 0.85rem;
-      margin: -4px 0 10px;
-    }
-    .empty {
-      padding: 24px;
-      text-align: center;
-      color: var(--muted);
-    }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      font-weight: 500;
-    }
-    .badge--warn { background: #fef3cd; color: var(--warn); }
-    .badge--error { background: #fde8e8; color: var(--error); }
-    .badge--offline { background: #fde8e8; color: var(--error); }
-    .badge--unknown { background: #eee; color: var(--muted); }
-    footer {
-      margin-top: 20px;
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
+    :root{--bg:#f5f6f8;--card:#fff;--text:#1a1d21;--muted:#5c6370;--border:#d8dce3;--warn:#b8860b;--error:#c0392b;--ok-link:#1a5fb4}
+    *{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px;line-height:1.45}
+    .report{max-width:1200px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:24px 28px}
+    h1{margin:0 0 8px;font-size:1.5rem}h2{margin:24px 0 10px;font-size:1.05rem;border-bottom:1px solid var(--border);padding-bottom:6px}
+    .meta{color:var(--muted);font-size:.9rem;margin-bottom:14px}
+    .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:14px 0}
+    .summary-card{border:1px solid var(--border);border-radius:6px;padding:12px;background:#fafbfc}
+    .summary-card .value{font-size:1.45rem;font-weight:700}.summary-card .label{font-size:.78rem;color:var(--muted);margin-top:4px}
+    .systems-list{margin:10px 0 0;padding:0;list-style:none;font-size:.9rem}
+    .systems-list li{padding:4px 0;border-bottom:1px dashed var(--border)}
+    .ok-note{color:var(--muted);font-style:italic}
+    table{width:100%;border-collapse:collapse;font-size:.82rem;margin-bottom:8px}
+    th,td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
+    th{background:#eef0f4;font-weight:600}
+    tr.row--error{background:#fff5f5}tr.row--warn{background:#fffdf5}
+    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:500}
+    .badge--error{background:#fde8e8;color:var(--error)}.badge--warn{background:#fef3cd;color:var(--warn)}
+    .host-hint{display:block;color:var(--muted);font-size:.75rem;font-family:ui-monospace,monospace}
+    a.device-link{color:var(--ok-link);font-weight:500;text-decoration:none}
+    .section-meta{color:var(--muted);font-size:.82rem;margin:-4px 0 8px}
+    footer{margin-top:16px;font-size:.78rem;color:var(--muted)}
   </style>
 </head>
 <body>
-  <article class="report">
-    <h1>Отчёт о неисправностях ТСО</h1>
-    <div class="meta">
-      <p><strong>Сформирован:</strong> 10.07.2026 12:00:00</p>
-    </div>
+<article class="report">
+  <h1>Отчёт о неисправностях ТСО</h1>
+  <div class="meta"><p><strong>Сформирован:</strong> 15.07.2026 08:24:25</p></div>
+  <div class="summary-grid">
+    <div class="summary-card"><div class="value">45</div><div class="label">всего проблем</div></div>
+    <div class="summary-card"><div class="value">14</div><div class="label">критичных</div></div>
+    <div class="summary-card"><div class="value">31</div><div class="label">предупреждений</div></div>
+  </div>
+  <p><strong>По системам:</strong></p>
+  <ul class="systems-list">
+    <li><strong>ТСВ:</strong> 43 проблемы</li>
+    <li><strong>СКУД:</strong> 2 проблемы</li>
+    <li><strong>Биотерминалы:</strong> <span class="ok-note">без замечаний</span></li>
+    <li><strong>СОТС:</strong> <span class="ok-note">без замечаний</span></li>
+  </ul>
 
-    <div class="summary-grid">
-      <div class="summary-card">
-        <div class="value">12</div>
-        <div class="label">всего проблем</div>
-      </div>
-      <div class="summary-card">
-        <div class="value">5</div>
-        <div class="label">критичных</div>
-      </div>
-      <div class="summary-card">
-        <div class="value">7</div>
-        <div class="label">предупреждений</div>
-      </div>
-    </div>
+  <h2>ТСВ</h2>
+  <p class="section-meta">Критичных: 12, предупреждений: 31 (показаны ключевые строки)</p>
+  <table>
+    <thead>
+      <tr><th>Объект</th><th>Устройство</th><th>Категория</th><th>Статус</th><th>Причина</th><th>В проблеме</th></tr>
+    </thead>
+    <tbody>
+      <tr class="row--error">
+        <td>г. Москва, Новоданиловская наб., 10</td>
+        <td><a class="device-link" href="#">XRN-2010R</a><span class="host-hint">10.89.188.193</span></td>
+        <td>Аппаратные события</td><td><span class="badge badge--error">Неисправно</span></td>
+        <td>Сбой батареи</td><td>25 сут.</td>
+      </tr>
+      <tr class="row--error">
+        <td>г. Москва, ул Вавилова, д. 19</td>
+        <td><a class="device-link" href="#">HRX-1634</a><span class="host-hint">10.89.7.152</span></td>
+        <td>Глубина архива</td><td><span class="badge badge--error">Неисправно</span></td>
+        <td>Запись/архив недоступны (ошибка API записи)</td><td>20 сут.</td>
+      </tr>
+      <tr class="row--error">
+        <td>г.Москва, ул. Арбат, д.33/12, к.1</td>
+        <td><a class="device-link" href="#">HRX-1620</a><span class="host-hint">100.111.10.136</span></td>
+        <td>Доступность (SUNAPI)</td><td><span class="badge badge--error">Неисправно</span></td>
+        <td>Превышено время ожидания</td><td>4 сут. 23 ч.</td>
+      </tr>
+      <tr class="row--error">
+        <td>г.Москва, ул. Федосьино ул., д.4, корп.1</td>
+        <td><a class="device-link" href="#">XRN-3210B2</a><span class="host-hint">100.111.8.241</span></td>
+        <td>Время / NTP</td><td><span class="badge badge--error">Неисправно</span></td>
+        <td>Глубина архива 0.9 сут. (критично &lt; 7 сут.)</td><td>&lt; 1 ч.</td>
+      </tr>
+      <tr class="row--error">
+        <td>г.Москва, ул. Федосьино ул., д.4, корп.1</td>
+        <td><a class="device-link" href="#">XRN-3210B2</a><span class="host-hint">100.111.8.243</span></td>
+        <td>Глубина архива</td><td><span class="badge badge--error">Неисправно</span></td>
+        <td>Глубина архива 0.9 сут. (критично &lt; 7 сут.)</td><td>&lt; 1 ч.</td>
+      </tr>
+      <tr class="row--error">
+        <td>ул. Поклонная, д. 3 , корп.1 (А)</td>
+        <td><a class="device-link" href="#">XRN-3210B2</a><span class="host-hint">10.89.200.197</span></td>
+        <td>Доступность (SUNAPI)</td><td><span class="badge badge--error">Неисправно</span></td>
+        <td>HTTP 503</td><td>1 сут. 15 ч.</td>
+      </tr>
+      <tr class="row--warn">
+        <td>г. Москва, Оружейный переулок, д. 41</td>
+        <td><a class="device-link" href="#">XRN-6410B2</a><span class="host-hint">10.89.208.139</span></td>
+        <td>Температура HDD</td><td><span class="badge badge--warn">Деградация</span></td>
+        <td>Температура HDD 40 °C (предупреждение ≥ 40 °C)</td><td>2 сут.</td>
+      </tr>
+      <tr class="row--warn">
+        <td>г.Москва, ул. Брянская, д.8</td>
+        <td><a class="device-link" href="#">HRX-1620</a><span class="host-hint">100.111.12.5</span></td>
+        <td>Температура HDD</td><td><span class="badge badge--warn">Деградация</span></td>
+        <td>Температура HDD 42 °C</td><td>42 сут.</td>
+      </tr>
+      <tr class="row--warn">
+        <td>г. Москва, ул Вавилова, д. 23</td>
+        <td><a class="device-link" href="#">HRX-1634</a><span class="host-hint">10.89.215.209</span></td>
+        <td>Каналы</td><td><span class="badge badge--warn">Деградация</span></td>
+        <td>Неисправно 3 из 18 каналов</td><td>29 сут.</td>
+      </tr>
+    </tbody>
+  </table>
 
-    <p><strong>По системам:</strong></p>
-    <ul class="systems-list">
-      
-      
-      <li>
-        <strong>ТСВ:</strong>
-        
-        10 проблем
-        
-      </li>
-      
-      
-      <li>
-        <strong>СКУД:</strong>
-        
-        1 проблема
-        
-      </li>
-      
-      
-      <li>
-        <strong>Биотерминалы:</strong>
-        
-        1 проблема
-        
-      </li>
-      
-      
-      <li>
-        <strong>СОТС:</strong>
-        
-        <span class="ok-note">без замечаний</span>
-        
-      </li>
-      
-    </ul>
-
-    
-    
-    <h2 id="section-tsv">ТСВ</h2>
-    <p class="section-meta">
-      Критичных: 3,
-      предупреждений: 7
-    </p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Объект</th>
-            <th>Устройство</th>
-            
-            <th>Категория</th>
-            
-            <th>Статус</th>
-            
-            <th>Значение</th>
-            
-            <th>Причина</th>
-            <th>В проблеме</th>
-            <th>Последний опрос</th>
-          </tr>
-        </thead>
-        <tbody>
-          
-          <tr class="row--error">
-            <td>Офис ТБ · Красный пр., 45</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.103"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: HRX-1634"
-              >HRX-1634</a>
-              <span class="host-hint">10.12.40.103</span>
-              
-            </td>
-            
-            <td>Глубина архива</td>
-            
-            <td>
-              <span class="badge badge--error">Неисправно</span>
-            </td>
-            
-            <td>4.0-6.0 сут. (норма 30)</td>
-            
-            <td>Запись/архив недоступны: накопитель отсутствует</td>
-            <td title="С 09.07.2026 18:00 (18 ч.)">
-              
-              18 ч.
-              <span class="host-hint">с 09.07.2026 18:00</span>
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--error">
-            <td>Офис ТБ · Красный пр., 45</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.103"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: HRX-1634"
-              >HRX-1634</a>
-              <span class="host-hint">10.12.40.103</span>
-              
-            </td>
-            
-            <td>Накопители</td>
-            
-            <td>
-              <span class="badge badge--error">Неисправно</span>
-            </td>
-            
-            <td>—</td>
-            
-            <td>Накопитель отсутствует</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--error">
-            <td>Офис ТБ · Красный пр., 45</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.103"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: HRX-1634"
-              >HRX-1634</a>
-              <span class="host-hint">10.12.40.103</span>
-              
-            </td>
-            
-            <td>Температура HDD</td>
-            
-            <td>
-              <span class="badge badge--error">Неисправно</span>
-            </td>
-            
-            <td>63.0 °C</td>
-            
-            <td>Температура HDD 63 °C (критично ≥ 60 °C)</td>
-            <td title="С 08.07.2026 07:00 (2 сут. 5 ч.)">
-              
-              2 сут. 5 ч.
-              <span class="host-hint">с 08.07.2026 07:00</span>
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>ВСП Северный · ул. Ленина, 12</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.101"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: XRN-3210B2"
-              >XRN-3210B2</a>
-              <span class="host-hint">10.12.40.101</span>
-              
-            </td>
-            
-            <td>Глубина архива</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>28.0-31.0 сут. (норма 30)</td>
-            
-            <td>Глубина архива 28.0-31.0 сут. (норма 30 сут.)</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>ВСП Центральный · пр. Мира, 8</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.102"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: XRN-6410B2"
-              >XRN-6410B2</a>
-              <span class="host-hint">10.12.40.102</span>
-              
-            </td>
-            
-            <td>Время / NTP</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>Δt 1 мин 35 с · NTP Success</td>
-            
-            <td>—</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>ВСП Центральный · пр. Мира, 8</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.102"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: XRN-6410B2"
-              >XRN-6410B2</a>
-              <span class="host-hint">10.12.40.102</span>
-              
-            </td>
-            
-            <td>Глубина архива</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>28.0-31.0 сут. (норма 30)</td>
-            
-            <td>Глубина архива 28.0-31.0 сут. (норма 30 сут.)</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>ВСП Центральный · пр. Мира, 8</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.102"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: XRN-6410B2"
-              >XRN-6410B2</a>
-              <span class="host-hint">10.12.40.102</span>
-              
-            </td>
-            
-            <td>Каналы</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>16 кан. · 14 ок · 2 дегр.</td>
-            
-            <td>Деградация на 2 из 16 каналов</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>ВСП Центральный · пр. Мира, 8</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.102"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: XRN-6410B2"
-              >XRN-6410B2</a>
-              <span class="host-hint">10.12.40.102</span>
-              
-            </td>
-            
-            <td>Температура HDD</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>56.0 °C</td>
-            
-            <td>Температура HDD 56 °C (предупреждение ≥ 50 °C)</td>
-            <td title="С 08.07.2026 07:00 (2 сут. 5 ч.)">
-              
-              2 сут. 5 ч.
-              <span class="host-hint">с 08.07.2026 07:00</span>
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>КИЦ · наб. реки, 3</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.104"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: XRN-2010"
-              >XRN-2010</a>
-              <span class="host-hint">10.12.40.104</span>
-              
-            </td>
-            
-            <td>Глубина архива</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>28.0-31.0 сут. (норма 30)</td>
-            
-            <td>Глубина архива 28.0-31.0 сут. (норма 30 сут.)</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-          <tr class="row--warn">
-            <td>Офис ТБ · Красный пр., 45</td>
-            <td>
-              
-              <a
-                class="device-link"
-                href="http://10.12.40.103"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Открыть web-интерфейс NVR: HRX-1634"
-              >HRX-1634</a>
-              <span class="host-hint">10.12.40.103</span>
-              
-            </td>
-            
-            <td>Каналы</td>
-            
-            <td>
-              <span class="badge badge--warn">Деградация</span>
-            </td>
-            
-            <td>16 кан. · 10 ок · 3 отказ · 5 ?</td>
-            
-            <td>Неисправно 3 из 16 каналов</td>
-            <td title="">
-              
-              —
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-        </tbody>
-      </table>
-    </div>
-    
-    <h2 id="section-skud">СКУД</h2>
-    <p class="section-meta">
-      Критичных: 1,
-      предупреждений: 0
-    </p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Объект</th>
-            <th>Устройство</th>
-            
-            <th>Статус</th>
-            
-            <th>Причина</th>
-            <th>В проблеме</th>
-            <th>Последний опрос</th>
-          </tr>
-        </thead>
-        <tbody>
-          
-          <tr class="row--error">
-            <td>ВСП Северный · ул. Ленина, 12</td>
-            <td>
-              
-              СКУД-контроллер
-              <span class="host-hint">10.12.50.11</span>
-              
-            </td>
-            
-            <td>
-              <span class="badge badge--error">Неисправно</span>
-            </td>
-            
-            <td>отсутствует Ping</td>
-            <td title="С 09.07.2026 12:00 (1 сут.)">
-              
-              1 сут.
-              <span class="host-hint">с 09.07.2026 12:00</span>
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-        </tbody>
-      </table>
-    </div>
-    
-    <h2 id="section-bio">Биотерминалы</h2>
-    <p class="section-meta">
-      Критичных: 1,
-      предупреждений: 0
-    </p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Объект</th>
-            <th>Устройство</th>
-            
-            <th>Статус</th>
-            
-            <th>Причина</th>
-            <th>В проблеме</th>
-            <th>Последний опрос</th>
-          </tr>
-        </thead>
-        <tbody>
-          
-          <tr class="row--error">
-            <td>Офис ТБ · Красный пр., 45</td>
-            <td>
-              
-              BioEntry-W2
-              <span class="host-hint">10.12.50.22</span>
-              
-            </td>
-            
-            <td>
-              <span class="badge badge--error">Неисправно</span>
-            </td>
-            
-            <td>отсутствует Ping</td>
-            <td title="С 09.07.2026 12:00 (1 сут.)">
-              
-              1 сут.
-              <span class="host-hint">с 09.07.2026 12:00</span>
-              
-            </td>
-            <td>2026-07-10 12:00</td>
-          </tr>
-          
-        </tbody>
-      </table>
-    </div>
-    
-    
-
-    <footer>
-      Wisenet Диагностика · сводный HTML-отчёт по всем системам ТСО (вкладка «Сводка»).
-    </footer>
-  </article>
+  <h2>СКУД</h2>
+  <p class="section-meta">Критичных: 2, предупреждений: 0</p>
+  <table>
+    <thead><tr><th>Объект</th><th>Устройство</th><th>Статус</th><th>Причина</th><th>В проблеме</th></tr></thead>
+    <tbody>
+      <tr class="row--error">
+        <td>г.Москва, ул. Федосьино ул., д.4, корп.1</td>
+        <td>NG1000 <span class="host-hint">100.111.46.69</span></td>
+        <td><span class="badge badge--error">Неисправно</span></td>
+        <td>отсутствует Ping</td><td>1 сут. 21 ч.</td>
+      </tr>
+      <tr class="row--error">
+        <td>г.Москва, ул. Федосьино ул., д.4, корп.1</td>
+        <td>NG1000 <span class="host-hint">100.111.46.67</span></td>
+        <td><span class="badge badge--error">Неисправно</span></td>
+        <td>отсутствует Ping</td><td>1 сут. 21 ч.</td>
+      </tr>
+    </tbody>
+  </table>
+  <footer>Wisenet Диагностика · сводный HTML-отчёт по всем системам ТСО</footer>
+</article>
 </body>
 </html>

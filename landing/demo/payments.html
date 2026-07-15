@@ -1,55 +1,103 @@
-<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
-    <title>Статус оплаты</title><style>
-:root{--bg-base:#0b0e14;--bg-surface:#12161f;--bg-elevated:#1a2030;--border-subtle:#2a3348;--text-primary:#e8ecf4;--text-secondary:#8b95a8;--text-muted:#5c6678;--accent:#3b82f6;--status-ok:#22c55e;--status-warn:#eab308;--status-error:#ef4444;--status-unknown:#6b7280;--sidebar-width:220px}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--text-primary);background:var(--bg-base)}
-.app-shell{display:flex;min-height:100vh}.sidebar{width:var(--sidebar-width);background:#0d1119;border-right:1px solid var(--border-subtle);padding:20px 12px}
-.sidebar-brand{font-size:14px;font-weight:600;margin-bottom:20px;padding:0 8px}.sidebar-nav a{display:block;padding:8px 10px;border-radius:8px;color:var(--text-secondary);text-decoration:none;margin-bottom:2px}
-.sidebar-nav a.active,.sidebar-nav a:hover{background:var(--bg-elevated);color:var(--text-primary)}
-.main{flex:1;padding:24px 28px;overflow:auto}.page-title{font-size:22px;font-weight:600;margin:0 0 4px}.page-lead{color:var(--text-secondary);margin:0 0 20px}
-.card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:10px;padding:16px 18px;margin-bottom:16px}
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-.kpi{padding:14px;border:1px solid var(--border-subtle);border-radius:8px;background:var(--bg-elevated)}
-.kpi .v{font-size:22px;font-weight:700}.kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
-.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:8px 10px;border-bottom:1px solid var(--border-subtle);text-align:left}
-th{color:var(--text-muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.matrix-col-narrow{width:52px;text-align:center}
-.matrix-cell{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600}
-.matrix-cell--ok{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3);color:var(--status-ok)}
-.matrix-cell--warn{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.35);color:var(--status-warn)}
-.matrix-cell--error,.matrix-cell--offline{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:var(--status-error)}
-.object-matrix-object a{color:var(--text-primary);text-decoration:none;font-weight:500}
-.object-matrix-problems{font-size:11px;color:var(--text-muted);display:block}
-.chart-bar{height:8px;border-radius:4px;background:var(--bg-elevated);overflow:hidden;margin-top:6px}
-.chart-bar span{display:block;height:100%;border-radius:4px}
-.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
-.badge--confirmed{background:rgba(239,68,68,.15);color:#f87171}
-.badge--suspect{background:rgba(234,179,8,.15);color:#fbbf24}
-.chat{display:flex;flex-direction:column;gap:12px}.bubble{padding:12px 14px;border-radius:10px;max-width:85%}
-.bubble--user{align-self:flex-end;background:#1e3a5f;border:1px solid #2563eb}
-.bubble--ai{align-self:flex-start;background:var(--bg-elevated);border:1px solid var(--border-subtle)}
-.sql{font-family:ui-monospace,monospace;font-size:12px;background:#0d1119;padding:10px;border-radius:6px;color:#93c5fd;margin-top:8px}
-</style></head><body>
-    <div class="app-shell"><aside class="sidebar"><div class="sidebar-brand">Дашборд руководителя ТСО</div>
-    <nav class="sidebar-nav"><a href='#' class=''>Сводка</a><a href='#' class=''>Объекты</a><a href='#' class='active'>Статус оплаты</a><a href='#' class=''>Повторные РВР</a><a href='#' class=''>Чат с AI</a></nav></aside>
-    <main class="main"><h1 class="page-title">Статус оплаты</h1>
-    <p class="page-lead">Заявки Портала Поставщика: модернизация и РВР</p>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Статус оплаты</title>
+<style>
+:root{--bg-base:#0b0e14;--bg-surface:#12161f;--bg-elevated:#1a2030;--border-subtle:#2a3348;--text-primary:#e8ecf4;--text-secondary:#8b95a8;--text-muted:#5c6678;--accent:#3b82f6;--sidebar-width:200px}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;line-height:1.45;color:var(--text-primary);background:var(--bg-base)}
+.app-shell{display:flex;min-height:100vh}.sidebar{width:var(--sidebar-width);background:#0d1119;border-right:1px solid var(--border-subtle);padding:14px 8px;font-size:11px}
+.sidebar-brand{font-size:12px;font-weight:600;margin-bottom:12px;padding:0 6px}
+.sidebar-nav a{display:block;padding:5px 8px;border-radius:6px;color:var(--text-secondary);text-decoration:none}
+.sidebar-nav a.active{background:var(--bg-elevated);color:var(--text-primary)}
+.main{flex:1;padding:20px 24px;overflow:auto}
+.page-title{font-size:18px;font-weight:600;margin:0 0 4px}.page-lead{color:var(--text-secondary);margin:0 0 14px;font-size:12px}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tab{padding:6px 14px;border-radius:6px;border:1px solid var(--border-subtle);font-size:12px;color:var(--text-secondary)}
+.tab.active{background:var(--bg-elevated);color:var(--text-primary);border-color:#3b82f6}
+.section{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.section h2{margin:0 0 10px;font-size:14px}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.kpi{padding:10px 12px;border:1px solid var(--border-subtle);border-radius:8px;background:var(--bg-elevated)}
+.kpi .v{font-size:18px;font-weight:700}.kpi .l{font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-top:2px}
+.charts{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+.chart-box{border:1px solid var(--border-subtle);border-radius:8px;padding:10px;background:var(--bg-elevated)}
+.chart-box h3{margin:0 0 8px;font-size:11px;color:var(--text-muted);font-weight:500}
+.party{font-size:11px;padding:3px 0;border-bottom:1px dashed var(--border-subtle)}
+.party:last-child{border:none}
+.dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="sidebar-brand">Дашборд руководителя ТСО</div>
+  <nav class="sidebar-nav"><a href="#">Сводка</a><a href="#" class="active">Статус оплаты</a><a href="#">Повторные РВР</a><a href="#">Чат с AI</a></nav>
+</aside>
+<main class="main">
+  <h1 class="page-title">Статус оплаты</h1>
+  <p class="page-lead">Отчёт по статусу согласования заявок на модернизацию и РВР · обновлён 13.07.2026 19:20 · 51 930 строк в исходном файле</p>
+  <div class="tabs"><span class="tab active">Модернизация</span><span class="tab">РВР</span></div>
+
+  <div class="section">
+    <h2>АЗ МБ: статус согласования</h2>
     <div class="kpi-row">
-      <div class="kpi"><div class="v">186</div><div class="l">Заявок всего</div></div>
-      <div class="kpi"><div class="v" style="color:var(--status-warn)">23</div><div class="l">Ожидают оплаты</div></div>
-      <div class="kpi"><div class="v" style="color:var(--status-error)">7</div><div class="l">Просрочено</div></div>
-      <div class="kpi"><div class="v" style="color:var(--status-ok)">156</div><div class="l">Оплачено</div></div>
+      <div class="kpi"><div class="v">4</div><div class="l">Заявок в работе</div></div>
+      <div class="kpi"><div class="v">648 404 ₽</div><div class="l">Общая сумма</div></div>
+      <div class="kpi"><div class="v">2026-06</div><div class="l">Самая «старая»</div></div>
+      <div class="kpi"><div class="v">596 593 ₽</div><div class="l">Крупнейшая</div></div>
     </div>
-    <section class="card"><h2 style="margin:0 0 12px;font-size:15px">Модернизация · по ТБ</h2>
-    <div style="display:grid;gap:10px">
-      <div><span style="color:var(--text-secondary)">ТБ Москва</span><div class="chart-bar"><span style="width:72%;background:var(--status-ok)"></span></div></div>
-      <div><span style="color:var(--text-secondary)">ТБ Северо-Запад</span><div class="chart-bar"><span style="width:58%;background:var(--status-warn)"></span></div></div>
-      <div><span style="color:var(--text-secondary)">ТБ Урал</span><div class="chart-bar"><span style="width:91%;background:var(--status-ok)"></span></div></div>
-    </div></section>
-  <section class="card"><h2 style="margin:0 0 12px;font-size:15px">РВР · повторные заявки</h2>
-  <table><thead><tr><th>Объект</th><th>Заявок</th><th>Статус оплаты</th></tr></thead>
-  <tbody>
-    <tr><td>ВСП Центральный</td><td>4</td><td><span class="badge badge--suspect">На согласовании</span></td></tr>
-    <tr><td>Офис ТБ</td><td>2</td><td><span class="badge badge--confirmed">Просрочено</span></td></tr>
-    <tr><td>КИЦ наб. реки</td><td>1</td><td>Оплачено</td></tr>
-  </tbody></table></section></main></div></body></html>
+    <div class="charts">
+      <div class="chart-box"><h3>Неоплаченная сумма по месяцам</h3>
+        <svg width="100%" height="120" viewBox="0 0 400 120"><rect x="20" y="40" width="40" height="70" fill="#34d399" rx="2"/><rect x="70" y="55" width="40" height="55" fill="#34d399" rx="2"/><rect x="120" y="10" width="40" height="100" fill="#34d399" rx="2"/><rect x="170" y="75" width="40" height="35" fill="#38bdf8" rx="2"/><rect x="220" y="70" width="40" height="40" fill="#38bdf8" rx="2"/><rect x="270" y="68" width="40" height="42" fill="#c084fc" rx="2"/><rect x="320" y="95" width="40" height="15" fill="#fb923c" rx="2"/></svg>
+      </div>
+      <div class="chart-box"><h3>Где деньги сейчас</h3>
+        <div class="party"><span class="dot" style="background:#38bdf8"></span><strong>Войнов:</strong> 596 593 ₽ (92%)</div>
+        <div class="party"><span class="dot" style="background:#c084fc"></span><strong>СТК:</strong> 40 303 ₽ (6%)</div>
+        <div class="party"><span class="dot" style="background:#fb923c"></span><strong>ЦС:</strong> 11 508 ₽ (2%)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>АЗ ЦА: статус согласования</h2>
+    <div class="kpi-row">
+      <div class="kpi"><div class="v">14</div><div class="l">Заявок в работе</div></div>
+      <div class="kpi"><div class="v">66,3 млн ₽</div><div class="l">Общая сумма</div></div>
+      <div class="kpi"><div class="v">2026-05</div><div class="l">Самая «старая»</div></div>
+      <div class="kpi"><div class="v">29,8 млн ₽</div><div class="l">Крупнейшая</div></div>
+    </div>
+    <div class="charts">
+      <div class="chart-box"><h3>Неоплаченная сумма по месяцам</h3>
+        <svg width="100%" height="120" viewBox="0 0 400 120"><rect x="120" y="15" width="40" height="95" fill="#34d399" rx="2"/><rect x="220" y="25" width="40" height="85" fill="#c084fc" rx="2"/><rect x="270" y="45" width="40" height="65" fill="#c084fc" rx="2"/></svg>
+      </div>
+      <div class="chart-box"><h3>Где деньги сейчас</h3>
+        <div class="party"><span class="dot" style="background:#c084fc"></span><strong>СТК:</strong> 65,4 млн ₽ (99%)</div>
+        <div class="party"><span class="dot" style="background:#f87171"></span><strong>Семенова:</strong> 891 тыс ₽ (1%)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>ВСП и УС МБ: статус согласования</h2>
+    <div class="kpi-row">
+      <div class="kpi"><div class="v">107</div><div class="l">Заявок в работе</div></div>
+      <div class="kpi"><div class="v">27,5 млн ₽</div><div class="l">Общая сумма</div></div>
+      <div class="kpi"><div class="v">2026-04</div><div class="l">Самая «старая»</div></div>
+      <div class="kpi"><div class="v">5,8 млн ₽</div><div class="l">Крупнейшая</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>ЦА (К32 и пр.): статус согласования</h2>
+    <div class="kpi-row">
+      <div class="kpi"><div class="v">12</div><div class="l">Заявок в работе</div></div>
+      <div class="kpi"><div class="v">46,1 млн ₽</div><div class="l">Общая сумма</div></div>
+      <div class="kpi"><div class="v">2026-03</div><div class="l">Самая «старая»</div></div>
+      <div class="kpi"><div class="v">35,2 млн ₽</div><div class="l">Крупнейшая</div></div>
+    </div>
+  </div>
+</main>
+</div>
+</body>
+</html>

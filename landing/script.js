@@ -149,10 +149,11 @@
   var trafficRows = document.querySelectorAll("[data-traffic-row]");
   var trafficDetail = document.getElementById("traffic-detail");
   var trafficData = {
-    "vsp-north": "ВСП Северный: СКУД offline 1 сут. · NVR в норме · биотерминал OK",
-    "vsp-center": "ВСП Центральный: температура HDD 56°C (warn) · 2 канала warn · СКУД OK",
-    "office-tb": "Офис ТБ: архив 4 сут. (error) · HDD 63°C · 3 канала error · биотерминал offline",
-    "kic": "КИЦ: все категории в норме · 8 каналов OK"
+    "vavilova-199": "Вавилова 199/33: 9 NVR · 7 предупреждений по HW · 2 по архиву · СКУД и био в норме",
+    "fedosino": "Федосьино 4к19/16: 9 NVR · 4 критичных по архиву (0.9 сут.) · 2 СКУД offline · NTP и HDD с отклонениями",
+    "novodanilovskaya": "Новоданиловская 105/12: 5 NVR · 3 предупреждения по архиву (12 сут.) · остальное в норме",
+    "oruzheiny": "Оружейный 41: 3 NVR · температура HDD 40°C · остальные категории OK",
+    "poklonnaya": "Поклонная 3к1: 2 NVR · 1 недоступен по SUNAPI (HTTP 503) · остальное в норме"
   };
 
   function selectTrafficRow(row) {

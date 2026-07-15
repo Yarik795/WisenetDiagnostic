@@ -32,16 +32,20 @@ python -m http.server 8080
 
 ## Генерация скриншотов и демо-HTML
 
-Скриншоты (`assets/screens/*.png`) и интерактивные демо (`demo/*.html`) генерируются из кода платформы:
+Скриншоты (`assets/screens/*.png`) и интерактивные демо (`demo/*.html`) — **ручные HTML на реальных данных** (июль 2026). Пересборка PNG:
 
 ```bash
 cd backend
-pip install pydantic jinja2 playwright
+pip install playwright
 python -m playwright install chromium
-python ../scripts/generate_landing_assets.py
+python ../scripts/screenshot_landing_demo.py
 ```
 
-Скрипт строит демо-данные (CMDB → API → матрица объектов), рендерит HTML-отчёт об ошибках и снимает PNG/GIF через Playwright.
+Полная перегенерация из кода платформы (устаревший путь с фиктивными объектами):
+
+```bash
+python ../scripts/generate_landing_assets.py
+```
 
 ## Деплой на Netlify
 
