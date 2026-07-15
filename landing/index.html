@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Дашборд руководителя ТСО — единая платформа мониторинга ТСВ, СКУД и биотерминалов с ИИ-аналитикой.">
-  <title>Дашборд руководителя ТСО — Лучшие в Сбере 2026</title>
+  <meta name="description" content="Дашборд сотрудника ТСО — единая платформа мониторинга ТСВ, СКУД и биотерминалов с ИИ-аналитикой.">
+  <title>Дашборд сотрудника ТСО — Лучшие в Сбере 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Literata:opsz,wght@7..72,500;7..72,600;7..72,700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 <body>
 
   <header class="site-nav" aria-label="Навигация">
-    <div class="site-nav__brand">Дашборд руководителя ТСО</div>
+    <div class="site-nav__brand">Дашборд сотрудника ТСО</div>
     <nav class="site-nav__links" aria-label="Разделы">
       <a href="#description" data-section="description">Описание</a>
       <a href="#problem" data-section="problem">Проблема</a>
@@ -21,6 +21,7 @@
       <a href="#demo" data-section="demo">Демо</a>
       <a href="#ai" data-section="ai">ИИ</a>
       <a href="#catalog" data-section="catalog">Модули</a>
+      <a href="#economics" data-section="economics">Эффект</a>
     </nav>
     <div class="site-nav__cta">
       <a class="btn btn--ghost-light" href="#demo">Смотреть демо</a>
@@ -34,8 +35,8 @@
       <div class="hero__top">
         <div class="reveal">
           <span class="hero__tag">Disrupt-проект · LLM + единая аналитика</span>
-          <h1>Дашборд<br>руководителя ТСО</h1>
-          <p class="hero__subtitle">Единая платформа, которая на одном дашборде показывает состояние ТСВ, СКУД и биотерминалов, аккумулирует данные из пяти корпоративных систем и строит отчёты, отражающие реальное положение технических средств охраны на объектах и статус взаимодействия с СТК.</p>
+          <h1>Дашборд<br>сотрудника ТСО</h1>
+          <p class="hero__subtitle">Единая платформа аккумулирует данные из пяти корпоративных систем и на едином дашборде отображает состояние оборудования и статус взаимодействия с СТК.</p>
           <div class="hero__actions">
             <a class="btn btn--accent" href="#demo">Смотреть демо отчёта</a>
             <a class="btn" href="#solution">Как это работает</a>
@@ -124,7 +125,7 @@
         </div>
         <div class="before-after__card before-after__card--after">
           <div class="before-after__label before-after__label--good">Process TO BE</div>
-          <p style="font-weight:600;margin-bottom:0.75rem">Один дашборд руководителя ТСО</p>
+          <p style="font-weight:600;margin-bottom:0.75rem">Один дашборд сотрудника ТСО</p>
           <div class="unified-bar">
             <div class="unified-pill unified-pill--ok">ТСВ ✓</div>
             <div class="unified-pill unified-pill--warn">СКУД !</div>
@@ -327,9 +328,9 @@
           <span class="screen-frame__dot screen-frame__dot--r"></span>
           <span class="screen-frame__dot screen-frame__dot--y"></span>
           <span class="screen-frame__dot screen-frame__dot--g"></span>
-          <span class="screen-frame__title">dashboard / summary · full width</span>
+          <span class="screen-frame__title">monitoring / nvr-status · full width</span>
         </div>
-        <img src="assets/screens/hero-dashboard.png" alt="Сводный дашборд руководителя ТСО на широком экране" loading="lazy">
+        <img src="demo/nvrstatus.png" alt="Статус регистраторов: мониторинг NVR по объектам и категориям" loading="lazy">
       </figure>
     </div>
   </section>
@@ -461,11 +462,56 @@
     </div>
   </section>
 
-  <!-- 07 СРОКИ -->
+  <!-- 07 ЭКОНОМИЧЕСКИЙ ЭФФЕКТ -->
+  <section class="section--paper-dark" id="economics">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <div class="section-index mono"><span>07</span> <span>/ Экономический эффект</span></div>
+        <h2>Снижение затрат на РВР за счёт проактивной диагностики</h2>
+        <p class="lead">По данным по всем территориальным банкам: лимитные заявки РВР обходятся в <strong>48&nbsp;500 тыс. ₽ в месяц</strong>, сверхлимитные — ещё около <strong>50% от лимита</strong>. Предварительный анализ с участием AI показывает, что глубокая диагностика и снижение повторных РВР и отказов оборудования позволяют сократить объём выездов на <strong>30–50%</strong>.</p>
+      </header>
+
+      <div class="econ-grid reveal">
+        <div class="econ-cell">
+          <div class="econ-cell__value"><span data-count="48.5" data-decimals="1" data-suffix=" млн ₽">0</span></div>
+          <div class="econ-cell__label">Лимитные заявки РВР в месяц (все ТБ)</div>
+        </div>
+        <div class="econ-cell">
+          <div class="econ-cell__value"><span data-count="24.3" data-decimals="1" data-suffix=" млн ₽">0</span></div>
+          <div class="econ-cell__label">Сверхлимитные заявки (~50% от лимита)</div>
+        </div>
+        <div class="econ-cell">
+          <div class="econ-cell__value"><span data-count="72.8" data-decimals="1" data-suffix=" млн ₽">0</span></div>
+          <div class="econ-cell__label">Совокупные затраты на РВР в месяц</div>
+        </div>
+        <div class="econ-cell">
+          <div class="econ-cell__value">30–50%</div>
+          <div class="econ-cell__label">Ожидаемое снижение числа РВР (AI-оценка)</div>
+        </div>
+        <div class="econ-cell">
+          <div class="econ-cell__value"><span data-count="21.8" data-decimals="1" data-suffix=" млн ₽">0</span></div>
+          <div class="econ-cell__label">Экономия в месяц при снижении на 30%</div>
+        </div>
+        <div class="econ-cell">
+          <div class="econ-cell__value"><span data-count="36.4" data-decimals="1" data-suffix=" млн ₽">0</span></div>
+          <div class="econ-cell__label">Экономия в месяц при снижении на 50%</div>
+        </div>
+      </div>
+
+      <div class="econ-total reveal">
+        <div class="econ-total__value">262–437 млн ₽</div>
+        <div class="econ-total__label">Потенциальная годовая экономия при снижении РВР на 30–50%</div>
+      </div>
+
+      <p class="econ-note reveal">Оценка основана на фактических лимитах и сверхлимите по РВР и предварительном AI-анализе повторных заявок. Финальный эффект зависит от скорости внедрения проактивного мониторинга и качества устранения корневых причин на объектах.</p>
+    </div>
+  </section>
+
+  <!-- 08 СРОКИ -->
   <section id="timeline">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>07</span> <span>/ Сроки</span></div>
+        <div class="section-index mono"><span>08</span> <span>/ Сроки</span></div>
         <h2>От MVP к федеральному масштабу</h2>
       </header>
       <div class="timeline reveal">
@@ -477,15 +523,16 @@
     </div>
   </section>
 
-  <!-- 08 РАЗВИТИЕ -->
+  <!-- 09 РАЗВИТИЕ -->
   <section class="section--dark" id="roadmap">
     <div class="wrap">
       <header class="section-head reveal">
-        <div class="section-index mono"><span>08</span> <span>/ Развитие</span></div>
+        <div class="section-index mono"><span>09</span> <span>/ Развитие</span></div>
         <h2>Что дальше</h2>
       </header>
       <div class="roadmap-list reveal">
         <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--wip">В работе</span><div><h3>Прогноз бюджета</h3><p>ML на истории заявок ПП и Naumen.</p></div></div>
+        <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span><div><h3>Интеграция отчётов SberDocs</h3><p>Контроль статуса выполнения поручений и рассмотрения обращений. Команда SberDocs планирует сформировать соответствующие отчёты до конца 2026 года.</p></div></div>
         <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span><div><h3>СОТС и АС SberGuard</h3><p>Расширение мониторинга и выгрузок в единую базу.</p></div></div>
         <div class="roadmap-item"><span class="roadmap-item__status roadmap-item__status--planned">Запланировано</span><div><h3>ML-аналитика качества видео</h3><p>Деградация изображения до жалоб.</p></div></div>
       </div>
@@ -511,13 +558,8 @@
   <footer class="footer">
     <div class="wrap footer__grid">
       <div>
-        <p class="mono" style="color:rgba(255,255,255,0.35);margin-bottom:0.5rem">Дашборд руководителя ТСО</p>
+        <p class="mono" style="color:rgba(255,255,255,0.35);margin-bottom:0.5rem">Дашборд сотрудника ТСО</p>
         <p style="margin:0;color:rgba(255,255,255,0.7)">Конкурс «Лучшие в Сбере» 2026 · Номинация «Лучший в Безопасности. Проект года»</p>
-        <div class="footer__criteria">
-          <span class="criteria-chip">Эффект <strong>50%</strong></span>
-          <span class="criteria-chip">Актуальность <strong>25%</strong></span>
-          <span class="criteria-chip">Инновационность <strong>25%</strong></span>
-        </div>
       </div>
       <div><a class="btn btn--ghost-light" href="#top">↑ Наверх</a></div>
     </div>
