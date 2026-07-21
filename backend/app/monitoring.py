@@ -399,6 +399,9 @@ def _upsert_channel_from_poll(
         data_rate=ch.data_rate,
         cpu_usage=ch.cpu_usage,
         poe_status=ch.poe_status,
+        camera_user_id=ch.camera_user_id,
+        camera_http_port=ch.camera_http_port,
+        camera_protocol=ch.camera_protocol,
     )
     state.record_history(
         "channel",

@@ -1216,6 +1216,8 @@ if (!window.__arsenalChartsResizeBound) {
 }
 
 const recorderAgeChartStore = new Map();
+const cameraAgeChartStore = new Map();
+let cameraInventoryPollTimer = null;
 const diskWearChartStore = new Map();
 
 function timelineDistributionBarOption(distribution) {
@@ -1371,6 +1373,199 @@ function initRecorderAgeExportActions(root) {
   });
 }
 
+function disposeCameraAgeCharts(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-camera-age-chart]").forEach((el) => {
+    const chart = echarts.getInstanceByDom(el);
+    if (chart) chart.dispose();
+  });
+  cameraAgeChartStore.clear();
+}
+
+function resolveCameraAgeDashboard(root) {
+  const scope = root || document;
+  let dashboard = null;
+  if (scope instanceof Element && scope.hasAttribute("data-camera-age-dashboard")) {
+    dashboard = scope;
+  } else if (scope instanceof Document || scope instanceof Element) {
+    dashboard = scope.querySelector("[data-camera-age-dashboard]");
+  }
+  if (!dashboard) {
+    dashboard = document.querySelector("[data-camera-age-dashboard]");
+  }
+  if (dashboard && !dashboard.isConnected) {
+    dashboard = document.querySelector("[data-camera-age-dashboard]");
+  }
+  return dashboard;
+}
+
+function collectCameraAgeFilterParams() {
+  const form = document.querySelector("[data-camera-age-filters]");
+  if (!form) return new URLSearchParams();
+  return new URLSearchParams(new FormData(form));
+}
+
+function loadCameraAgeDetail(extraParams) {
+  if (typeof htmx === "undefined") return;
+  const params = collectCameraAgeFilterParams();
+  Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+  const panel = document.getElementById("camera-age-detail-panel");
+  if (panel) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  htmx.ajax("GET", `/cameras-age/partials/detail?${params.toString()}`, {
+    target: "#camera-age-detail-panel",
+    swap: "innerHTML",
+  });
+}
+
+function initCameraAgeCharts(root) {
+  if (typeof echarts === "undefined") return;
+  const dashboard = resolveCameraAgeDashboard(root);
+  if (!dashboard) return;
+
+  disposeCameraAgeCharts(dashboard);
+  const scriptEl = dashboard.querySelector("[data-camera-age-charts]");
+  if (!scriptEl) return;
+
+  let chartData;
+  try {
+    chartData = JSON.parse(scriptEl.textContent || "{}");
+  } catch (err) {
+    console.error("[wisenet] camera-age chart data parse error", err);
+    return;
+  }
+
+  const el = dashboard.querySelector('[data-camera-age-chart="distribution"]');
+  if (!el) return;
+  const distribution = chartData.distribution || {};
+  const chart = echarts.init(el, null, { renderer: "canvas" });
+  chart.setOption(timelineDistributionBarOption(distribution), true);
+  chart.on("click", (params) => {
+    const periodKey =
+      params?.data?.periodKey ||
+      (distribution.keys || [])[params?.dataIndex];
+    if (!periodKey) return;
+    loadCameraAgeDetail({ period: periodKey });
+  });
+  cameraAgeChartStore.set("distribution", chart);
+}
+
+function resizeCameraAgeCharts() {
+  cameraAgeChartStore.forEach((chart) => chart.resize());
+}
+
+function initCameraAgeExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-camera-age-export]").forEach((btn) => {
+    if (btn.dataset.cameraAgeExportBound === "1") return;
+    btn.dataset.cameraAgeExportBound = "1";
+    btn.addEventListener("click", () => {
+      const params = collectCameraAgeFilterParams();
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/cameras-age/export.html?${qs}`
+        : "/cameras-age/export.html";
+    });
+  });
+  scope.querySelectorAll("[data-camera-age-email]").forEach((btn) => {
+    if (btn.dataset.cameraAgeEmailBound === "1") return;
+    btn.dataset.cameraAgeEmailBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const params = collectCameraAgeFilterParams();
+        const res = await fetch("/cameras-age/report/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить отчёт на почту");
+        console.error("[wisenet] camera-age email error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function refreshCameraAgeDashboard() {
+  if (typeof htmx === "undefined") return;
+  const params = collectCameraAgeFilterParams();
+  htmx.ajax("GET", `/cameras-age/partials/dashboard?${params.toString()}`, {
+    target: "#camera-age-dashboard-root",
+    swap: "outerHTML",
+  });
+}
+
+function pollCameraInventoryJob(jobId) {
+  if (!jobId) return;
+  if (cameraInventoryPollTimer) {
+    clearInterval(cameraInventoryPollTimer);
+  }
+  cameraInventoryPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/cameras-age/inventory-jobs/${jobId}`);
+      if (!res.ok) return;
+      const html = await res.text();
+      const panel = document.getElementById("camera-inventory-panel");
+      if (panel) panel.innerHTML = html;
+      if (res.headers.get("HX-Trigger") === "cameraInventoryDone") {
+        clearInterval(cameraInventoryPollTimer);
+        cameraInventoryPollTimer = null;
+        refreshCameraAgeDashboard();
+        showToast("success", "Опрос камер завершён");
+      }
+    } catch (err) {
+      console.error("[wisenet] camera inventory poll error", err);
+    }
+  }, 2000);
+}
+
+function initCameraAgeInventoryActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-camera-age-inventory]").forEach((btn) => {
+    if (btn.dataset.cameraAgeInventoryBound === "1") return;
+    btn.dataset.cameraAgeInventoryBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch("/cameras-age/inventory/start", { method: "POST" });
+        if (!res.ok) {
+          showToast("error", "Не удалось запустить опрос камер");
+          return;
+        }
+        const html = await res.text();
+        const panel = document.getElementById("camera-inventory-panel");
+        if (panel) panel.innerHTML = html;
+        const progressEl = panel?.querySelector("#camera-inventory-progress");
+        const jobId = progressEl?.dataset?.jobId;
+        if (jobId) {
+          pollCameraInventoryJob(jobId);
+        }
+      } catch (err) {
+        showToast("error", "Ошибка запуска опроса камер");
+        console.error("[wisenet] camera inventory start error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  const progressEl = scope.querySelector("#camera-inventory-progress[data-job-id]");
+  if (progressEl?.dataset?.jobId) {
+    pollCameraInventoryJob(progressEl.dataset.jobId);
+  }
+}
+
 function disposeDiskWearCharts(root) {
   const scope = root || document;
   scope.querySelectorAll("[data-disk-wear-chart]").forEach((el) => {
@@ -1475,6 +1670,11 @@ function initDiskWearExportActions(root) {
 if (!window.__recorderAgeChartsResizeBound) {
   window.__recorderAgeChartsResizeBound = true;
   window.addEventListener("resize", resizeRecorderAgeCharts);
+}
+
+if (!window.__cameraAgeChartsResizeBound) {
+  window.__cameraAgeChartsResizeBound = true;
+  window.addEventListener("resize", resizeCameraAgeCharts);
 }
 
 if (!window.__diskWearChartsResizeBound) {
@@ -1840,6 +2040,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initSiteDevicesExportActions();
   initRecorderAgeCharts();
   initRecorderAgeExportActions();
+  initCameraAgeCharts();
+  initCameraAgeExportActions();
+  initCameraAgeInventoryActions();
   initDiskWearCharts();
   initDiskWearExportActions();
   initRvrRepeatActions();
@@ -1874,11 +2077,14 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsCharts(e.detail?.target);
   initArsenalCharts(e.detail?.target);
   initRecorderAgeCharts(e.detail?.target);
+  initCameraAgeCharts(e.detail?.target);
   initDiskWearCharts(e.detail?.target);
   initPaymentsExportActions(e.detail?.target);
   initArsenalExportActions(e.detail?.target);
   initSiteDevicesExportActions(e.detail?.target);
   initRecorderAgeExportActions(e.detail?.target);
+  initCameraAgeExportActions(e.detail?.target);
+  initCameraAgeInventoryActions(e.detail?.target);
   initDiskWearExportActions(e.detail?.target);
   initRvrRepeatActions(e.detail?.target);
   scrollToHighlightedCategory();

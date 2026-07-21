@@ -9,6 +9,7 @@ from .config_store import ConfigStore
 from .logging_config import get_log_file_path, get_logger, setup_logging
 from .ping_jobs import PingJobManager
 from .poll_jobs import PollJobManager
+from .camera_inventory_jobs import CameraInventoryJobManager
 from .report_jobs import ReportJobManager
 from .scheduler import MonitoringScheduler
 from .state_store import StateStore
@@ -28,9 +29,11 @@ async def lifespan(app: FastAPI):
     state_store = get_state_store()
     poll_jobs = PollJobManager()
     ping_jobs = PingJobManager()
+    camera_inventory_jobs = CameraInventoryJobManager()
     report_jobs = ReportJobManager()
     app.state.poll_job_manager = poll_jobs
     app.state.ping_job_manager = ping_jobs
+    app.state.camera_inventory_job_manager = camera_inventory_jobs
     app.state.report_job_manager = report_jobs
     scheduler = MonitoringScheduler(ConfigStore(), state_store, poll_jobs=poll_jobs)
     app.state.scheduler = scheduler

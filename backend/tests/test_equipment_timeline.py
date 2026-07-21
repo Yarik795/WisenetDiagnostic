@@ -7,11 +7,15 @@ from pathlib import Path
 import pytest
 
 from app.models import Recorder
-from app.state_store import RecorderMetricsRow, StateStore
+from app.state_store import ChannelRow, RecorderMetricsRow, StateStore
 from app.ui.equipment_timeline import (
+    CameraWithContext,
     RecorderWithMetrics,
+    aggregate_cameras_by_period,
     aggregate_disks_by_wear,
     aggregate_recorders_by_period,
+    camera_age_detail_rows,
+    camera_age_kpi,
     disk_wear_detail_rows,
     explode_disk_rows,
     normalize_period_filter,
@@ -175,3 +179,79 @@ def test_list_tsv_recorders_with_metrics_filters_skud(tmp_path: Path) -> None:
     items = list_tsv_recorders_with_metrics(store, state)
     assert len(items) == 1
     assert items[0].recorder.id == "nvr-1"
+
+
+def _channel(**kwargs) -> ChannelRow:
+    defaults = dict(
+        id=1,
+        recorder_id="nvr-1",
+        channel_no=0,
+        name="Cam 1",
+        camera_ip="10.0.0.10",
+        camera_model="IPC-HFW1230",
+        source_state="On",
+        health_status="ok",
+        health_reason=None,
+        video_loss=False,
+        last_polled_at=None,
+        manufacturer="dahua",
+        manufacture_date="2020-06",
+        manufacture_date_source="firmware_build",
+        camera_serial="SN1",
+    )
+    defaults.update(kwargs)
+    return ChannelRow(**defaults)
+
+
+def test_aggregate_cameras_by_period_and_kpi() -> None:
+    rec = _recorder()
+    items = [
+        CameraWithContext(_channel(), rec),
+        CameraWithContext(
+            _channel(channel_no=1, camera_ip="10.0.0.11", manufacture_date="2021-03"),
+            rec,
+        ),
+        CameraWithContext(
+            _channel(channel_no=2, camera_ip="10.0.0.12", manufacture_date=None),
+            rec,
+        ),
+    ]
+    chart = aggregate_cameras_by_period(items, grouping="year")
+    assert chart["keys"] == ["2020", "2021"]
+    assert chart["values"] == [1, 1]
+
+    kpi = camera_age_kpi(items)
+    assert kpi["total_cameras"] == 3
+    assert kpi["with_date"] == 2
+    assert kpi["dahua_count"] == 3
+
+    rows = camera_age_detail_rows(items, period="2020", grouping="year")
+    assert len(rows) == 1
+    assert rows[0]["camera_ip"] == "10.0.0.10"
+    assert rows[0]["date_source"] == "сборка прошивки"
+
+
+def test_channels_inventory_columns_migration(tmp_path: Path) -> None:
+    state = StateStore(tmp_path / "monitoring.db")
+    state.init_db()
+    state.upsert_channel(
+        "nvr-1",
+        0,
+        camera_ip="10.0.0.5",
+        camera_user_id="admin",
+        camera_http_port=80,
+        camera_protocol="ONVIF",
+    )
+    state.update_camera_inventory(
+        "nvr-1",
+        0,
+        manufacturer="dahua",
+        camera_serial="ABC",
+        manufacture_date="2020-01",
+        manufacture_date_source="firmware_build",
+    )
+    row = state.get_channel("nvr-1", 0)
+    assert row is not None
+    assert row.camera_user_id == "admin"
+    assert row.manufacturer == "dahua"
+    assert row.manufacture_date == "2020-01"

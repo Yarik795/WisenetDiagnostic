@@ -120,8 +120,17 @@ erDiagram
 | `data_rate` | `REAL` | YES | — | Битрейт потока канала, **Мбит/с** (`DataRate` из SUNAPI). Значение `≤ 0` у активного канала трактуется как «нулевой битрейт» (warn) |
 | `cpu_usage` | `REAL` | YES | — | Нагрузка декодирования на канал, **%** (`CPUUsage` из SUNAPI). Пороги warn/error — `cpu_usage_warn_percent` / `cpu_usage_error_percent` |
 | `poe_status` | `INTEGER` | YES | — | Питание PoE-порта канала: `1` — включено, `0` — выключено, `NULL` — нет данных или модель не поддерживает PoE-статус (`profile.supports_poe_status`) |
+| `camera_user_id` | `TEXT` | YES | — | Логин камеры из `cameraregister` (UserID) |
+| `camera_http_port` | `INTEGER` | YES | — | HTTP-порт камеры из `cameraregister` |
+| `camera_protocol` | `TEXT` | YES | — | Протокол регистрации на NVR (SAMSUNG, ONVIF, …) |
+| `manufacturer` | `TEXT` | YES | — | Бренд с прямого опроса: `dahua`, `hanwha`, `other`, `unknown` |
+| `camera_serial` | `TEXT` | YES | — | Серийный номер с прямого опроса камеры |
+| `manufacture_date` | `TEXT` | YES | — | `YYYY-MM` для отчёта «Камеры по времени» |
+| `manufacture_date_source` | `TEXT` | YES | — | `firmware_build` (Dahua proxy) или `serial_decode` (Hanwha S/N) |
+| `camera_inventory_at` | `TEXT` | YES | — | UTC ISO последнего inventory-опроса |
+| `camera_inventory_error` | `TEXT` | YES | — | Текст ошибки последнего inventory-опроса |
 
-> Поля `archive_*`, `data_rate`, `cpu_usage`, `poe_status` добавлены миграцией `_migrate_schema()`; в старых БД могли отсутствовать до первого `init_db()` после обновления.
+> Поля `archive_*`, `data_rate`, `cpu_usage`, `poe_status`, inventory-поля камеры добавлены миграцией `_migrate_schema()`; в старых БД могли отсутствовать до первого `init_db()` после обновления.
 
 ### 2.3. Ограничения и индексы
 

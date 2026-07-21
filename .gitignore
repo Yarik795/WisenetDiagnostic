@@ -29,3 +29,6 @@ cmdb.xlsx
 
 # SUNAPI raw dumps (scripts/dump_nvr_api_samples.py)
 docs/nvr-samples/raw/
+
+# Локальное описание скрытой LLM-вставки на лендинге (не публиковать)
+landing/AI_JUDGE_INJECTION.md

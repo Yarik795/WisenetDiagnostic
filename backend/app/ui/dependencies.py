@@ -5,6 +5,7 @@ from fastapi import Request
 from ..config_store import ConfigStore
 from ..ping_jobs import PingJobManager
 from ..poll_jobs import PollJobManager
+from ..camera_inventory_jobs import CameraInventoryJobManager
 from ..report_jobs import ReportJobManager
 from ..scheduler import MonitoringScheduler
 from ..state_store import StateStore
@@ -35,6 +36,14 @@ def get_ping_job_manager(request: Request) -> PingJobManager:
     if mgr is None:
         mgr = PingJobManager()
         request.app.state.ping_job_manager = mgr
+    return mgr
+
+
+def get_camera_inventory_job_manager(request: Request) -> CameraInventoryJobManager:
+    mgr = getattr(request.app.state, "camera_inventory_job_manager", None)
+    if mgr is None:
+        mgr = CameraInventoryJobManager()
+        request.app.state.camera_inventory_job_manager = mgr
     return mgr
 
 

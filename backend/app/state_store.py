@@ -31,6 +31,15 @@ class ChannelRow:
     data_rate: Optional[float] = None
     cpu_usage: Optional[float] = None
     poe_status: Optional[bool] = None
+    camera_user_id: Optional[str] = None
+    camera_http_port: Optional[int] = None
+    camera_protocol: Optional[str] = None
+    manufacturer: Optional[str] = None
+    camera_serial: Optional[str] = None
+    manufacture_date: Optional[str] = None
+    manufacture_date_source: Optional[str] = None
+    camera_inventory_at: Optional[datetime] = None
+    camera_inventory_error: Optional[str] = None
 
 
 @dataclass
@@ -723,6 +732,15 @@ class StateStore:
             ("data_rate", "REAL"),       # битрейт потока канала, Мбит/с (DataRate из SUNAPI)
             ("cpu_usage", "REAL"),       # нагрузка декодирования на канал, %
             ("poe_status", "INTEGER"),   # 1=питание PoE-порта включено, 0=выключено, NULL=нет данных/не поддерживается
+            ("camera_user_id", "TEXT"),  # логин камеры из cameraregister (UserID)
+            ("camera_http_port", "INTEGER"),  # HTTP-порт камеры из cameraregister
+            ("camera_protocol", "TEXT"),  # протокол регистрации: SAMSUNG, ONVIF, …
+            ("manufacturer", "TEXT"),  # dahua / hanwha / other / unknown
+            ("camera_serial", "TEXT"),  # серийный номер с прямого опроса камеры
+            ("manufacture_date", "TEXT"),  # YYYY-MM для отчёта «Камеры по времени»
+            ("manufacture_date_source", "TEXT"),  # firmware_build | serial_decode
+            ("camera_inventory_at", "TEXT"),  # UTC ISO последнего inventory-опроса
+            ("camera_inventory_error", "TEXT"),  # ошибка последнего inventory-опроса
         ]
         for name, col_type in channel_additions:
             if name not in channel_columns:
@@ -1246,6 +1264,9 @@ class StateStore:
         data_rate: Optional[float] = None,
         cpu_usage: Optional[float] = None,
         poe_status: Optional[bool] = None,
+        camera_user_id: Optional[str] = None,
+        camera_http_port: Optional[int] = None,
+        camera_protocol: Optional[str] = None,
     ) -> None:
         polled = _iso(last_polled_at)
         with self._connect() as conn:
@@ -1255,8 +1276,9 @@ class StateStore:
                     recorder_id, channel_no, name, camera_ip, camera_model,
                     source_state, health_status, health_reason, video_loss, last_polled_at,
                     archive_start, archive_end, archive_days,
-                    data_rate, cpu_usage, poe_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    data_rate, cpu_usage, poe_status,
+                    camera_user_id, camera_http_port, camera_protocol
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id, channel_no) DO UPDATE SET
                     name=excluded.name,
                     camera_ip=excluded.camera_ip,
@@ -1271,7 +1293,10 @@ class StateStore:
                     archive_days=excluded.archive_days,
                     data_rate=excluded.data_rate,
                     cpu_usage=excluded.cpu_usage,
-                    poe_status=excluded.poe_status
+                    poe_status=excluded.poe_status,
+                    camera_user_id=excluded.camera_user_id,
+                    camera_http_port=excluded.camera_http_port,
+                    camera_protocol=excluded.camera_protocol
                 """,
                 (
                     recorder_id,
@@ -1290,8 +1315,70 @@ class StateStore:
                     data_rate,
                     cpu_usage,
                     _bool_int(poe_status),
+                    camera_user_id,
+                    camera_http_port,
+                    camera_protocol,
                 ),
             )
+
+    def update_camera_inventory(
+        self,
+        recorder_id: str,
+        channel_no: int,
+        *,
+        manufacturer: Optional[str] = None,
+        camera_serial: Optional[str] = None,
+        manufacture_date: Optional[str] = None,
+        manufacture_date_source: Optional[str] = None,
+        camera_model: Optional[str] = None,
+        camera_inventory_at: Optional[datetime] = None,
+        camera_inventory_error: Optional[str] = None,
+    ) -> None:
+        """Обновить результаты прямого опроса камеры (не трогает health/архив)."""
+        inv_at = _iso(camera_inventory_at)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE channels SET
+                    manufacturer = ?,
+                    camera_serial = ?,
+                    manufacture_date = ?,
+                    manufacture_date_source = ?,
+                    camera_inventory_at = ?,
+                    camera_inventory_error = ?,
+                    camera_model = COALESCE(?, camera_model)
+                WHERE recorder_id = ? AND channel_no = ?
+                """,
+                (
+                    manufacturer,
+                    camera_serial,
+                    manufacture_date,
+                    manufacture_date_source,
+                    inv_at,
+                    camera_inventory_error,
+                    camera_model,
+                    recorder_id,
+                    channel_no,
+                ),
+            )
+
+    def list_ip_camera_channels(
+        self,
+        recorder_id: Optional[str] = None,
+    ) -> list[ChannelRow]:
+        """Каналы с непустым IP (цели inventory-опроса)."""
+        sql = (
+            "SELECT * FROM channels WHERE camera_ip IS NOT NULL "
+            "AND TRIM(camera_ip) != ''"
+        )
+        params: list = []
+        if recorder_id:
+            sql += " AND recorder_id = ?"
+            params.append(recorder_id)
+        sql += " ORDER BY recorder_id, channel_no"
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [_channel_from_row(r) for r in rows]
 
     def remove_channels_not_in(self, recorder_id: str, channel_nos: list[int]) -> None:
         with self._connect() as conn:
@@ -1817,6 +1904,21 @@ def _channel_from_row(row: sqlite3.Row) -> ChannelRow:
             None
             if "poe_status" not in row.keys() or row["poe_status"] is None
             else bool(row["poe_status"])
+        ),
+        camera_user_id=row["camera_user_id"] if "camera_user_id" in row.keys() else None,
+        camera_http_port=row["camera_http_port"] if "camera_http_port" in row.keys() else None,
+        camera_protocol=row["camera_protocol"] if "camera_protocol" in row.keys() else None,
+        manufacturer=row["manufacturer"] if "manufacturer" in row.keys() else None,
+        camera_serial=row["camera_serial"] if "camera_serial" in row.keys() else None,
+        manufacture_date=row["manufacture_date"] if "manufacture_date" in row.keys() else None,
+        manufacture_date_source=(
+            row["manufacture_date_source"] if "manufacture_date_source" in row.keys() else None
+        ),
+        camera_inventory_at=_parse_iso(row["camera_inventory_at"])
+        if "camera_inventory_at" in row.keys()
+        else None,
+        camera_inventory_error=(
+            row["camera_inventory_error"] if "camera_inventory_error" in row.keys() else None
         ),
     )
 

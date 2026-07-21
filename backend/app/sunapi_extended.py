@@ -170,6 +170,9 @@ class ChannelInfo:
     video_state: Optional[str] = None
     camera_ip: Optional[str] = None
     camera_model: Optional[str] = None
+    camera_user_id: Optional[str] = None
+    camera_http_port: Optional[int] = None
+    camera_protocol: Optional[str] = None
     register_status: Optional[str] = None
     data_rate: Optional[float] = None
     cpu_usage: Optional[float] = None
@@ -429,6 +432,18 @@ def _parse_data_rate(raw) -> Optional[float]:
     return _parse_optional_float(raw)
 
 
+def _parse_http_port(raw) -> Optional[int]:
+    if raw is None or raw == "":
+        return None
+    try:
+        port = int(str(raw).strip())
+        if 1 <= port <= 65535:
+            return port
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
 def _channel_from_register_item(item: dict) -> Optional[ChannelInfo]:
     ch = item.get("Channel")
     if ch is None:
@@ -443,6 +458,9 @@ def _channel_from_register_item(item: dict) -> Optional[ChannelInfo]:
         channel_no=int(ch),
         camera_ip=item.get("IPAddress"),
         camera_model=item.get("Model"),
+        camera_user_id=item.get("UserID"),
+        camera_http_port=_parse_http_port(item.get("HTTPPort")),
+        camera_protocol=item.get("Protocol"),
         register_status=item.get("Status"),
         data_rate=_parse_data_rate(item.get("DataRate")),
         cpu_usage=_parse_optional_float(item.get("CPUUsage")),
@@ -480,6 +498,9 @@ def parse_cameraregister(body: str) -> list[ChannelInfo]:
                 channel_no=ch,
                 camera_ip=attrs.get("IPAddress"),
                 camera_model=attrs.get("Model"),
+                camera_user_id=attrs.get("UserID"),
+                camera_http_port=_parse_http_port(attrs.get("HTTPPort")),
+                camera_protocol=attrs.get("Protocol"),
                 register_status=attrs.get("Status"),
                 data_rate=_parse_data_rate(attrs.get("DataRate")),
                 cpu_usage=_parse_optional_float(attrs.get("CPUUsage")),

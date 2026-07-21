@@ -12,7 +12,7 @@ from typing import Any, Literal, Optional
 from ..config_store import ConfigStore
 from ..device_kinds import recorder_device_kind
 from ..models import Recorder
-from ..state_store import RecorderMetricsRow, StateStore
+from ..state_store import ChannelRow, RecorderMetricsRow, StateStore
 from .grouping import metrics_map_from_list
 from .metrics_helpers import (
     disk_field,
@@ -509,3 +509,191 @@ def objects_for_period(
             }
         )
     return summary
+
+
+@dataclass(frozen=True)
+class CameraWithContext:
+    channel: ChannelRow
+    recorder: Recorder
+
+
+def list_tsv_cameras_with_context(
+    store: ConfigStore,
+    state: StateStore,
+) -> list[CameraWithContext]:
+    recorders = {
+        r.id: r
+        for r in store.list_recorders()
+        if recorder_device_kind(r) == "tsv"
+    }
+    items: list[CameraWithContext] = []
+    for channel in state.list_ip_camera_channels():
+        recorder = recorders.get(channel.recorder_id)
+        if recorder is None:
+            continue
+        items.append(CameraWithContext(channel, recorder))
+    return items
+
+
+def camera_model(item: CameraWithContext) -> Optional[str]:
+    return item.channel.camera_model
+
+
+def camera_manufacturer(item: CameraWithContext) -> Optional[str]:
+    return item.channel.manufacturer
+
+
+def camera_manufacture_date(item: CameraWithContext) -> Optional[str]:
+    return item.channel.manufacture_date
+
+
+def filter_cameras_by_model(
+    items: list[CameraWithContext],
+    model: str,
+) -> list[CameraWithContext]:
+    if not model:
+        return items
+    return [item for item in items if camera_model(item) == model]
+
+
+def filter_cameras_by_brand(
+    items: list[CameraWithContext],
+    brand: str,
+) -> list[CameraWithContext]:
+    if not brand:
+        return items
+    return [item for item in items if (camera_manufacturer(item) or "") == brand]
+
+
+def aggregate_cameras_by_period(
+    items: list[CameraWithContext],
+    *,
+    grouping: PeriodGrouping = "month",
+    from_key: str = "",
+    to_key: str = "",
+    model: str = "",
+    brand: str = "",
+) -> dict[str, Any]:
+    filtered = filter_cameras_by_brand(filter_cameras_by_model(items, model), brand)
+    counter: Counter[str] = Counter()
+    for item in filtered:
+        mfg = camera_manufacture_date(item)
+        parsed = parse_manufacture_date(mfg)
+        if not parsed:
+            continue
+        key = period_key(parsed, grouping)
+        if not period_in_range(key, grouping, from_key, to_key):
+            continue
+        counter[key] += 1
+
+    keys = sorted(counter.keys(), key=lambda k: _period_sort_key(k, grouping))
+    labels = [format_period_label(k, grouping) for k in keys]
+    values = [counter[k] for k in keys]
+    colors = {k: chart_color(idx) for idx, k in enumerate(keys)}
+    return {
+        "labels": labels,
+        "values": values,
+        "keys": keys,
+        "colors": colors,
+    }
+
+
+def _date_source_label(source: Optional[str]) -> str:
+    if source == "firmware_build":
+        return "сборка прошивки"
+    if source == "serial_decode":
+        return "S/N"
+    return "—"
+
+
+def camera_age_detail_rows(
+    items: list[CameraWithContext],
+    *,
+    period: str,
+    grouping: PeriodGrouping = "month",
+    from_key: str = "",
+    to_key: str = "",
+    model: str = "",
+    brand: str = "",
+) -> list[dict[str, Any]]:
+    filtered = filter_cameras_by_brand(filter_cameras_by_model(items, model), brand)
+    rows: list[dict[str, Any]] = []
+    for item in filtered:
+        mfg = camera_manufacture_date(item)
+        parsed = parse_manufacture_date(mfg)
+        if not parsed:
+            continue
+        key = period_key(parsed, grouping)
+        if key != period:
+            continue
+        if not period_in_range(key, grouping, from_key, to_key):
+            continue
+        ch = item.channel
+        rec = item.recorder
+        rows.append(
+            {
+                "object_name": rec.object_name,
+                "recorder_name": rec.name or rec.host,
+                "channel_name": ch.name or f"Канал {ch.channel_no + 1}",
+                "camera_ip": ch.camera_ip or "—",
+                "model": camera_model(item) or "—",
+                "manufacturer": camera_manufacturer(item) or "—",
+                "serial_number": ch.camera_serial or "—",
+                "manufacture_date": mfg or "—",
+                "date_source": _date_source_label(ch.manufacture_date_source),
+                "metric_value": format_manufacture_date(mfg) if mfg else "—",
+            }
+        )
+    rows.sort(key=lambda r: (r["object_name"], r["recorder_name"], r["channel_name"]))
+    return rows
+
+
+def distinct_camera_models(items: list[CameraWithContext]) -> list[str]:
+    return sorted({m for item in items if (m := camera_model(item))})
+
+
+def distinct_camera_brands(items: list[CameraWithContext]) -> list[str]:
+    return sorted({b for item in items if (b := camera_manufacturer(item))})
+
+
+def camera_age_kpi(
+    items: list[CameraWithContext],
+    *,
+    model: str = "",
+    brand: str = "",
+) -> dict[str, Any]:
+    filtered = filter_cameras_by_brand(filter_cameras_by_model(items, model), brand)
+    with_date = 0
+    without_date = 0
+    dahua_count = 0
+    inventory_errors = 0
+    periods: list[tuple[int, int]] = []
+    for item in filtered:
+        if item.channel.camera_inventory_error:
+            inventory_errors += 1
+        mfg = camera_manufacture_date(item)
+        if mfg and parse_manufacture_date(mfg):
+            with_date += 1
+            parsed = parse_manufacture_date(mfg)
+            assert parsed is not None
+            periods.append((parsed.year, parsed.month))
+        else:
+            without_date += 1
+        if camera_manufacturer(item) == "dahua":
+            dahua_count += 1
+    oldest = newest = "—"
+    if periods:
+        periods.sort()
+        oldest = format_manufacture_date(f"{periods[0][0]:04d}-{periods[0][1]:02d}")
+        newest = format_manufacture_date(
+            f"{periods[-1][0]:04d}-{periods[-1][1]:02d}"
+        )
+    return {
+        "total_cameras": len(filtered),
+        "with_date": with_date,
+        "without_date": without_date,
+        "dahua_count": dahua_count,
+        "inventory_errors": inventory_errors,
+        "oldest": oldest,
+        "newest": newest,
+    }

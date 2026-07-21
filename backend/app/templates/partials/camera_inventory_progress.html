@@ -1,0 +1,17 @@
+<section class="card" id="camera-inventory-progress" data-job-id="{{ camera_inventory_job.job_id }}" style="margin-bottom:16px;padding:16px;">
+  <p style="margin:0 0 8px;">
+    Опрос IP-камер: <strong>{{ camera_inventory_percent }}%</strong>
+    ({{ camera_inventory_job.done }}/{{ camera_inventory_job.total }})
+  </p>
+  <div style="background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;">
+    <div style="background:#3b82f6;height:100%;width:{{ camera_inventory_percent }}%;"></div>
+  </div>
+  {% if camera_inventory_job.running_hosts %}
+  <p class="text-secondary" style="margin:8px 0 0;font-size:13px;">
+    Сейчас: {{ camera_inventory_job.running_hosts | join(', ') }}
+  </p>
+  {% endif %}
+  {% if camera_inventory_job.message %}
+  <p class="text-secondary" style="margin:8px 0 0;font-size:13px;">{{ camera_inventory_job.message }}</p>
+  {% endif %}
+</section>

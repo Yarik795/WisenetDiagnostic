@@ -26,11 +26,13 @@ from ..cashflow_report import (
 )
 from ..ping_jobs import PingJob, PingJobManager
 from ..poll_jobs import PollJob, PollJobManager
+from ..camera_inventory_jobs import CameraInventoryJob, CameraInventoryJobManager
 from ..report_jobs import ReportJob, ReportJobManager
 from ..scheduler import MonitoringScheduler
 from ..sunapi_extended import enable_recorder_ntp
 from ..state_store import StateStore
 from ..ui.dependencies import (
+    get_camera_inventory_job_manager,
     get_monitoring_scheduler,
     get_ping_job_manager,
     get_poll_job_manager,
@@ -92,6 +94,17 @@ from ..ui.disk_wear_export import (
     build_disk_wear_export_context,
     disk_wear_export_filename,
     render_disk_wear_export_html,
+)
+from ..ui.camera_age_dashboard import (
+    camera_age_detail_context,
+    camera_age_page_context,
+)
+from ..ui.camera_age_export import (
+    build_camera_age_export_context,
+    camera_age_email_subject,
+    camera_age_export_filename,
+    render_camera_age_email_body,
+    render_camera_age_export_html,
 )
 from ..ui.site_inventory import site_devices_page_context
 from ..ui.site_inventory_export import (
@@ -903,6 +916,280 @@ def disks_wear_export_html(
         min_years=min_years,
         max_years=max_years,
         model=model,
+    )
+
+
+@router.get("/cameras-age", response_class=HTMLResponse)
+def cameras_age_page(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    brand: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    inventory_jobs: CameraInventoryJobManager = Depends(get_camera_inventory_job_manager),
+) -> HTMLResponse:
+    active_job = inventory_jobs.get_active_job()
+    return templates.TemplateResponse(
+        request,
+        "camera_age.html",
+        {
+            "active_nav": "cameras_age",
+            "toast": _toast_from_query(request),
+            **camera_age_page_context(
+                store,
+                state,
+                date_from=date_from,
+                date_to=date_to,
+                grouping=grouping,
+                model=model,
+                brand=brand,
+                inventory_job=active_job,
+            ),
+        },
+    )
+
+
+@router.get("/cameras-age/partials/dashboard", response_class=HTMLResponse)
+def cameras_age_dashboard_partial(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    brand: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    inventory_jobs: CameraInventoryJobManager = Depends(get_camera_inventory_job_manager),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/camera_age_dashboard.html",
+        camera_age_page_context(
+            store,
+            state,
+            date_from=date_from,
+            date_to=date_to,
+            grouping=grouping,
+            model=model,
+            brand=brand,
+            inventory_job=inventory_jobs.get_active_job(),
+        ),
+    )
+
+
+@router.get("/cameras-age/partials/detail", response_class=HTMLResponse)
+def cameras_age_detail_partial(
+    request: Request,
+    period: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    brand: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/camera_age_detail.html",
+        camera_age_detail_context(
+            store,
+            state,
+            period=period,
+            date_from=date_from,
+            date_to=date_to,
+            grouping=grouping,
+            model=model,
+            brand=brand,
+        ),
+    )
+
+
+def _cameras_age_export_html_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    brand: str = "",
+) -> Response:
+    export_ctx = build_camera_age_export_context(
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+        brand=brand,
+    )
+    html = render_camera_age_export_html(export_ctx)
+    filename = camera_age_export_filename()
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.get("/cameras-age/export.html", include_in_schema=False)
+def cameras_age_export_html(
+    request: Request,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    brand: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _cameras_age_export_html_response(
+        request,
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+        brand=brand,
+    )
+
+
+@router.post("/cameras-age/report/email", include_in_schema=False)
+def cameras_age_report_email(
+    request: Request,
+    date_from: str = Form(default=""),
+    date_to: str = Form(default=""),
+    grouping: str = Form(default="month"),
+    model: str = Form(default=""),
+    brand: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    page_ctx = camera_age_page_context(
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+        brand=brand,
+    )
+    if not page_ctx.get("camera_age_has_data"):
+        return JSONResponse(
+            {"ok": False, "message": "Нет данных для отправки отчёта «Камеры по времени»"},
+            status_code=400,
+        )
+
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: "
+                + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+
+    export_ctx = build_camera_age_export_context(
+        store,
+        state,
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+        brand=brand,
+    )
+    attachment_html = render_camera_age_export_html(export_ctx)
+    filename = camera_age_export_filename()
+    body_html = render_camera_age_email_body(export_ctx)
+    subject = camera_age_email_subject(
+        date_from=date_from,
+        date_to=date_to,
+        brand=brand,
+    )
+
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            attachments=[(filename, attachment_html)],
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
+
+
+def _camera_inventory_panel_response(
+    request: Request,
+    job: CameraInventoryJob,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/camera_inventory_progress.html",
+        {
+            "camera_inventory_job": job,
+            "camera_inventory_percent": job.percent,
+            "camera_inventory_active": job.is_active,
+        },
+    )
+
+
+@router.post("/cameras-age/inventory/start", response_class=HTMLResponse)
+async def cameras_age_inventory_start(
+    request: Request,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    inventory_jobs: CameraInventoryJobManager = Depends(get_camera_inventory_job_manager),
+) -> HTMLResponse:
+    job = inventory_jobs.start_inventory(
+        store,
+        state,
+        refresh_url="/cameras-age/partials/dashboard",
+    )
+    return _camera_inventory_panel_response(request, job)
+
+
+@router.get("/cameras-age/inventory-jobs/{job_id}", response_class=HTMLResponse)
+async def cameras_age_inventory_job_status(
+    request: Request,
+    job_id: str,
+    inventory_jobs: CameraInventoryJobManager = Depends(get_camera_inventory_job_manager),
+) -> HTMLResponse:
+    job = inventory_jobs.get_job(job_id)
+    if not job:
+        return HTMLResponse("Job not found", status_code=404)
+    if job.is_active:
+        return _camera_inventory_panel_response(request, job)
+    return templates.TemplateResponse(
+        request,
+        "partials/camera_inventory_progress.html",
+        {
+            "camera_inventory_job": job,
+            "camera_inventory_percent": 100,
+            "camera_inventory_active": False,
+        },
+        headers={"HX-Trigger": "cameraInventoryDone"},
     )
 
 

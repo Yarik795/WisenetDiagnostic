@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ export.title }} — Wisenet Диагностика</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #fff;
+      --text: #1a1d21;
+      --muted: #5c6370;
+      --border: #d8dce3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .report {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 1.1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    h3 { margin: 20px 0 8px; font-size: 1rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+    .meta p { margin: 4px 0; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 16px 0 8px;
+    }
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .summary-card .value { font-size: 1.25rem; font-weight: 700; }
+    .summary-card .label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+    .chart-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: #fafbfc;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 8px 0 16px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef1f5; font-weight: 600; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    .section-block { margin-top: 24px; page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+  <div class="report">
+    <h1>{{ export.title }}</h1>
+    <div class="meta">
+      <p>{{ export.subtitle }}</p>
+      <p>Фильтры: {{ export.filter_label }}</p>
+      <p>Сформирован: {{ export.generated_at }}</p>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.total_cameras }}</div>
+        <div class="label">IP-камер</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.with_date }}</div>
+        <div class="label">С датой</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.without_date }}</div>
+        <div class="label">Без даты</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.dahua_count }}</div>
+        <div class="label">Dahua</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.oldest }}</div>
+        <div class="label">Самая старая</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.newest }}</div>
+        <div class="label">Самая новая</div>
+      </div>
+    </div>
+
+    <h2>Распределение по дате</h2>
+    <div class="chart-box">{{ export.distribution.bar_svg | safe }}</div>
+    <table>
+      <thead>
+        <tr><th>Период</th><th>Кол-во</th><th>Доля</th></tr>
+      </thead>
+      <tbody>
+        {% for row in export.distribution.table_rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td>{{ row.count }}</td>
+          <td>{{ row.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Объекты и камеры по периодам</h2>
+    {% for section in export.detail_sections %}
+    <div class="section-block">
+      <h3>{{ section.period_label }} ({{ section.count }})</h3>
+      {% if section.rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>Регистратор</th>
+            <th>Канал</th>
+            <th>IP</th>
+            <th>Модель</th>
+            <th>Бренд</th>
+            <th>S/N</th>
+            <th>Дата</th>
+            <th>Источник</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in section.rows %}
+          <tr>
+            <td>{{ row.object_name }}</td>
+            <td>{{ row.recorder_name }}</td>
+            <td>{{ row.channel_name }}</td>
+            <td class="mono">{{ row.camera_ip }}</td>
+            <td>{{ row.model }}</td>
+            <td>{{ row.manufacturer }}</td>
+            <td class="mono">{{ row.serial_number }}</td>
+            <td>{{ row.metric_value }}</td>
+            <td>{{ row.date_source }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="meta">Нет данных.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

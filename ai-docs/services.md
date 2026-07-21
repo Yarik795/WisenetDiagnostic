@@ -181,6 +181,21 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 ---
 
+## Inventory-опрос IP-камер (`camera_inventory.py`, `camera_inventory_jobs.py`)
+
+Отчёт **«Камеры по времени»** (`/cameras-age`): камеры берутся из `channels` с непустым `camera_ip` (ТСВ-регистраторы). Прямой опрос — фоновый job `CameraInventoryJobManager` (кнопка «Опросить камеры»), concurrency ~12, dedupe по IP.
+
+| Этап | Модуль | Данные |
+|------|--------|--------|
+| Credentials | `config.credentials` + `channels.camera_user_id` | Пароль — глобальный из конфига |
+| Dahua | `dahua_cgi.py` | `getVendor`, `getSystemInfo`, `getSoftwareVersion` → `manufacturer=dahua`, `manufacture_date` из `build:` (proxy), `manufacture_date_source=firmware_build` |
+| Hanwha | `hanwha_camera.py` | SUNAPI `deviceinfo` → S/N, `serial_manufacture_date.decode_samsung_manufacture_date` |
+| Прочие | `onvif_deviceinfo.py` | ONVIF `GetDeviceInformation` → brand/S/N |
+
+Результаты пишутся в `channels` через `update_camera_inventory` (не затрагивает health). HTML-экспорт и ручная email-рассылка: `GET /cameras-age/export.html`, `POST /cameras-age/report/email` (`camera_age_export.py`, `send_report_email`).
+
+---
+
 ## Модели конфигурации (`models.py`)
 
 Используются всеми сервисами (Pydantic):

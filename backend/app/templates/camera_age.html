@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+{% block title %}Камеры по времени — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Камеры по времени{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Распределение IP-камер, зарегистрированных на регистраторах, по дате производства.
+  Для Dahua используется дата сборки прошивки (proxy); для Hanwha/Samsung — декод серийного номера.
+  Сначала выполните опрос камер, затем примените фильтры.
+</p>
+
+<form
+  class="toolbar"
+  style="flex-wrap:wrap;gap:8px;margin-bottom:16px;"
+  hx-get="/cameras-age/partials/dashboard"
+  hx-target="#camera-age-dashboard-root"
+  hx-swap="outerHTML"
+  hx-trigger="change from:select, change from:input, submit"
+  data-camera-age-filters
+>
+  <label class="text-secondary" for="camera-age-from">Период с</label>
+  <input
+    id="camera-age-from"
+    type="month"
+    name="date_from"
+    class="input"
+    value="{{ camera_age_date_from }}"
+    style="min-width:140px;"
+  />
+  <label class="text-secondary" for="camera-age-to">по</label>
+  <input
+    id="camera-age-to"
+    type="month"
+    name="date_to"
+    class="input"
+    value="{{ camera_age_date_to }}"
+    style="min-width:140px;"
+  />
+  <label class="text-secondary" for="camera-age-grouping">Группировка</label>
+  <select id="camera-age-grouping" name="grouping" class="select" style="min-width:140px;">
+    <option value="month" {% if camera_age_grouping == 'month' %}selected{% endif %}>По месяцам</option>
+    <option value="quarter" {% if camera_age_grouping == 'quarter' %}selected{% endif %}>По кварталам</option>
+    <option value="year" {% if camera_age_grouping == 'year' %}selected{% endif %}>По годам</option>
+  </select>
+  <label class="text-secondary" for="camera-age-model">Модель камеры</label>
+  <select id="camera-age-model" name="model" class="select" style="min-width:180px;">
+    <option value="">Все модели</option>
+    {% for option in camera_age_model_options %}
+    <option value="{{ option }}" {% if camera_age_model == option %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <label class="text-secondary" for="camera-age-brand">Бренд</label>
+  <select id="camera-age-brand" name="brand" class="select" style="min-width:140px;">
+    <option value="">Все бренды</option>
+    {% for option in camera_age_brand_options %}
+    <option value="{{ option }}" {% if camera_age_brand == option %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-outline btn-sm">Применить</button>
+  {% if camera_age_has_data %}
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-camera-age-export
+    title="Скачать HTML текущей выборки"
+  >Экспорт в HTML</button>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-camera-age-email
+    title="Отправить HTML-отчёт на адреса из config.email_report"
+  >Отправить на почту</button>
+  {% endif %}
+  {% if camera_age_has_cameras %}
+  <button
+    type="button"
+    class="btn btn-primary btn-sm"
+    data-camera-age-inventory
+    {% if camera_inventory_active %}disabled{% endif %}
+    title="Прямой опрос IP-камер (Dahua ONVIF/CGI, Hanwha SUNAPI)"
+  >{% if camera_inventory_active %}Опрос камер… {{ camera_inventory_percent }}%{% else %}Опросить камеры{% endif %}</button>
+  {% endif %}
+</form>
+
+<div id="camera-inventory-panel">
+  {% if camera_inventory_active %}
+  {% include "partials/camera_inventory_progress.html" %}
+  {% endif %}
+</div>
+
+{% include "partials/camera_age_dashboard.html" %}
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/echarts.min.js?v=5.5.1"></script>
+{{ super() }}
+{% endblock %}

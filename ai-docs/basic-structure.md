@@ -72,6 +72,11 @@
 | `poll_jobs.py` | Менеджер фоновых задач опроса (ручной и по расписанию), статус для UI |
 | `ping_jobs.py` | Фоновый ICMP-ping «зомби»-устройств (CMDB без опроса) для отчёта «Устройства на объекте», прогресс для UI |
 | `serial_manufacture_date.py` | Дата производства устройства по серийному номеру Samsung/Hanwha |
+| `dahua_cgi.py` | HTTP CGI Dahua (magicBox): vendor, S/N, firmware build |
+| `onvif_deviceinfo.py` | ONVIF GetDeviceInformation для идентификации камеры |
+| `hanwha_camera.py` | Прямой опрос камеры Hanwha/Samsung по SUNAPI deviceinfo |
+| `camera_inventory.py` | Оркестрация inventory-опроса IP-камер с каналов NVR |
+| `camera_inventory_jobs.py` | Фоновый job inventory-опроса камер с прогрессом для UI |
 
 #### Отчёты и рассылка
 
@@ -147,6 +152,8 @@
 | `equipment_timeline.py` | Общая агрегация для отчётов «по времени»: дата пр-ва NVR, наработка HDD, drill-down по `object_name` |
 | `recorder_age_dashboard.py` | Дашборд «Регистраторы по времени»: распределение NVR по `manufacture_date`, ECharts, drill-down |
 | `recorder_age_export.py` | HTML-экспорт отчёта «Регистраторы по времени» (inline SVG + таблицы объектов) |
+| `camera_age_dashboard.py` | Дашборд «Камеры по времени»: распределение IP-камер, inventory job, drill-down |
+| `camera_age_export.py` | HTML-экспорт и email отчёта «Камеры по времени» |
 | `disk_wear_dashboard.py` | Дашборд «Диски по времени»: распределение HDD по `PowerOnDuration`, ECharts, drill-down |
 | `disk_wear_export.py` | HTML-экспорт отчёта «Диски по времени» (inline SVG + таблицы объектов) |
 | `site_inventory.py` | Отчёт «Устройства на объекте»: реальные NVR/камеры из опроса, сопоставление с CMDB, аналоговые камеры, вспомогательное оборудование, статусы ping зомби |
@@ -158,7 +165,7 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `disk_wear.html`, `site_devices.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `camera_age.html`, `disk_wear.html`, `site_devices.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
 - `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, регистраторы/диски по времени, повторные РВР)
 
