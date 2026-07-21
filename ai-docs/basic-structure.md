@@ -64,6 +64,7 @@
 |--------|------------|
 | `sunapi.py` | Базовая проверка доступности: `deviceinfo` через HTTP, разбор ответа, `check_recorder` |
 | `sunapi_extended.py` | Полный опрос NVR: каналы, диски, архив, NTP, события; `poll_recorder`, включение NTP |
+| `config_backup.py` | Выгрузка конфигурации устройства через SUNAPI `configbackup` (binary GET, ZIP по объекту) |
 | `sunapi_parsing.py` | Парсинг тел SUNAPI (key=value, индексированные поля, JSON, даты) |
 | `ping_check.py` | ICMP ping для устройств СКУД и биотерминалов (без SUNAPI) |
 | `monitoring.py` | Оценка здоровья каналов и регистраторов, сохранение результатов в БД, циклы `run_poll_cycle` / `run_inventory_cycle`, NTP fix |
@@ -160,6 +161,7 @@
 | `disk_wear_export.py` | HTML-экспорт отчёта «Диски по времени» (inline SVG + таблицы объектов) |
 | `site_inventory.py` | Отчёт «Устройства на объекте»: реальные NVR/камеры из опроса, сопоставление с CMDB, аналоговые камеры, вспомогательное оборудование, статусы ping зомби |
 | `site_inventory_export.py` | HTML-экспорт и email отчёта «Устройства на объекте» для выдачи инженеру |
+| `device_configs.py` | Отчёт «Конфигурации NVR/SPD»: группировка по объектам, NVR из config, SPD из CMDB, ссылки на скачивание |
 | `helpers.py` | Имена, URL веб-интерфейса устройства, формат дат |
 
 #### Шаблоны и статика
@@ -167,7 +169,7 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `recorder_inventory.html`, `camera_age.html`, `disk_wear.html`, `site_devices.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `recorder_inventory.html`, `camera_age.html`, `disk_wear.html`, `site_devices.html`, `device_configs.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
 - `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, регистраторы/диски по времени, инвентарь регистраторов, повторные РВР)
 

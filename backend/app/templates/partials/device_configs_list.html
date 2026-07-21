@@ -1,0 +1,93 @@
+<div id="device-configs-list-root" data-device-configs-list>
+  {% if not device_configs_has_data %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет устройств для выгрузки. Добавьте регистраторы в мониторинг и загрузите CMDB с SPD на странице «Исходные данные».
+    </p>
+  </section>
+  {% elif not device_configs_groups %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">По запросу «{{ device_configs_search }}» ничего не найдено.</p>
+  </section>
+  {% else %}
+  <p class="text-secondary" style="margin:0 0 12px;font-size:13px;">
+    Объектов: {{ device_configs_object_count }}, устройств: {{ device_configs_device_count }}.
+    Раскройте объект и скачайте конфигурацию по устройству или всё сразу в ZIP.
+  </p>
+
+  {% for group in device_configs_groups %}
+  <details class="site-object-details card">
+    <summary class="site-object-summary">
+      <span class="site-object-chevron" aria-hidden="true">▼</span>
+      <span class="site-object-title">{{ group.object_name }}</span>
+      <span class="site-object-meta text-secondary">
+        NVR {{ group.nvrs|length }}, SPD {{ group.spd_devices|length }}
+      </span>
+    </summary>
+    <div class="site-object-body">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <a
+          class="btn btn-outline btn-sm"
+          href="/device-configs/download?object={{ group.object_name | urlencode }}&amp;kind=all"
+          title="Скачать конфигурации всех устройств объекта"
+        >Скачать всё (ZIP)</a>
+      </div>
+
+      {% if group.nvrs %}
+      <h3 class="text-secondary" style="margin:0 0 8px;font-size:14px;">Регистраторы</h3>
+      <table class="table table-compact" style="margin-bottom:16px;">
+        <thead>
+          <tr>
+            <th>Имя</th>
+            <th>IP</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for device in group.nvrs %}
+          <tr>
+            <td>{{ device.name }}</td>
+            <td><code>{{ device.host }}</code></td>
+            <td style="text-align:right;white-space:nowrap;">
+              <a
+                class="btn btn-ghost btn-sm"
+                href="/device-configs/download?object={{ group.object_name | urlencode }}&amp;kind=nvr&amp;host={{ device.host | urlencode }}"
+              >Скачать</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if group.spd_devices %}
+      <h3 class="text-secondary" style="margin:0 0 8px;font-size:14px;">SPD</h3>
+      <table class="table table-compact">
+        <thead>
+          <tr>
+            <th>Модель</th>
+            <th>IP</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for device in group.spd_devices %}
+          <tr>
+            <td>{{ device.model or device.name }}</td>
+            <td><code>{{ device.host }}</code></td>
+            <td style="text-align:right;white-space:nowrap;">
+              <a
+                class="btn btn-ghost btn-sm"
+                href="/device-configs/download?object={{ group.object_name | urlencode }}&amp;kind=spd&amp;host={{ device.host | urlencode }}"
+              >Скачать</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </details>
+  {% endfor %}
+  {% endif %}
+</div>

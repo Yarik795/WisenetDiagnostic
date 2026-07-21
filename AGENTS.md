@@ -29,6 +29,7 @@
 | Отчёт «Камеры по времени», inventory-опрос IP-камер (Dahua/Hanwha), HTML/email | `backend/app/camera_inventory.py`, `camera_inventory_jobs.py`, `dahua_cgi.py`, `onvif_deviceinfo.py`, `hanwha_camera.py`, `ui/camera_age_dashboard.py`, `ui/camera_age_export.py`, `state_store.py` §channels | `ai-docs/monitoring-db.md` §channels (`manufacture_date`, `manufacturer`) |
 | Отчёт «Диски по времени», наработка HDD, drill-down по объектам | `backend/app/ui/equipment_timeline.py`, `ui/disk_wear_dashboard.py`, `ui/disk_wear_export.py` | `ai-docs/monitoring-db.md` §recorder_metrics (`disks_json`) |
 | Отчёт «Устройства на объекте», реальные NVR/камеры vs CMDB, ping зомби, HTML-экспорт/email | `backend/app/ui/site_inventory.py`, `ui/site_inventory_export.py`, `ping_jobs.py`, `state_store.py` | `ai-docs/monitoring-db.md` §channels, §recorder_metrics, §cmdb_records |
+| Отчёт «Конфигурации NVR/SPD», выгрузка configbackup по объектам (NVR из config, SPD из CMDB) | `backend/app/config_backup.py`, `ui/device_configs.py`, `state_store.py` §cmdb_records | — |
 | Импорт АС Арсенал (файл с «паспортам») | `backend/app/arsenal_import.py`, `data_sources.py`, `state_store.py`, `ui/arsenal_dashboard.py`, `ui/arsenal_export.py` | `ai-docs/monitoring-db.md` §arsenal_* |
 | Планировщик, фоновые задачи опроса | `backend/app/scheduler.py`, `poll_jobs.py` | — |
 | Импорт из CMDB | `backend/app/cmdb_sync.py`, `cmdb_import.py`, `scripts/sync_config_from_cmdb.py`, `scripts/cmdb_reader.py` | `ai-docs/monitoring-db.md` §cmdb_records |

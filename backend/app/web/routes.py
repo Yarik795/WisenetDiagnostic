@@ -114,6 +114,21 @@ from ..ui.recorder_inventory_export import (
     render_recorder_inventory_email_body,
     render_recorder_inventory_export_html,
 )
+from ..config_backup import (
+    ConfigBackupError,
+    attachment_content_disposition,
+    build_object_config_zip,
+    config_backup_filename,
+    fetch_config_backup_for_target,
+    object_zip_filename,
+)
+from ..ui.device_configs import (
+    build_all_device_config_groups,
+    device_configs_page_context,
+    find_device_in_groups,
+    get_credentials,
+    resolve_object_devices,
+)
 from ..ui.site_inventory import site_devices_page_context
 from ..ui.site_inventory_export import (
     build_site_devices_export_context,
@@ -1619,6 +1634,120 @@ def site_devices_report_email(
 
     recipients = ", ".join(email_cfg.to_emails)
     return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
+
+
+@router.get("/device-configs", response_class=HTMLResponse)
+def device_configs_page(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "device_configs.html",
+        {
+            "active_nav": "device_configs",
+            "toast": _toast_from_query(request),
+            **device_configs_page_context(store, state, search=search),
+        },
+    )
+
+
+@router.get("/device-configs/partials/list", response_class=HTMLResponse)
+def device_configs_list_partial(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/device_configs_list.html",
+        device_configs_page_context(store, state, search=search),
+    )
+
+
+def _device_config_download_error(message: str, *, status_code: int = 502) -> Response:
+    return Response(
+        content=message,
+        status_code=status_code,
+        media_type="text/plain; charset=utf-8",
+    )
+
+
+@router.get("/device-configs/download", include_in_schema=False)
+async def device_configs_download(
+    object: str = Query(..., min_length=1),
+    kind: Literal["nvr", "spd", "all"] = Query(...),
+    host: str = Query(default=""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    groups = build_all_device_config_groups(store, state)
+    credentials = get_credentials(store)
+
+    if kind == "all":
+        devices = resolve_object_devices(groups, object)
+        if not devices:
+            return _device_config_download_error(
+                "Объект не найден или на нём нет устройств",
+                status_code=404,
+            )
+        try:
+            zip_bytes, errors = await build_object_config_zip(
+                [device.to_backup_target() for device in devices],
+                credentials,
+            )
+        except ConfigBackupError as exc:
+            return _device_config_download_error(exc.message, status_code=502)
+
+        if len(errors) == len(devices):
+            return _device_config_download_error(
+                "Не удалось выгрузить конфигурации ни с одного устройства:\n"
+                + "\n".join(errors),
+                status_code=502,
+            )
+
+        filename = object_zip_filename(object)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": attachment_content_disposition(filename)},
+        )
+
+    if not host.strip():
+        return _device_config_download_error(
+            "Не указан IP устройства",
+            status_code=400,
+        )
+
+    device = find_device_in_groups(
+        groups,
+        object_name=object,
+        kind=kind,
+        host=host,
+    )
+    if device is None:
+        return _device_config_download_error(
+            "Устройство не найдено на указанном объекте",
+            status_code=404,
+        )
+
+    try:
+        content = await fetch_config_backup_for_target(
+            device.to_backup_target(),
+            credentials,
+        )
+    except ConfigBackupError as exc:
+        return _device_config_download_error(exc.message, status_code=502)
+
+    filename = config_backup_filename(device.object_name, device.kind, device.host)
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": attachment_content_disposition(filename)},
+    )
 
 
 @router.post("/arsenal/report/email", include_in_schema=False)

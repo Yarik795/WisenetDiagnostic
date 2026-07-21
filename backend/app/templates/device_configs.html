@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block title %}Конфигурации NVR/SPD — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Конфигурации NVR/SPD{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Выгрузка файлов конфигурации с регистраторов (из мониторинга) и SPD (из CMDB).
+  Запрос идёт на устройство по SUNAPI; используются общие учётные данные из настроек.
+  После backup устройство может перезагрузиться.
+</p>
+
+<div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+  <form
+    style="display:contents;"
+    hx-get="/device-configs/partials/list"
+    hx-target="#device-configs-list-root"
+    hx-swap="outerHTML"
+    hx-trigger="keyup changed delay:300ms from:#device-configs-search, submit"
+  >
+    <label class="text-secondary" for="device-configs-search">Поиск по объекту, IP или модели</label>
+    <input
+      id="device-configs-search"
+      type="search"
+      name="search"
+      class="input"
+      value="{{ device_configs_search }}"
+      placeholder="Адрес, IP, SPD-151…"
+      style="min-width:280px;"
+    />
+    <button type="submit" class="btn btn-outline btn-sm">Найти</button>
+  </form>
+</div>
+
+{% include "partials/device_configs_list.html" %}
+{% endblock %}
