@@ -106,6 +106,14 @@ from ..ui.camera_age_export import (
     render_camera_age_email_body,
     render_camera_age_export_html,
 )
+from ..ui.recorder_inventory import recorder_inventory_page_context
+from ..ui.recorder_inventory_export import (
+    build_recorder_inventory_export_context,
+    recorder_inventory_email_subject,
+    recorder_inventory_export_filename,
+    render_recorder_inventory_email_body,
+    render_recorder_inventory_export_html,
+)
 from ..ui.site_inventory import site_devices_page_context
 from ..ui.site_inventory_export import (
     build_site_devices_export_context,
@@ -1220,6 +1228,138 @@ async def cameras_age_inventory_job_status(
     if not job:
         return HTMLResponse("Job not found", status_code=404)
     return _camera_inventory_panel_response(request, job)
+
+
+@router.get("/recorders-inventory", response_class=HTMLResponse)
+def recorders_inventory_page(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "recorder_inventory.html",
+        {
+            "active_nav": "recorders_inventory",
+            "toast": _toast_from_query(request),
+            **recorder_inventory_page_context(store, state, search=search),
+        },
+    )
+
+
+@router.get("/recorders-inventory/partials/table", response_class=HTMLResponse)
+def recorders_inventory_table_partial(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/recorder_inventory_table.html",
+        recorder_inventory_page_context(store, state, search=search),
+    )
+
+
+def _recorders_inventory_export_html_response(
+    request: Request,
+    store: ConfigStore,
+    state: StateStore,
+    *,
+    search: str = "",
+) -> Response:
+    page_ctx = recorder_inventory_page_context(store, state, search=search)
+    if not page_ctx.get("recorder_inventory_has_data"):
+        return _redirect(
+            "/recorders-inventory",
+            "error",
+            "Нет данных для экспорта инвентаря регистраторов",
+            request=request,
+        )
+    export_ctx = build_recorder_inventory_export_context(
+        store,
+        state,
+        search=search,
+    )
+    filename = recorder_inventory_export_filename()
+    html = render_recorder_inventory_export_html(export_ctx)
+    response = HTMLResponse(content=html)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@router.get("/recorders-inventory/export.html", include_in_schema=False)
+def recorders_inventory_export_html(
+    request: Request,
+    search: str = "",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    return _recorders_inventory_export_html_response(
+        request,
+        store,
+        state,
+        search=search,
+    )
+
+
+@router.post("/recorders-inventory/report/email", include_in_schema=False)
+def recorders_inventory_report_email(
+    request: Request,
+    search: str = Form(default=""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..email_sender import send_report_email
+    from ..report_delivery import validate_email_config
+
+    page_ctx = recorder_inventory_page_context(store, state, search=search)
+    if not page_ctx.get("recorder_inventory_has_data"):
+        return JSONResponse(
+            {"ok": False, "message": "Нет данных для отправки инвентаря регистраторов"},
+            status_code=400,
+        )
+
+    config = store.load()
+    email_cfg = config.email_report
+    config_errors = validate_email_config(email_cfg)
+    if config_errors:
+        return JSONResponse(
+            {
+                "ok": False,
+                "message": "Настройте email_report в config.json: "
+                + "; ".join(config_errors),
+            },
+            status_code=400,
+        )
+
+    export_ctx = build_recorder_inventory_export_context(
+        store,
+        state,
+        search=search,
+    )
+    attachment_html = render_recorder_inventory_export_html(export_ctx)
+    filename = recorder_inventory_export_filename()
+    body_html = render_recorder_inventory_email_body(export_ctx)
+    subject = recorder_inventory_email_subject(search)
+
+    try:
+        send_report_email(
+            email_cfg,
+            body_html=body_html,
+            attachments=[(filename, attachment_html)],
+            subject=subject,
+        )
+    except Exception as exc:
+        short = str(exc)[:200] + ("…" if len(str(exc)) > 200 else "")
+        return JSONResponse(
+            {"ok": False, "message": f"Ошибка отправки: {short}"},
+            status_code=500,
+        )
+
+    recipients = ", ".join(email_cfg.to_emails)
+    return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
 
 
 @router.get("/site-devices", response_class=HTMLResponse)

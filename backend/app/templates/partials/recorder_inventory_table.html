@@ -1,0 +1,59 @@
+<div id="recorder-inventory-table-root" data-recorder-inventory-table>
+  {% if not recorder_inventory_has_data %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет регистраторов ТСВ в реестре. Добавьте устройства в конфигурацию и выполните опрос.
+    </p>
+  </section>
+  {% elif not recorder_inventory_rows %}
+  <section class="card" style="padding:24px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">По запросу «{{ recorder_inventory_search }}» ничего не найдено.</p>
+  </section>
+  {% else %}
+  <section class="fleet-overview card" aria-label="Показатели отчёта">
+    <div class="fleet-kpi-grid">
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_inventory_kpi.total }}</span>
+        <span class="fleet-kpi-label">Регистраторов</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_inventory_kpi.with_model }}</span>
+        <span class="fleet-kpi-label">С моделью</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_inventory_kpi.with_mac }}</span>
+        <span class="fleet-kpi-label">С MAC</span>
+      </div>
+      <div class="fleet-kpi">
+        <span class="fleet-kpi-value">{{ recorder_inventory_kpi.with_serial }}</span>
+        <span class="fleet-kpi-label">С серийным номером</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:16px;padding:0;overflow:hidden;">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>Модель</th>
+            <th>MAC</th>
+            <th>Серийный номер</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recorder_inventory_rows %}
+          <tr>
+            <td>{{ row.object_name }}</td>
+            <td>{{ row.model }}</td>
+            <td class="mono">{{ row.mac }}</td>
+            <td class="mono">{{ row.serial_number }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</div>

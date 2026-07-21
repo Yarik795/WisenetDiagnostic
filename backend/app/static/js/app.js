@@ -1679,6 +1679,51 @@ function initPaymentsExportActions(root) {
   });
 }
 
+function initRecorderInventoryExportActions(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-recorder-inventory-export]").forEach((btn) => {
+    if (btn.dataset.recorderInventoryExportBound === "1") return;
+    btn.dataset.recorderInventoryExportBound = "1";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const searchInput = document.getElementById("recorder-inventory-search");
+      const search = searchInput ? searchInput.value : "";
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      const qs = params.toString();
+      window.location.href = qs
+        ? `/recorders-inventory/export.html?${qs}`
+        : "/recorders-inventory/export.html";
+    });
+  });
+  scope.querySelectorAll("[data-recorder-inventory-email]").forEach((btn) => {
+    if (btn.dataset.recorderInventoryEmailBound === "1") return;
+    btn.dataset.recorderInventoryEmailBound = "1";
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const searchInput = document.getElementById("recorder-inventory-search");
+        const search = searchInput ? searchInput.value : "";
+        const body = new URLSearchParams();
+        if (search) body.set("search", search);
+        const res = await fetch("/recorders-inventory/report/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
+        });
+        const data = await res.json();
+        showToast(data.ok ? "success" : "error", data.message || "Неизвестная ошибка");
+      } catch (err) {
+        showToast("error", "Не удалось отправить отчёт на почту");
+        console.error("[wisenet] recorder-inventory email error", err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function initSiteDevicesExportActions(root) {
   const scope = root || document;
   scope.querySelectorAll("[data-site-devices-export]").forEach((btn) => {
@@ -1977,6 +2022,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initArsenalCharts();
   initArsenalExportActions();
   initSiteDevicesExportActions();
+  initRecorderInventoryExportActions();
   initRecorderAgeCharts();
   initRecorderAgeExportActions();
   initCameraAgeCharts();
@@ -2020,6 +2066,7 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initPaymentsExportActions(e.detail?.target);
   initArsenalExportActions(e.detail?.target);
   initSiteDevicesExportActions(e.detail?.target);
+  initRecorderInventoryExportActions(e.detail?.target);
   initRecorderAgeExportActions(e.detail?.target);
   initCameraAgeExportActions(e.detail?.target);
   initDiskWearExportActions(e.detail?.target);

@@ -152,6 +152,8 @@
 | `equipment_timeline.py` | Общая агрегация для отчётов «по времени»: дата пр-ва NVR, наработка HDD, drill-down по `object_name` |
 | `recorder_age_dashboard.py` | Дашборд «Регистраторы по времени»: распределение NVR по `manufacture_date`, ECharts, drill-down |
 | `recorder_age_export.py` | HTML-экспорт отчёта «Регистраторы по времени» (inline SVG + таблицы объектов) |
+| `recorder_inventory.py` | Отчёт «Инвентарь регистраторов»: объект, модель, MAC, серийный номер (config + `recorder_metrics`) |
+| `recorder_inventory_export.py` | HTML-экспорт и email отчёта «Инвентарь регистраторов» |
 | `camera_age_dashboard.py` | Дашборд «Камеры по времени»: распределение IP-камер, inventory job, drill-down |
 | `camera_age_export.py` | HTML-экспорт и email отчёта «Камеры по времени» |
 | `disk_wear_dashboard.py` | Дашборд «Диски по времени»: распределение HDD по `PowerOnDuration`, ECharts, drill-down |
@@ -165,9 +167,9 @@
 `backend/app/templates/` — Jinja2:
 
 - `layout.html`, `base.html` — каркас страниц
-- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `camera_age.html`, `disk_wear.html`, `site_devices.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
+- Страницы: `objects.html`, `recorders.html`, `monitoring.html`, `summary.html`, `kind_section.html`, `time.html`, `status.html`, `sources.html`, `arsenal.html`, `recorder_age.html`, `recorder_inventory.html`, `camera_age.html`, `disk_wear.html`, `site_devices.html`, `payments.html`, `rvr_repeat.html`, `ai_chat.html`, `settings.html`, `settings_exclusions.html`, `placeholder_section.html`
 - `partials/` — фрагменты для HTMX (дашборды, строки таблиц, формы, панель опроса)
-- `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, регистраторы/диски по времени, повторные РВР)
+- `exports/` — печатные/экспортные отчёты (ошибки, оплата, Арсенал, регистраторы/диски по времени, инвентарь регистраторов, повторные РВР)
 
 `backend/app/static/`:
 

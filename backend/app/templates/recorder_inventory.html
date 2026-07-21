@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% block title %}Инвентарь регистраторов — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}Инвентарь регистраторов{% endblock %}
+{% block content %}
+<p class="page-lead">
+  Сводная таблица видеорегистраторов ТСВ: объект, модель (из опроса), MAC (из реестра/CMDB) и серийный номер.
+</p>
+
+<div
+  class="toolbar"
+  style="flex-wrap:wrap;gap:8px;margin-bottom:16px;"
+>
+  <form
+    style="display:contents;"
+    hx-get="/recorders-inventory/partials/table"
+    hx-target="#recorder-inventory-table-root"
+    hx-swap="outerHTML"
+    hx-trigger="keyup changed delay:300ms from:#recorder-inventory-search, submit"
+  >
+    <label class="text-secondary" for="recorder-inventory-search">Поиск</label>
+    <input
+      id="recorder-inventory-search"
+      type="search"
+      name="search"
+      class="input"
+      value="{{ recorder_inventory_search }}"
+      placeholder="Объект, модель, MAC, серийный номер…"
+      style="min-width:280px;"
+    />
+    <button type="submit" class="btn btn-outline btn-sm">Найти</button>
+  </form>
+  {% if recorder_inventory_has_data %}
+  <a
+    class="btn btn-ghost btn-sm"
+    data-recorder-inventory-export
+    href="/recorders-inventory/export.html{% if recorder_inventory_search %}?search={{ recorder_inventory_search | urlencode }}{% endif %}"
+    title="Скачать HTML текущей выборки"
+  >Экспорт в HTML</a>
+  <button
+    type="button"
+    class="btn btn-ghost btn-sm"
+    data-recorder-inventory-email
+    title="Отправить HTML-отчёт на адреса из config.email_report"
+  >Отправить на почту</button>
+  {% endif %}
+</div>
+
+{% include "partials/recorder_inventory_table.html" %}
+{% endblock %}

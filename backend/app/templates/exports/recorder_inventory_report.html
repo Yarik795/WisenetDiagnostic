@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ export.title }} — Wisenet Диагностика</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #fff;
+      --text: #1a1d21;
+      --muted: #5c6370;
+      --border: #d8dce3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.45;
+    }
+    .report {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+    .meta p { margin: 4px 0; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafbfc;
+    }
+    .summary-card .value { font-size: 1.25rem; font-weight: 700; }
+    .summary-card .label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 8px 0 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef1f5; font-weight: 600; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="report">
+    <h1>{{ export.title }}</h1>
+    <div class="meta">
+      <p>Сформировано: {{ export.generated_at }}</p>
+      <p>{{ export.filter_label }}</p>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.total }}</div>
+        <div class="label">Регистраторов</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.with_model }}</div>
+        <div class="label">С моделью</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.with_mac }}</div>
+        <div class="label">С MAC</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{{ export.kpi.with_serial }}</div>
+        <div class="label">С серийным номером</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Объект</th>
+          <th>Модель</th>
+          <th>MAC</th>
+          <th>Серийный номер</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in export.rows %}
+        <tr>
+          <td>{{ row.object_name }}</td>
+          <td>{{ row.model }}</td>
+          <td class="mono">{{ row.mac }}</td>
+          <td class="mono">{{ row.serial_number }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
