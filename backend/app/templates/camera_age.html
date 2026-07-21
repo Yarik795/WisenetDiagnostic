@@ -74,18 +74,21 @@
   <button
     type="button"
     class="btn btn-primary btn-sm"
-    data-camera-age-inventory
+    hx-post="/cameras-age/inventory/start"
+    hx-target="#camera-inventory-panel"
+    hx-swap="outerHTML"
+    hx-include="[data-camera-age-filters]"
     {% if camera_inventory_active %}disabled{% endif %}
     title="Прямой опрос IP-камер (Dahua ONVIF/CGI, Hanwha SUNAPI)"
   >{% if camera_inventory_active %}Опрос камер… {{ camera_inventory_percent }}%{% else %}Опросить камеры{% endif %}</button>
   {% endif %}
 </form>
 
-<div id="camera-inventory-panel">
-  {% if camera_inventory_active %}
-  {% include "partials/camera_inventory_progress.html" %}
-  {% endif %}
-</div>
+{% if camera_inventory_active %}
+{% include "partials/camera_inventory_progress.html" %}
+{% else %}
+<div id="camera-inventory-panel"></div>
+{% endif %}
 
 {% include "partials/camera_age_dashboard.html" %}
 {% endblock %}

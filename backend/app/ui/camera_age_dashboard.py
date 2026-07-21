@@ -83,6 +83,7 @@ def camera_age_page_context(
         "camera_inventory_active": bool(job and job.is_active),
         "camera_inventory_percent": job.percent if job else 0,
         "camera_inventory_message": job.message if job else None,
+        "camera_inventory_refresh_url": job.refresh_url if job else None,
     }
 
 

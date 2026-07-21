@@ -1140,9 +1140,36 @@ def cameras_age_report_email(
     return JSONResponse({"ok": True, "message": f"Отчёт отправлен на {recipients}"})
 
 
+def _camera_inventory_refresh_url(
+    *,
+    date_from: str = "",
+    date_to: str = "",
+    grouping: str = "month",
+    model: str = "",
+    brand: str = "",
+) -> str:
+    parts: list[str] = []
+    if date_from:
+        parts.append(f"date_from={date_from}")
+    if date_to:
+        parts.append(f"date_to={date_to}")
+    if grouping and grouping != "month":
+        parts.append(f"grouping={grouping}")
+    if model:
+        parts.append(f"model={model}")
+    if brand:
+        parts.append(f"brand={brand}")
+    qs = "&".join(parts)
+    if qs:
+        return f"/cameras-age/partials/dashboard?{qs}"
+    return "/cameras-age/partials/dashboard"
+
+
 def _camera_inventory_panel_response(
     request: Request,
     job: CameraInventoryJob,
+    *,
+    refresh_url: str | None = None,
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -1151,6 +1178,7 @@ def _camera_inventory_panel_response(
             "camera_inventory_job": job,
             "camera_inventory_percent": job.percent,
             "camera_inventory_active": job.is_active,
+            "camera_inventory_refresh_url": refresh_url or job.refresh_url,
         },
     )
 
@@ -1158,16 +1186,28 @@ def _camera_inventory_panel_response(
 @router.post("/cameras-age/inventory/start", response_class=HTMLResponse)
 async def cameras_age_inventory_start(
     request: Request,
+    date_from: str = Form(default=""),
+    date_to: str = Form(default=""),
+    grouping: str = Form(default="month"),
+    model: str = Form(default=""),
+    brand: str = Form(default=""),
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
     inventory_jobs: CameraInventoryJobManager = Depends(get_camera_inventory_job_manager),
 ) -> HTMLResponse:
+    refresh_url = _camera_inventory_refresh_url(
+        date_from=date_from,
+        date_to=date_to,
+        grouping=grouping,
+        model=model,
+        brand=brand,
+    )
     job = inventory_jobs.start_inventory(
         store,
         state,
-        refresh_url="/cameras-age/partials/dashboard",
+        refresh_url=refresh_url,
     )
-    return _camera_inventory_panel_response(request, job)
+    return _camera_inventory_panel_response(request, job, refresh_url=refresh_url)
 
 
 @router.get("/cameras-age/inventory-jobs/{job_id}", response_class=HTMLResponse)
@@ -1179,18 +1219,7 @@ async def cameras_age_inventory_job_status(
     job = inventory_jobs.get_job(job_id)
     if not job:
         return HTMLResponse("Job not found", status_code=404)
-    if job.is_active:
-        return _camera_inventory_panel_response(request, job)
-    return templates.TemplateResponse(
-        request,
-        "partials/camera_inventory_progress.html",
-        {
-            "camera_inventory_job": job,
-            "camera_inventory_percent": 100,
-            "camera_inventory_active": False,
-        },
-        headers={"HX-Trigger": "cameraInventoryDone"},
-    )
+    return _camera_inventory_panel_response(request, job)
 
 
 @router.get("/site-devices", response_class=HTMLResponse)

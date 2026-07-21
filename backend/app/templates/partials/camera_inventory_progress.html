@@ -1,17 +1,57 @@
-<section class="card" id="camera-inventory-progress" data-job-id="{{ camera_inventory_job.job_id }}" style="margin-bottom:16px;padding:16px;">
-  <p style="margin:0 0 8px;">
-    Опрос IP-камер: <strong>{{ camera_inventory_percent }}%</strong>
-    ({{ camera_inventory_job.done }}/{{ camera_inventory_job.total }})
-  </p>
-  <div style="background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;">
-    <div style="background:#3b82f6;height:100%;width:{{ camera_inventory_percent }}%;"></div>
+<div
+  id="camera-inventory-panel"
+  class="poll-job-panel poll-job-panel--compact card{% if camera_inventory_job.is_active %} poll-job-panel--running{% endif %}"
+  style="margin-bottom:16px;"
+  {% if camera_inventory_job.is_active %}
+  hx-get="/cameras-age/inventory-jobs/{{ camera_inventory_job.job_id }}"
+  hx-trigger="every 2s"
+  hx-swap="outerHTML"
+  {% elif camera_inventory_job.status.value == 'completed' and camera_inventory_refresh_url %}
+  hx-get="{{ camera_inventory_refresh_url }}"
+  hx-target="#camera-age-dashboard-root"
+  hx-swap="outerHTML"
+  hx-trigger="load"
+  {% endif %}
+>
+  <div class="poll-job-body">
+    <div class="poll-job-status-row">
+      <span class="poll-job-status poll-job-status--{{ camera_inventory_job.status.value }}">
+        {% if camera_inventory_job.status.value == 'pending' %}Запуск…
+        {% elif camera_inventory_job.status.value == 'running' %}Опрос камер
+        {% elif camera_inventory_job.status.value == 'completed' %}Завершён
+        {% elif camera_inventory_job.status.value == 'failed' %}Ошибка
+        {% elif camera_inventory_job.status.value == 'cancelled' %}Прерван
+        {% else %}{{ camera_inventory_job.status.value }}{% endif %}
+      </span>
+      {% if camera_inventory_job.status.value == 'running' and camera_inventory_job.total > 0 %}
+      <span class="poll-job-counter">{{ camera_inventory_job.done }}/{{ camera_inventory_job.total }}</span>
+      {% endif %}
+      {% if camera_inventory_job.total > 0 %}
+      <span class="poll-job-percent">{{ camera_inventory_percent }}%</span>
+      {% endif %}
+    </div>
+
+    {% if camera_inventory_job.status.value in ('pending', 'running', 'completed', 'failed') %}
+    <div class="poll-job-progress" role="progressbar" aria-valuenow="{{ camera_inventory_percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="poll-job-progress-bar" style="width: {{ camera_inventory_percent }}%;"></div>
+    </div>
+    {% endif %}
+
+    <p class="poll-job-line{% if camera_inventory_job.status.value == 'failed' %} poll-job-line--error{% elif camera_inventory_job.status.value == 'cancelled' %} poll-job-line--warn{% elif camera_inventory_job.status.value == 'completed' and camera_inventory_job.failed %} poll-job-line--warn{% endif %}">
+      {% if camera_inventory_job.status.value == 'running' %}
+        {% if camera_inventory_job.total > 0 %}
+        ✓{{ camera_inventory_job.success }}{% if camera_inventory_job.failed %} · ✗{{ camera_inventory_job.failed }}{% endif %}
+        {% if camera_inventory_job.running_hosts %}
+        · {{ camera_inventory_job.running_hosts | join(', ') }}
+        {% endif %}
+        {% else %}
+        Подготовка списка камер…
+        {% endif %}
+      {% elif camera_inventory_job.status.value in ('completed', 'failed', 'cancelled') %}
+        {% if camera_inventory_job.message %}{{ camera_inventory_job.message }}{% elif camera_inventory_job.total == 0 %}Нет IP-камер для опроса (сначала опросите NVR){% endif %}
+      {% elif camera_inventory_job.status.value == 'pending' %}
+        {% if camera_inventory_job.total > 0 %}Подготовка…{% else %}Сбор списка камер…{% endif %}
+      {% endif %}
+    </p>
   </div>
-  {% if camera_inventory_job.running_hosts %}
-  <p class="text-secondary" style="margin:8px 0 0;font-size:13px;">
-    Сейчас: {{ camera_inventory_job.running_hosts | join(', ') }}
-  </p>
-  {% endif %}
-  {% if camera_inventory_job.message %}
-  <p class="text-secondary" style="margin:8px 0 0;font-size:13px;">{{ camera_inventory_job.message }}</p>
-  {% endif %}
-</section>
+</div>

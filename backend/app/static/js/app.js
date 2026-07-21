@@ -1217,7 +1217,6 @@ if (!window.__arsenalChartsResizeBound) {
 
 const recorderAgeChartStore = new Map();
 const cameraAgeChartStore = new Map();
-let cameraInventoryPollTimer = null;
 const diskWearChartStore = new Map();
 
 function timelineDistributionBarOption(distribution) {
@@ -1504,66 +1503,6 @@ function refreshCameraAgeDashboard() {
     target: "#camera-age-dashboard-root",
     swap: "outerHTML",
   });
-}
-
-function pollCameraInventoryJob(jobId) {
-  if (!jobId) return;
-  if (cameraInventoryPollTimer) {
-    clearInterval(cameraInventoryPollTimer);
-  }
-  cameraInventoryPollTimer = setInterval(async () => {
-    try {
-      const res = await fetch(`/cameras-age/inventory-jobs/${jobId}`);
-      if (!res.ok) return;
-      const html = await res.text();
-      const panel = document.getElementById("camera-inventory-panel");
-      if (panel) panel.innerHTML = html;
-      if (res.headers.get("HX-Trigger") === "cameraInventoryDone") {
-        clearInterval(cameraInventoryPollTimer);
-        cameraInventoryPollTimer = null;
-        refreshCameraAgeDashboard();
-        showToast("success", "Опрос камер завершён");
-      }
-    } catch (err) {
-      console.error("[wisenet] camera inventory poll error", err);
-    }
-  }, 2000);
-}
-
-function initCameraAgeInventoryActions(root) {
-  const scope = root || document;
-  scope.querySelectorAll("[data-camera-age-inventory]").forEach((btn) => {
-    if (btn.dataset.cameraAgeInventoryBound === "1") return;
-    btn.dataset.cameraAgeInventoryBound = "1";
-    btn.addEventListener("click", async () => {
-      if (btn.disabled) return;
-      btn.disabled = true;
-      try {
-        const res = await fetch("/cameras-age/inventory/start", { method: "POST" });
-        if (!res.ok) {
-          showToast("error", "Не удалось запустить опрос камер");
-          return;
-        }
-        const html = await res.text();
-        const panel = document.getElementById("camera-inventory-panel");
-        if (panel) panel.innerHTML = html;
-        const progressEl = panel?.querySelector("#camera-inventory-progress");
-        const jobId = progressEl?.dataset?.jobId;
-        if (jobId) {
-          pollCameraInventoryJob(jobId);
-        }
-      } catch (err) {
-        showToast("error", "Ошибка запуска опроса камер");
-        console.error("[wisenet] camera inventory start error", err);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-  const progressEl = scope.querySelector("#camera-inventory-progress[data-job-id]");
-  if (progressEl?.dataset?.jobId) {
-    pollCameraInventoryJob(progressEl.dataset.jobId);
-  }
 }
 
 function disposeDiskWearCharts(root) {
@@ -2042,7 +1981,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initRecorderAgeExportActions();
   initCameraAgeCharts();
   initCameraAgeExportActions();
-  initCameraAgeInventoryActions();
   initDiskWearCharts();
   initDiskWearExportActions();
   initRvrRepeatActions();
@@ -2084,7 +2022,6 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initSiteDevicesExportActions(e.detail?.target);
   initRecorderAgeExportActions(e.detail?.target);
   initCameraAgeExportActions(e.detail?.target);
-  initCameraAgeInventoryActions(e.detail?.target);
   initDiskWearExportActions(e.detail?.target);
   initRvrRepeatActions(e.detail?.target);
   scrollToHighlightedCategory();
