@@ -1372,6 +1372,17 @@ function initRecorderAgeExportActions(root) {
   });
 }
 
+function initRecorderAgeMissingKpi(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-recorder-age-missing]").forEach((btn) => {
+    if (btn.dataset.recorderAgeMissingBound === "1") return;
+    btn.dataset.recorderAgeMissingBound = "1";
+    btn.addEventListener("click", () => {
+      loadRecorderAgeDetail({ missing: "1" });
+    });
+  });
+}
+
 function disposeCameraAgeCharts(root) {
   const scope = root || document;
   scope.querySelectorAll("[data-camera-age-chart]").forEach((el) => {
@@ -1496,6 +1507,17 @@ function initCameraAgeExportActions(root) {
   });
 }
 
+function initCameraAgeMissingKpi(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-camera-age-missing]").forEach((btn) => {
+    if (btn.dataset.cameraAgeMissingBound === "1") return;
+    btn.dataset.cameraAgeMissingBound = "1";
+    btn.addEventListener("click", () => {
+      loadCameraAgeDetail({ missing: "1" });
+    });
+  });
+}
+
 function refreshCameraAgeDashboard() {
   if (typeof htmx === "undefined") return;
   const params = collectCameraAgeFilterParams();
@@ -1602,6 +1624,17 @@ function initDiskWearExportActions(root) {
       window.location.href = qs
         ? `/disks-wear/export.html?${qs}`
         : "/disks-wear/export.html";
+    });
+  });
+}
+
+function initDiskWearMissingKpi(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-disk-wear-missing]").forEach((btn) => {
+    if (btn.dataset.diskWearMissingBound === "1") return;
+    btn.dataset.diskWearMissingBound = "1";
+    btn.addEventListener("click", () => {
+      loadDiskWearDetail({ missing: "1" });
     });
   });
 }
@@ -2025,10 +2058,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initRecorderInventoryExportActions();
   initRecorderAgeCharts();
   initRecorderAgeExportActions();
+  initRecorderAgeMissingKpi();
   initCameraAgeCharts();
   initCameraAgeExportActions();
+  initCameraAgeMissingKpi();
   initDiskWearCharts();
   initDiskWearExportActions();
+  initDiskWearMissingKpi();
   initRvrRepeatActions();
   if (typeof htmx === "undefined") {
     showToast(
@@ -2068,8 +2104,11 @@ document.body.addEventListener("htmx:afterSwap", (e) => {
   initSiteDevicesExportActions(e.detail?.target);
   initRecorderInventoryExportActions(e.detail?.target);
   initRecorderAgeExportActions(e.detail?.target);
+  initRecorderAgeMissingKpi(e.detail?.target);
   initCameraAgeExportActions(e.detail?.target);
+  initCameraAgeMissingKpi(e.detail?.target);
   initDiskWearExportActions(e.detail?.target);
+  initDiskWearMissingKpi(e.detail?.target);
   initRvrRepeatActions(e.detail?.target);
   scrollToHighlightedCategory();
 });

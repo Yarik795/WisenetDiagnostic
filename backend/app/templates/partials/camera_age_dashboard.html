@@ -2,16 +2,10 @@
   {% if not camera_age_has_data %}
   <section class="card" style="padding:24px;text-align:center;">
     <p class="text-secondary" style="margin:0;">
-      {% if camera_age_has_cameras %}
-      Нет данных о дате производства камер. Нажмите «Опросить камеры» для прямого опроса IP-камер с регистраторов.
-      {% else %}
       Нет IP-камер на регистраторах. Убедитесь, что NVR опрошены и в каналах указаны IP-адреса камер.
-      {% endif %}
     </p>
   </section>
   {% else %}
-  <script type="application/json" data-camera-age-charts>{{ camera_age_charts | tojson }}</script>
-
   <section class="fleet-overview card" aria-label="Показатели камер">
     <div class="fleet-kpi-grid">
       <div class="fleet-kpi">
@@ -23,11 +17,19 @@
         <span class="fleet-kpi-value">{{ camera_age_kpi.with_date }}</span>
         <span class="fleet-kpi-label">С датой</span>
       </div>
+      {% if camera_age_kpi.without_date > 0 %}
+      <button type="button" class="fleet-kpi fleet-kpi--warn fleet-kpi--action" data-camera-age-missing title="Показать список">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ camera_age_kpi.without_date }}</span>
+        <span class="fleet-kpi-label">Без даты</span>
+      </button>
+      {% else %}
       <div class="fleet-kpi fleet-kpi--warn">
         <span class="fleet-kpi-dot" aria-hidden="true"></span>
         <span class="fleet-kpi-value">{{ camera_age_kpi.without_date }}</span>
         <span class="fleet-kpi-label">Без даты</span>
       </div>
+      {% endif %}
       <div class="fleet-kpi">
         <span class="fleet-kpi-value">{{ camera_age_kpi.dahua_count }}</span>
         <span class="fleet-kpi-label">Dahua</span>
@@ -46,6 +48,9 @@
     </p>
   </section>
 
+  {% if camera_age_has_distribution %}
+  <script type="application/json" data-camera-age-charts>{{ camera_age_charts | tojson }}</script>
+
   <section class="card arsenal-chart-card" style="margin-top:16px;">
     <h3 class="card-section-title">Распределение по дате</h3>
     <p class="text-secondary" style="margin:0 0 8px;font-size:13px;">
@@ -53,6 +58,18 @@
     </p>
     <div class="arsenal-chart" data-camera-age-chart="distribution" style="height:360px;"></div>
   </section>
+  {% else %}
+  <section class="card" style="margin-top:16px;padding:20px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет данных о дате производства для построения графика.
+      {% if camera_age_kpi.without_date > 0 %}
+      Нажмите «Без даты» выше, чтобы увидеть список камер.
+      {% else %}
+      Нажмите «Опросить камеры» для прямого опроса IP-камер с регистраторов.
+      {% endif %}
+    </p>
+  </section>
+  {% endif %}
 
   <div id="camera-age-detail-panel" style="margin-top:16px;"></div>
   {% endif %}

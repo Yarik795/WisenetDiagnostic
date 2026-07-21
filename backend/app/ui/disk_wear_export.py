@@ -13,6 +13,7 @@ from .arsenal_export import render_vertical_bar_svg
 from .disk_wear_dashboard import disk_wear_page_context
 from .equipment_timeline import (
     disk_wear_detail_rows,
+    disk_wear_missing_rows,
     explode_disk_rows,
     list_tsv_recorders_with_metrics,
 )
@@ -83,6 +84,8 @@ def build_disk_wear_export_context(
             }
         )
 
+    missing_rows = disk_wear_missing_rows(items, model=model)
+
     filter_parts = [f"Интервал: {_bucket_label(bucket_val)}"]
     if min_years:
         filter_parts.append(f"от {min_years} лет")
@@ -116,6 +119,13 @@ def build_disk_wear_export_context(
             ],
         },
         "detail_sections": detail_sections,
+        "missing_section": {
+            "title": "Диски без наработки",
+            "count": len(missing_rows),
+            "rows": missing_rows,
+        }
+        if missing_rows
+        else None,
     }
 
 

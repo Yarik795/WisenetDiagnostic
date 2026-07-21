@@ -15,6 +15,7 @@ from .equipment_timeline import (
     normalize_period_filter,
     recorder_age_detail_rows,
     recorder_age_kpi,
+    recorder_age_missing_rows,
 )
 
 
@@ -46,7 +47,8 @@ def recorder_age_page_context(
     )
     kpi = recorder_age_kpi(items, model=model)
     model_options = distinct_recorder_models(items)
-    has_data = kpi["with_date"] > 0
+    has_data = kpi["total_recorders"] > 0
+    has_distribution = kpi["with_date"] > 0
 
     query_parts = []
     if date_from:
@@ -68,6 +70,7 @@ def recorder_age_page_context(
         "recorder_age_kpi": kpi,
         "recorder_age_charts": {"distribution": distribution},
         "recorder_age_has_data": has_data,
+        "recorder_age_has_distribution": has_distribution,
         "recorder_age_export_query": export_query,
     }
 
@@ -81,28 +84,34 @@ def recorder_age_detail_context(
     date_to: str = "",
     grouping: str = "month",
     model: str = "",
+    missing: bool = False,
 ) -> dict[str, Any]:
     grp = _parse_grouping(grouping)
     from_key = normalize_period_filter(date_from, grp)
     to_key = normalize_period_filter(date_to, grp)
     items = list_tsv_recorders_with_metrics(store, state)
-    rows = recorder_age_detail_rows(
-        items,
-        period=period,
-        grouping=grp,
-        from_key=from_key,
-        to_key=to_key,
-        model=model,
-    )
-    title = (
-        f"Регистраторы, произв. {format_period_label(period, grp)}"
-        if period
-        else "Регистраторы"
-    )
+    if missing:
+        rows = recorder_age_missing_rows(items, model=model)
+        title = "Регистраторы без даты производства"
+    else:
+        rows = recorder_age_detail_rows(
+            items,
+            period=period,
+            grouping=grp,
+            from_key=from_key,
+            to_key=to_key,
+            model=model,
+        )
+        title = (
+            f"Регистраторы, произв. {format_period_label(period, grp)}"
+            if period
+            else "Регистраторы"
+        )
     return {
         "recorder_age_detail_title": title,
         "recorder_age_detail_count": len(rows),
         "recorder_age_detail_rows": rows,
+        "recorder_age_detail_missing": missing,
         "recorder_age_detail_period": period,
         "recorder_age_date_from": date_from,
         "recorder_age_date_to": date_to,

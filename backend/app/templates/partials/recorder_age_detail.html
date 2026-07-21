@@ -42,6 +42,12 @@
     </table>
   </div>
   {% else %}
-  <p class="text-secondary" style="margin:0;">Нет регистраторов для выбранного периода.</p>
+  <p class="text-secondary" style="margin:0;">
+    {% if recorder_age_detail_missing %}
+    Нет регистраторов без даты производства для выбранных фильтров.
+    {% else %}
+    Нет регистраторов для выбранного периода.
+    {% endif %}
+  </p>
   {% endif %}
 </section>

@@ -16,12 +16,15 @@ from app.ui.equipment_timeline import (
     aggregate_recorders_by_period,
     camera_age_detail_rows,
     camera_age_kpi,
+    camera_age_missing_rows,
     disk_wear_detail_rows,
+    disk_wear_missing_rows,
     explode_disk_rows,
     normalize_period_filter,
     parse_manufacture_date,
     period_key,
     recorder_age_detail_rows,
+    recorder_age_missing_rows,
     wear_bucket_key,
 )
 
@@ -229,6 +232,75 @@ def test_aggregate_cameras_by_period_and_kpi() -> None:
     assert len(rows) == 1
     assert rows[0]["camera_ip"] == "10.0.0.10"
     assert rows[0]["date_source"] == "сборка прошивки"
+
+
+def test_recorder_age_missing_rows() -> None:
+    items = [
+        RecorderWithMetrics(_recorder(rec_id="nvr-1"), _metrics(rec_id="nvr-1", manufacture_date="2020-09")),
+        RecorderWithMetrics(_recorder(rec_id="nvr-2"), _metrics(rec_id="nvr-2", manufacture_date=None)),
+        RecorderWithMetrics(_recorder(rec_id="nvr-3"), _metrics(rec_id="nvr-3", manufacture_date="bad-date")),
+    ]
+    missing = recorder_age_missing_rows(items)
+    assert len(missing) == 2
+    assert {r["recorder_name"] for r in missing} == {"10.0.0.1"}
+
+    detail = recorder_age_detail_rows(items, period="2020-Q3", grouping="quarter")
+    assert len(detail) == 1
+
+    filtered = recorder_age_missing_rows(items, model="PRN-4011")
+    assert len(filtered) == 2
+
+
+def test_camera_age_missing_rows() -> None:
+    rec = _recorder()
+    items = [
+        CameraWithContext(_channel(), rec),
+        CameraWithContext(
+            _channel(channel_no=1, camera_ip="10.0.0.11", manufacture_date=None),
+            rec,
+        ),
+        CameraWithContext(
+            _channel(
+                channel_no=2,
+                camera_ip="10.0.0.12",
+                manufacture_date=None,
+                camera_inventory_error="timeout",
+            ),
+            rec,
+        ),
+    ]
+    missing = camera_age_missing_rows(items)
+    assert len(missing) == 2
+    assert missing[0]["camera_ip"] == "10.0.0.11"
+    assert any(r["missing_reason"] == "timeout" for r in missing)
+
+    detail = camera_age_detail_rows(items, period="2020", grouping="year")
+    assert len(detail) == 1
+
+    filtered = camera_age_missing_rows(items, model="IPC-HFW1230")
+    assert len(filtered) == 2
+
+
+def test_disk_wear_missing_rows() -> None:
+    disks_json = (
+        '[{"Storage":"1","Model":"WD_RED","PowerOnDuration":"4380"},'
+        '{"Storage":"2","Model":"WD_RED"},'
+        '{"Storage":"3","Model":"ST1000"}]'
+    )
+    items = [
+        RecorderWithMetrics(_recorder(), _metrics(disks_json=disks_json)),
+    ]
+    missing = disk_wear_missing_rows(items)
+    assert len(missing) == 2
+    assert {r["disk_slot"] for r in missing} == {"2", "3"}
+
+    exploded = explode_disk_rows(items)
+    detail = disk_wear_detail_rows(exploded, bucket_key="0-1", bucket="1")
+    assert len(detail) == 1
+
+    filtered = disk_wear_missing_rows(items, model="ST1000")
+    assert len(filtered) == 1
+    assert filtered[0]["disk_model"] == "ST1000"
 
 
 def test_channels_inventory_columns_migration(tmp_path: Path) -> None:

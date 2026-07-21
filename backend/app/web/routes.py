@@ -709,6 +709,7 @@ def recorders_age_detail_partial(
     date_to: str = "",
     grouping: str = "month",
     model: str = "",
+    missing: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
@@ -723,6 +724,7 @@ def recorders_age_detail_partial(
             date_to=date_to,
             grouping=grouping,
             model=model,
+            missing=missing in ("1", "true", "yes"),
         ),
     )
 
@@ -848,6 +850,7 @@ def disks_wear_detail_partial(
     min_years: str = "",
     max_years: str = "",
     model: str = "",
+    missing: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
@@ -862,6 +865,7 @@ def disks_wear_detail_partial(
             min_years=min_years,
             max_years=max_years,
             model=model,
+            missing=missing in ("1", "true", "yes"),
         ),
     )
 
@@ -997,6 +1001,7 @@ def cameras_age_detail_partial(
     grouping: str = "month",
     model: str = "",
     brand: str = "",
+    missing: str = "",
     store: ConfigStore = Depends(get_store),
     state: StateStore = Depends(get_state_store),
 ) -> HTMLResponse:
@@ -1012,6 +1017,7 @@ def cameras_age_detail_partial(
             grouping=grouping,
             model=model,
             brand=brand,
+            missing=missing in ("1", "true", "yes"),
         ),
     )
 

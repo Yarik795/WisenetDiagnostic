@@ -261,6 +261,37 @@ def recorder_age_detail_rows(
     return rows
 
 
+def recorder_age_missing_rows(
+    items: list[RecorderWithMetrics],
+    *,
+    model: str = "",
+) -> list[dict[str, Any]]:
+    filtered = filter_recorders_by_model(items, model)
+    rows: list[dict[str, Any]] = []
+    for item in filtered:
+        mfg = recorder_manufacture_date(item)
+        if parse_manufacture_date(mfg):
+            continue
+        rec = item.recorder
+        rows.append(
+            {
+                "object_name": rec.object_name,
+                "recorder_name": rec.name or rec.host,
+                "host": rec.host,
+                "model": recorder_model(item) or "—",
+                "serial_number": (
+                    item.metrics.serial_number if item.metrics else None
+                )
+                or "—",
+                "manufacture_date": mfg or "—",
+                "metric_label": "Дата пр-ва",
+                "metric_value": "—",
+            }
+        )
+    rows.sort(key=lambda r: (r["object_name"], r["recorder_name"]))
+    return rows
+
+
 def disk_power_on_hours_raw(disk: dict[str, Any]) -> Optional[int]:
     raw = disk_field(disk, "PowerOnDuration", "power_on_duration")
     if raw is None:
@@ -416,6 +447,41 @@ def disk_wear_detail_rows(
                 "metric_value": f"{row.power_on_hours} ч ({years:.1f} лет)",
             }
         )
+    rows.sort(
+        key=lambda r: (r["object_name"], r["recorder_name"], r["disk_slot"])
+    )
+    return rows
+
+
+def disk_wear_missing_rows(
+    items: list[RecorderWithMetrics],
+    *,
+    model: str = "",
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        metrics = item.metrics
+        if not metrics or not metrics.disks_json:
+            continue
+        rec = item.recorder
+        for disk in parse_disks_json(metrics.disks_json):
+            if disk_power_on_hours_raw(disk) is not None:
+                continue
+            disk_model = disk_field(disk, "Model", "model") or "—"
+            if model and disk_model != model:
+                continue
+            rows.append(
+                {
+                    "object_name": rec.object_name,
+                    "recorder_name": rec.name or rec.host,
+                    "host": rec.host,
+                    "nvr_model": metrics.model or "—",
+                    "disk_slot": disk_slot(disk),
+                    "disk_model": disk_model,
+                    "metric_label": "Наработка",
+                    "metric_value": "—",
+                }
+            )
     rows.sort(
         key=lambda r: (r["object_name"], r["recorder_name"], r["disk_slot"])
     )
@@ -606,6 +672,16 @@ def _date_source_label(source: Optional[str]) -> str:
     return "—"
 
 
+def _camera_missing_date_reason(item: CameraWithContext) -> str:
+    ch = item.channel
+    if ch.camera_inventory_error:
+        return ch.camera_inventory_error
+    mfg = camera_manufacture_date(item)
+    if mfg and not parse_manufacture_date(mfg):
+        return "невалидная дата"
+    return "нет данных"
+
+
 def camera_age_detail_rows(
     items: list[CameraWithContext],
     *,
@@ -642,6 +718,39 @@ def camera_age_detail_rows(
                 "manufacture_date": mfg or "—",
                 "date_source": _date_source_label(ch.manufacture_date_source),
                 "metric_value": format_manufacture_date(mfg) if mfg else "—",
+            }
+        )
+    rows.sort(key=lambda r: (r["object_name"], r["recorder_name"], r["channel_name"]))
+    return rows
+
+
+def camera_age_missing_rows(
+    items: list[CameraWithContext],
+    *,
+    model: str = "",
+    brand: str = "",
+) -> list[dict[str, Any]]:
+    filtered = filter_cameras_by_brand(filter_cameras_by_model(items, model), brand)
+    rows: list[dict[str, Any]] = []
+    for item in filtered:
+        mfg = camera_manufacture_date(item)
+        if parse_manufacture_date(mfg):
+            continue
+        ch = item.channel
+        rec = item.recorder
+        rows.append(
+            {
+                "object_name": rec.object_name,
+                "recorder_name": rec.name or rec.host,
+                "channel_name": ch.name or f"Канал {ch.channel_no + 1}",
+                "camera_ip": ch.camera_ip or "—",
+                "model": camera_model(item) or "—",
+                "manufacturer": camera_manufacturer(item) or "—",
+                "serial_number": ch.camera_serial or "—",
+                "manufacture_date": mfg or "—",
+                "date_source": _date_source_label(ch.manufacture_date_source),
+                "metric_value": "—",
+                "missing_reason": _camera_missing_date_reason(item),
             }
         )
     rows.sort(key=lambda r: (r["object_name"], r["recorder_name"], r["channel_name"]))

@@ -110,6 +110,7 @@
     </div>
 
     <h2>Распределение по дате производства</h2>
+    {% if export.distribution.table_rows %}
     <div class="chart-box">{{ export.distribution.bar_svg | safe }}</div>
     <table>
       <thead>
@@ -125,6 +126,9 @@
         {% endfor %}
       </tbody>
     </table>
+    {% else %}
+    <p class="meta">Нет данных для построения распределения по дате производства.</p>
+    {% endif %}
 
     <h2>Объекты и регистраторы по периодам</h2>
     {% for section in export.detail_sections %}
@@ -160,6 +164,34 @@
       {% endif %}
     </div>
     {% endfor %}
+
+    {% if export.missing_section %}
+    <div class="section-block">
+      <h2>{{ export.missing_section.title }} ({{ export.missing_section.count }})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Объект</th>
+            <th>Устройство</th>
+            <th>IP</th>
+            <th>Модель NVR</th>
+            <th>S/N</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in export.missing_section.rows %}
+          <tr>
+            <td>{{ row.object_name }}</td>
+            <td>{{ row.recorder_name }}</td>
+            <td class="mono">{{ row.host }}</td>
+            <td>{{ row.model }}</td>
+            <td class="mono">{{ row.serial_number }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
   </div>
 </body>
 </html>

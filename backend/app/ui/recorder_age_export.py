@@ -15,6 +15,7 @@ from .equipment_timeline import (
     list_tsv_recorders_with_metrics,
     normalize_period_filter,
     recorder_age_detail_rows,
+    recorder_age_missing_rows,
 )
 from .recorder_age_dashboard import recorder_age_page_context
 
@@ -76,6 +77,8 @@ def build_recorder_age_export_context(
             }
         )
 
+    missing_rows = recorder_age_missing_rows(items, model=model)
+
     filter_parts = [f"Группировка: {_grouping_label(grp)}"]
     if date_from:
         filter_parts.append(f"с {date_from}")
@@ -109,6 +112,13 @@ def build_recorder_age_export_context(
             ],
         },
         "detail_sections": detail_sections,
+        "missing_section": {
+            "title": "Регистраторы без даты производства",
+            "count": len(missing_rows),
+            "rows": missing_rows,
+        }
+        if missing_rows
+        else None,
     }
 
 

@@ -44,6 +44,12 @@
     </table>
   </div>
   {% else %}
-  <p class="text-secondary" style="margin:0;">Нет дисков для выбранного интервала.</p>
+  <p class="text-secondary" style="margin:0;">
+    {% if disk_wear_detail_missing %}
+    Нет дисков без наработки для выбранных фильтров.
+    {% else %}
+    Нет дисков для выбранного интервала.
+    {% endif %}
+  </p>
   {% endif %}
 </section>

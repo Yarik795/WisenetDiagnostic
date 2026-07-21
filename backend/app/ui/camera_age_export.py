@@ -13,6 +13,7 @@ from .arsenal_export import render_vertical_bar_svg
 from .camera_age_dashboard import camera_age_page_context
 from .equipment_timeline import (
     camera_age_detail_rows,
+    camera_age_missing_rows,
     list_tsv_cameras_with_context,
     normalize_period_filter,
 )
@@ -87,6 +88,8 @@ def build_camera_age_export_context(
             }
         )
 
+    missing_rows = camera_age_missing_rows(items, model=model, brand=brand)
+
     filter_parts = [f"Группировка: {_grouping_label(grp)}"]
     if date_from:
         filter_parts.append(f"с {date_from}")
@@ -126,6 +129,13 @@ def build_camera_age_export_context(
             ],
         },
         "detail_sections": detail_sections,
+        "missing_section": {
+            "title": "Камеры без даты производства",
+            "count": len(missing_rows),
+            "rows": missing_rows,
+        }
+        if missing_rows
+        else None,
     }
 
 

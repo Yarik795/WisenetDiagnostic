@@ -194,6 +194,27 @@ a:hover {
 .fleet-kpi--error .fleet-kpi-dot { background: var(--status-error); }
 .fleet-kpi--unknown .fleet-kpi-dot { background: var(--status-unknown); }
 
+button.fleet-kpi--action {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  transition: opacity 0.15s ease;
+}
+
+button.fleet-kpi--action:hover {
+  opacity: 0.85;
+}
+
+button.fleet-kpi--action:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .fleet-kpi-value {
   font-size: 22px;
   font-weight: 600;

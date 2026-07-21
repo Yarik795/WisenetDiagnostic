@@ -2,12 +2,10 @@
   {% if not recorder_age_has_data %}
   <section class="card" style="padding:24px;text-align:center;">
     <p class="text-secondary" style="margin:0;">
-      Нет данных о дате производства регистраторов. Убедитесь, что NVR опрошены и серийные номера распознаны.
+      Нет регистраторов ТСВ. Убедитесь, что NVR добавлены в конфигурацию.
     </p>
   </section>
   {% else %}
-  <script type="application/json" data-recorder-age-charts>{{ recorder_age_charts | tojson }}</script>
-
   <section class="fleet-overview card" aria-label="Показатели регистраторов">
     <div class="fleet-kpi-grid">
       <div class="fleet-kpi">
@@ -19,11 +17,19 @@
         <span class="fleet-kpi-value">{{ recorder_age_kpi.with_date }}</span>
         <span class="fleet-kpi-label">С датой пр-ва</span>
       </div>
+      {% if recorder_age_kpi.without_date > 0 %}
+      <button type="button" class="fleet-kpi fleet-kpi--warn fleet-kpi--action" data-recorder-age-missing title="Показать список">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ recorder_age_kpi.without_date }}</span>
+        <span class="fleet-kpi-label">Без даты пр-ва</span>
+      </button>
+      {% else %}
       <div class="fleet-kpi fleet-kpi--warn">
         <span class="fleet-kpi-dot" aria-hidden="true"></span>
         <span class="fleet-kpi-value">{{ recorder_age_kpi.without_date }}</span>
         <span class="fleet-kpi-label">Без даты пр-ва</span>
       </div>
+      {% endif %}
       <div class="fleet-kpi">
         <span class="fleet-kpi-value">{{ recorder_age_kpi.oldest }}</span>
         <span class="fleet-kpi-label">Самый старый</span>
@@ -35,6 +41,9 @@
     </div>
   </section>
 
+  {% if recorder_age_has_distribution %}
+  <script type="application/json" data-recorder-age-charts>{{ recorder_age_charts | tojson }}</script>
+
   <section class="card arsenal-chart-card" style="margin-top:16px;">
     <h3 class="card-section-title">Распределение по дате производства</h3>
     <p class="text-secondary" style="margin:0 0 8px;font-size:13px;">
@@ -42,6 +51,18 @@
     </p>
     <div class="arsenal-chart" data-recorder-age-chart="distribution" style="height:360px;"></div>
   </section>
+  {% else %}
+  <section class="card" style="margin-top:16px;padding:20px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет данных о дате производства для построения графика.
+      {% if recorder_age_kpi.without_date > 0 %}
+      Нажмите «Без даты пр-ва» выше, чтобы увидеть список регистраторов.
+      {% else %}
+      Убедитесь, что NVR опрошены и серийные номера распознаны.
+      {% endif %}
+    </p>
+  </section>
+  {% endif %}
 
   <div id="recorder-age-detail-panel" style="margin-top:16px;"></div>
   {% endif %}

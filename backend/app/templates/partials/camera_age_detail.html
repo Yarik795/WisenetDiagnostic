@@ -26,8 +26,12 @@
           <th>Модель</th>
           <th>Бренд</th>
           <th>S/N</th>
+          {% if camera_age_detail_missing %}
+          <th>Причина</th>
+          {% else %}
           <th>Дата</th>
           <th>Источник</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -40,14 +44,24 @@
           <td>{{ row.model }}</td>
           <td>{{ row.manufacturer }}</td>
           <td class="mono text-secondary" style="font-size:12px;">{{ row.serial_number }}</td>
+          {% if camera_age_detail_missing %}
+          <td class="text-secondary">{{ row.missing_reason }}</td>
+          {% else %}
           <td>{{ row.metric_value }}</td>
           <td class="text-secondary">{{ row.date_source }}</td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p class="text-secondary" style="margin:0;">Нет камер для выбранного периода.</p>
+  <p class="text-secondary" style="margin:0;">
+    {% if camera_age_detail_missing %}
+    Нет камер без даты производства для выбранных фильтров.
+    {% else %}
+    Нет камер для выбранного периода.
+    {% endif %}
+  </p>
   {% endif %}
 </section>

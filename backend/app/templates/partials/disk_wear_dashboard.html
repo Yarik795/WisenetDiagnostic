@@ -2,12 +2,10 @@
   {% if not disk_wear_has_data %}
   <section class="card" style="padding:24px;text-align:center;">
     <p class="text-secondary" style="margin:0;">
-      Нет данных о наработке дисков. Убедитесь, что NVR опрошены и storageinfo возвращает PowerOnDuration.
+      Нет данных о дисках. Убедитесь, что NVR опрошены и storageinfo возвращает информацию о дисках.
     </p>
   </section>
   {% else %}
-  <script type="application/json" data-disk-wear-charts>{{ disk_wear_charts | tojson }}</script>
-
   <section class="fleet-overview card" aria-label="Показатели дисков">
     <div class="fleet-kpi-grid">
       <div class="fleet-kpi">
@@ -19,17 +17,28 @@
         <span class="fleet-kpi-value">{{ disk_wear_kpi.with_wear }}</span>
         <span class="fleet-kpi-label">С наработкой</span>
       </div>
+      {% if disk_wear_kpi.without_wear > 0 %}
+      <button type="button" class="fleet-kpi fleet-kpi--warn fleet-kpi--action" data-disk-wear-missing title="Показать список">
+        <span class="fleet-kpi-dot" aria-hidden="true"></span>
+        <span class="fleet-kpi-value">{{ disk_wear_kpi.without_wear }}</span>
+        <span class="fleet-kpi-label">Без наработки</span>
+      </button>
+      {% else %}
       <div class="fleet-kpi fleet-kpi--warn">
         <span class="fleet-kpi-dot" aria-hidden="true"></span>
         <span class="fleet-kpi-value">{{ disk_wear_kpi.without_wear }}</span>
         <span class="fleet-kpi-label">Без наработки</span>
       </div>
+      {% endif %}
       <div class="fleet-kpi">
         <span class="fleet-kpi-value">{{ disk_wear_kpi.avg_years }}</span>
         <span class="fleet-kpi-label">Средняя наработка, лет</span>
       </div>
     </div>
   </section>
+
+  {% if disk_wear_has_distribution %}
+  <script type="application/json" data-disk-wear-charts>{{ disk_wear_charts | tojson }}</script>
 
   <section class="card arsenal-chart-card" style="margin-top:16px;">
     <h3 class="card-section-title">Распределение по наработке</h3>
@@ -38,6 +47,18 @@
     </p>
     <div class="arsenal-chart" data-disk-wear-chart="distribution" style="height:360px;"></div>
   </section>
+  {% else %}
+  <section class="card" style="margin-top:16px;padding:20px;text-align:center;">
+    <p class="text-secondary" style="margin:0;">
+      Нет данных о наработке для построения графика.
+      {% if disk_wear_kpi.without_wear > 0 %}
+      Нажмите «Без наработки» выше, чтобы увидеть список дисков.
+      {% else %}
+      Убедитесь, что NVR опрошены и storageinfo возвращает PowerOnDuration.
+      {% endif %}
+    </p>
+  </section>
+  {% endif %}
 
   <div id="disk-wear-detail-panel" style="margin-top:16px;"></div>
   {% endif %}

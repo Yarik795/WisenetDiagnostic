@@ -12,6 +12,7 @@ from .equipment_timeline import (
     aggregate_cameras_by_period,
     camera_age_detail_rows,
     camera_age_kpi,
+    camera_age_missing_rows,
     distinct_camera_brands,
     distinct_camera_models,
     format_period_label,
@@ -50,7 +51,8 @@ def camera_age_page_context(
         brand=brand,
     )
     kpi = camera_age_kpi(items, model=model, brand=brand)
-    has_data = kpi["with_date"] > 0
+    has_data = kpi["total_cameras"] > 0
+    has_distribution = kpi["with_date"] > 0
 
     query_parts = []
     if date_from:
@@ -77,6 +79,7 @@ def camera_age_page_context(
         "camera_age_kpi": kpi,
         "camera_age_charts": {"distribution": distribution},
         "camera_age_has_data": has_data,
+        "camera_age_has_distribution": has_distribution,
         "camera_age_has_cameras": len(items) > 0,
         "camera_age_export_query": export_query,
         "camera_inventory_job": job,
@@ -97,29 +100,35 @@ def camera_age_detail_context(
     grouping: str = "month",
     model: str = "",
     brand: str = "",
+    missing: bool = False,
 ) -> dict[str, Any]:
     grp = _parse_grouping(grouping)
     from_key = normalize_period_filter(date_from, grp)
     to_key = normalize_period_filter(date_to, grp)
     items = list_tsv_cameras_with_context(store, state)
-    rows = camera_age_detail_rows(
-        items,
-        period=period,
-        grouping=grp,
-        from_key=from_key,
-        to_key=to_key,
-        model=model,
-        brand=brand,
-    )
-    title = (
-        f"Камеры, произв. {format_period_label(period, grp)}"
-        if period
-        else "Камеры"
-    )
+    if missing:
+        rows = camera_age_missing_rows(items, model=model, brand=brand)
+        title = "Камеры без даты производства"
+    else:
+        rows = camera_age_detail_rows(
+            items,
+            period=period,
+            grouping=grp,
+            from_key=from_key,
+            to_key=to_key,
+            model=model,
+            brand=brand,
+        )
+        title = (
+            f"Камеры, произв. {format_period_label(period, grp)}"
+            if period
+            else "Камеры"
+        )
     return {
         "camera_age_detail_title": title,
         "camera_age_detail_count": len(rows),
         "camera_age_detail_rows": rows,
+        "camera_age_detail_missing": missing,
         "camera_age_detail_period": period,
         "camera_age_date_from": date_from,
         "camera_age_date_to": date_to,

@@ -11,6 +11,7 @@ from .equipment_timeline import (
     aggregate_disks_by_wear,
     disk_wear_detail_rows,
     disk_wear_kpi,
+    disk_wear_missing_rows,
     distinct_disk_models,
     explode_disk_rows,
     format_wear_bucket_label,
@@ -57,7 +58,8 @@ def disk_wear_page_context(
     )
     kpi = disk_wear_kpi(items, disks, model=model)
     model_options = distinct_disk_models(disks)
-    has_data = kpi["with_wear"] > 0
+    has_data = kpi["total_disks"] > 0
+    has_distribution = kpi["with_wear"] > 0
 
     query_parts = []
     if bucket and bucket != "1":
@@ -79,6 +81,7 @@ def disk_wear_page_context(
         "disk_wear_kpi": kpi,
         "disk_wear_charts": {"distribution": distribution},
         "disk_wear_has_data": has_data,
+        "disk_wear_has_distribution": has_distribution,
         "disk_wear_export_query": export_query,
     }
 
@@ -92,29 +95,35 @@ def disk_wear_detail_context(
     min_years: str = "",
     max_years: str = "",
     model: str = "",
+    missing: bool = False,
 ) -> dict[str, Any]:
     bucket_val = _parse_bucket(bucket)
     min_val = _parse_float(min_years)
     max_val = _parse_float(max_years)
     items = list_tsv_recorders_with_metrics(store, state)
-    disks = explode_disk_rows(items)
-    rows = disk_wear_detail_rows(
-        disks,
-        bucket_key=bucket_key,
-        bucket=bucket_val,
-        min_years=min_val,
-        max_years=max_val,
-        model=model,
-    )
-    title = (
-        f"Диски, наработка {format_wear_bucket_label(bucket_key)}"
-        if bucket_key
-        else "Диски"
-    )
+    if missing:
+        rows = disk_wear_missing_rows(items, model=model)
+        title = "Диски без наработки"
+    else:
+        disks = explode_disk_rows(items)
+        rows = disk_wear_detail_rows(
+            disks,
+            bucket_key=bucket_key,
+            bucket=bucket_val,
+            min_years=min_val,
+            max_years=max_val,
+            model=model,
+        )
+        title = (
+            f"Диски, наработка {format_wear_bucket_label(bucket_key)}"
+            if bucket_key
+            else "Диски"
+        )
     return {
         "disk_wear_detail_title": title,
         "disk_wear_detail_count": len(rows),
         "disk_wear_detail_rows": rows,
+        "disk_wear_detail_missing": missing,
         "disk_wear_detail_bucket_key": bucket_key,
         "disk_wear_bucket": bucket_val,
         "disk_wear_min_years": min_years,
