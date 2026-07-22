@@ -70,7 +70,8 @@ def test_build_batch_prompt_contains_objects() -> None:
     assert "confirmed|suspect|possible|none" in system
     user = messages[1]["content"]
     assert "i=0" in user
-    assert "г Москва, ул Тестовая, 1" in user
+    assert "г Москва, ул Тестовая, 1" not in user
+    assert "Адрес:" not in user
     assert "САПС" in user
 
 
