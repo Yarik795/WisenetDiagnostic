@@ -142,7 +142,7 @@ class LLMSettings(BaseModel):
 
 class EmailReportSettings(BaseModel):
     enabled: bool = False
-    smtp_host: str = "MTA.SIGMA.SBRF.RU"
+    smtp_host: str = "smtp.example.com"
     smtp_port: int = Field(default=25, ge=1, le=65535)
     use_starttls: bool = True
     smtp_user: str = ""

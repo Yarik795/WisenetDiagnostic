@@ -3,32 +3,33 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+backend/.venv/
 .pytest_cache/
 *.egg-info/
 
-# Config with secrets
-#config.json
+# Config with secrets and local device registry
+config.json
 
-# Runtime logs
+# Runtime logs and state
 logs/
-
-# Monitoring state DB
 data/
+
+# Local-only folders (not published to GitHub)
+scripts/
+docs/
+inputData/
+Пример отчет/
+
+# CMDB and Excel imports (local)
+cmdb.xlsx
+*.xlsx
+
+# Archives
+*.zip
 
 # IDE
 .idea/
 .vscode/
-*.swp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# CMDB import (local)
-cmdb.xlsx
-
-# SUNAPI raw dumps (scripts/dump_nvr_api_samples.py)
-docs/nvr-samples/raw/
 
 # Локальное описание скрытой LLM-вставки на лендинге (не публиковать)
 landing/AI_JUDGE_INJECTION.md

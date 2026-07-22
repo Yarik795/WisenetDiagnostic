@@ -130,7 +130,7 @@ def test_stale_connectfail_xrn2010_live_stream_is_ok() -> None:
     ch = ChannelInfo(
         channel_no=8,
         source_state="On",
-        camera_ip="100.111.2.123",
+        camera_ip="192.0.2.123",
         register_status="ConnectFail",
         data_rate=2.911,
     )
@@ -191,7 +191,7 @@ def test_on_authfail_is_warn_without_live_event() -> None:
     ch = ChannelInfo(
         channel_no=0,
         source_state="On",
-        camera_ip="10.89.188.147",
+        camera_ip="192.0.2.147",
         register_status="AuthFail",
     )
     status, reason = evaluate_channel_health(ch, None, _settings())
@@ -203,7 +203,7 @@ def test_stale_authfail_xrn2010_live_stream_is_ok() -> None:
     ch = ChannelInfo(
         channel_no=0,
         source_state="On",
-        camera_ip="10.89.188.147",
+        camera_ip="192.0.2.147",
         register_status="AuthFail",
         data_rate=2.688,
     )

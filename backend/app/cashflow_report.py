@@ -20,10 +20,7 @@ REPORTS_DIR = PROJECT_ROOT / "data" / "reports"
 REQUESTS_FILENAME = "requests.xlsx"
 REPORT_ARTIFACT = REPORTS_DIR / "cashflow_report.json"
 
-SAP_URL_TEMPLATE = (
-    "https://sap-asus.sigma.sbrf.ru/sap/bc/ui2/flp2#ZSPL_REQ_TSO-display"
-    "&//ZC_REQUEST_TSO('{num}')"
-)
+SAP_URL_TEMPLATE = "https://example.com/requests/{num}"
 
 REQUIRED_COLUMNS = (
     "Вид работ",

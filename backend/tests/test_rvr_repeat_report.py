@@ -28,7 +28,7 @@ def _row(
     drug_number: str = "SD001",
     created_at: str = "2026-01-15T10:00:00+00:00",
     customer_fio: str = "Иванов",
-    tb: str = "3800 Московский банк",
+    tb: str = "3800 Тестовый банк",
     work_type: str = "РВР",
     address: str = "ул. Ленина, 1",
     security_system_type: str = "СОТС",
@@ -68,7 +68,7 @@ def test_object_type_from_fio() -> None:
 def test_passes_tbank_filter() -> None:
     assert passes_tbank_filter(OBJECT_TYPE_ADZ, "9900 ЦА") is True
     assert passes_tbank_filter(OBJECT_TYPE_ADZ, "") is True
-    assert passes_tbank_filter(OBJECT_TYPE_VSP, "3800 Московский банк") is True
+    assert passes_tbank_filter(OBJECT_TYPE_VSP, "3800 Тестовый банк") is True
     assert passes_tbank_filter(OBJECT_TYPE_VSP, "9900 ЦА") is False
 
 
@@ -114,7 +114,7 @@ def test_mixed_object_types_tbank_filter_per_row() -> None:
         _row(
             request_number="vsp1",
             customer_fio="Иванов",
-            tb="3800 Московский банк",
+            tb="3800 Тестовый банк",
             address="Адрес ВСП ок",
         ),
         _row(

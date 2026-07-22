@@ -44,7 +44,7 @@
   },
   "email_report": {
     "enabled": false,
-    "smtp_host": "MTA.SIGMA.SBRF.RU",
+    "smtp_host": "smtp.example.com",
     "smtp_port": 25,
     "use_starttls": true,
     "smtp_user": "",

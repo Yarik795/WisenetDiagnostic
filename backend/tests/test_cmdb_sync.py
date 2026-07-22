@@ -257,10 +257,10 @@ def test_parse_cmdb_skud_and_bio() -> None:
         [
             "538000001",
             "Оборудование ТСО",
-            "100.111.46.66",
-            "E8:FF:1E:30:15:3F",
+            "10.0.0.46",
+            "AA:BB:CC:DD:EE:01",
             "",
-            "г. Москва, ул. Федосьино",
+            "г. Пример, ул. Тестовая, 1",
             "",
             "СКУД",
             "",
@@ -283,10 +283,10 @@ def test_parse_cmdb_skud_and_bio() -> None:
         [
             "538000001",
             "Оборудование ТСО",
-            "100.111.47.19",
-            "0C:63:FC:0A:E8:E2",
+            "10.0.0.47",
+            "AA:BB:CC:DD:EE:02",
             "",
-            "г. Москва, ул. Череповецкая",
+            "г. Пример, ул. Тестовая, 2",
             "",
             "",
             "",
@@ -310,10 +310,10 @@ def test_parse_cmdb_skud_and_bio() -> None:
     result = parse_cmdb_grid(grid)
     assert len(result.rows) == 2
     by_host = {r.host: r for r in result.rows}
-    assert by_host["100.111.46.66"].device_kind == "skud"
-    assert by_host["100.111.46.66"].name == "NG NET"
-    assert by_host["100.111.47.19"].device_kind == "bio"
-    assert by_host["100.111.47.19"].mac == "0C:63:FC:0A:E8:E2"
+    assert by_host["10.0.0.46"].device_kind == "skud"
+    assert by_host["10.0.0.46"].name == "NG NET"
+    assert by_host["10.0.0.47"].device_kind == "bio"
+    assert by_host["10.0.0.47"].mac == "AA:BB:CC:DD:EE:02"
     assert result.counts_by_kind["skud"] == 1
     assert result.counts_by_kind["bio"] == 1
 
