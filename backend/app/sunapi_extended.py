@@ -661,6 +661,11 @@ _TEMPERATURE_SMART_RE = re.compile(
     r"Temperature\s*:\s*(\d+)\s*(?:&#?\d+;|\u00b0|\°)?\s*C?",
     re.IGNORECASE,
 )
+_POWER_ON_HOURS_SMART_RE = re.compile(
+    r"009\s+Power[_-]On[_-]Hours\s+\d+\s+\d+\s+\d+\s+(\d+)",
+    re.IGNORECASE,
+)
+_LEGACY_STORAGE_MODEL_PREFIXES = ("HRX-1620", "XRN-2010")
 
 
 def parse_temperature_from_smart(
@@ -678,6 +683,85 @@ def parse_temperature_from_smart(
     if m:
         return f"{m.group(1)} °C"
     return None
+
+
+def parse_power_on_hours_from_smart(text: str) -> Optional[int]:
+    """SMART attribute 009 Power_On_Hours → часы наработки."""
+    if not text:
+        return None
+    plain = html.unescape(text)
+    plain = re.sub(r"<[^>]+>", " ", plain)
+    m = _POWER_ON_HOURS_SMART_RE.search(plain)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _smart_fields_from_text(
+    text: str, *, model: Optional[str] = None
+) -> dict[str, str]:
+    out: dict[str, str] = {}
+    temp = parse_temperature_from_smart(text, model=model)
+    if temp:
+        out["Temperature"] = temp
+    hours = parse_power_on_hours_from_smart(text)
+    if hours is not None:
+        out["PowerOnDuration"] = str(hours)
+    return out
+
+
+def _disk_slot_index(disk: dict) -> Optional[int]:
+    for key in ("SlotNumber", "slot_number", "Storage", "storage", "Slot", "slot"):
+        raw = disk.get(key)
+        if raw is None:
+            continue
+        try:
+            return int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _disk_power_on_hours_value(disk: dict) -> Optional[int]:
+    health = disk.get("Health")
+    if isinstance(health, dict):
+        for key in ("PowerOnHours", "power_on_hours", "PowerOnDuration"):
+            raw = health.get(key)
+            if raw is not None and str(raw).strip():
+                try:
+                    return int(float(str(raw).replace(",", ".")))
+                except (TypeError, ValueError):
+                    pass
+    for key in (
+        "PowerOnDuration",
+        "power_on_duration",
+        "PowerOnHours",
+        "power_on_hours",
+    ):
+        raw = disk.get(key)
+        if raw is None or not str(raw).strip():
+            continue
+        try:
+            return int(float(str(raw).replace(",", ".")))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _disk_needs_power_on_hours(disk: dict) -> bool:
+    return _disk_power_on_hours_value(disk) is None
+
+
+def _is_legacy_storage_model(model: Optional[str]) -> bool:
+    if not model:
+        return False
+    model_upper = model.strip().upper()
+    return any(
+        model_upper.startswith(prefix) for prefix in _LEGACY_STORAGE_MODEL_PREFIXES
+    )
 
 
 def parse_diskutility_list(body: str, *, model: Optional[str] = None) -> list[dict]:
@@ -704,9 +788,8 @@ def parse_diskutility_list(body: str, *, model: Optional[str] = None) -> list[di
         elif attr == "Name":
             disks[idx]["Name"] = value.strip()
         elif attr == "SMART":
-            temp = parse_temperature_from_smart(value, model=model)
-            if temp:
-                disks[idx]["Temperature"] = temp
+            smart_fields = _smart_fields_from_text(value, model=model)
+            disks[idx].update(smart_fields)
     return [
         disks[k]
         for k in sorted(disks)
@@ -720,12 +803,12 @@ def parse_diskutility_detail(body: str, *, model: Optional[str] = None) -> dict:
         item = data["Disks"][0]
         if isinstance(item, dict):
             smart = item.get("SMART") or ""
-            temp = parse_temperature_from_smart(str(smart), model=model)
-            return {
+            result = {
                 "Index": item.get("Index"),
                 "Name": (item.get("Name") or "").strip(),
-                "Temperature": temp,
             }
+            result.update(_smart_fields_from_text(str(smart), model=model))
+            return result
 
     fields = parse_key_value_body(body)
     pattern = re.compile(r"^Disk\.(\d+)\.(.+)$")
@@ -740,9 +823,7 @@ def parse_diskutility_detail(body: str, *, model: Optional[str] = None) -> dict:
         elif attr == "Name":
             result["Name"] = value.strip()
         elif attr == "SMART":
-            temp = parse_temperature_from_smart(value, model=model)
-            if temp:
-                result["Temperature"] = temp
+            result.update(_smart_fields_from_text(value, model=model))
     return result
 
 
@@ -774,7 +855,68 @@ def merge_disk_temperatures(
     return enriched
 
 
-async def enrich_storage_temperatures(
+def merge_disk_power_on_hours(
+    storage_disks: list[dict],
+    utility_disks: list[dict],
+    *,
+    details_by_index: Optional[dict[int, dict]] = None,
+) -> list[dict]:
+    enriched = [dict(d) for d in storage_disks]
+    by_index: dict[int, dict] = {}
+    for u in utility_disks:
+        idx = u.get("Index")
+        if idx is None:
+            continue
+        try:
+            by_index[int(idx)] = dict(u)
+        except (TypeError, ValueError):
+            continue
+    if details_by_index:
+        for idx, detail in details_by_index.items():
+            merged = dict(by_index.get(idx, {}))
+            for key, value in detail.items():
+                if value is not None:
+                    merged[key] = value
+            by_index[idx] = merged
+
+    if not by_index:
+        return enriched
+
+    for i, disk in enumerate(enriched):
+        if not _disk_needs_power_on_hours(disk):
+            continue
+        idx = _disk_slot_index(disk)
+        source = by_index.get(idx) if idx is not None else None
+        if source is None and i < len(utility_disks):
+            source = utility_disks[i]
+        if not source:
+            continue
+        hours = _disk_power_on_hours_value(source)
+        if hours is not None:
+            disk["PowerOnDuration"] = str(hours)
+    return enriched
+
+
+async def _fetch_diskutility_detail(
+    recorder: Recorder,
+    credentials: Credentials,
+    index: int,
+    *,
+    device_model: Optional[str] = None,
+    cgi: str = "recording.cgi",
+    timeout: float = 20.0,
+) -> dict:
+    detail_url = build_url(recorder, cgi, "diskutility", Index=str(index))
+    st, detail_body, _ = await _fetch(recorder, credentials, detail_url, timeout)
+    if st != 200 or not detail_body.strip() or _is_diskutility_error(detail_body):
+        return {}
+    detail = parse_diskutility_detail(detail_body, model=device_model)
+    if detail.get("Index") is None:
+        detail["Index"] = index
+    return detail
+
+
+async def enrich_storage_disk_metrics(
     recorder: Recorder,
     credentials: Credentials,
     disks: list[dict],
@@ -787,54 +929,116 @@ async def enrich_storage_temperatures(
     normalized = normalize_storage_disks(
         disks, model=device_model, profile=profile
     )
-    if normalized and all(d.get("Temperature") for d in normalized):
+    needs_temp = any(not d.get("Temperature") for d in normalized)
+    needs_hours = any(_disk_needs_power_on_hours(d) for d in normalized)
+    if not needs_temp and not needs_hours:
         return normalized
 
-    if profile is not None and not profile.supports_diskutility:
-        return normalized
+    legacy = _is_legacy_storage_model(device_model)
+    can_list = profile is None or profile.supports_diskutility
+    utility_disks: list[dict] = []
 
-    list_url = build_url(recorder, "recording.cgi", "diskutility")
-    status, body, _ = await _fetch(recorder, credentials, list_url, timeout)
-    if status != 200 or not body.strip() or _is_diskutility_error(body):
-        return normalized
+    if can_list and not legacy:
+        list_url = build_url(recorder, "recording.cgi", "diskutility")
+        status, body, _ = await _fetch(recorder, credentials, list_url, timeout)
+        if status == 200 and body.strip() and not _is_diskutility_error(body):
+            utility_disks = parse_diskutility_list(body, model=device_model)
 
-    utility_disks = parse_diskutility_list(body, model=device_model)
-    still_missing_storage = any(not d.get("Temperature") for d in normalized)
-    missing_temp = [
-        u for u in utility_disks if not u.get("Temperature")
-    ]
+    details_by_index: dict[int, dict] = {}
+    indices_to_fetch: list[int] = []
 
-    if (
-        still_missing_storage
-        and missing_temp
-        and len(missing_temp) <= max_detail_fetches
-    ):
-
-        async def fetch_one(index) -> dict:
-            detail_url = build_url(
-                recorder,
-                "recording.cgi",
-                "diskutility",
-                Index=str(index),
-            )
-            st, detail_body, _ = await _fetch(
-                recorder, credentials, detail_url, timeout
-            )
-            if st != 200:
-                return {"Index": index}
-            return parse_diskutility_detail(detail_body, model=device_model)
-
-        indices = [u["Index"] for u in missing_temp[:max_detail_fetches]]
-        details = await asyncio.gather(*(fetch_one(i) for i in indices))
-        by_index = {d.get("Index"): d for d in details if d.get("Index") is not None}
-        for u in utility_disks:
-            if u.get("Temperature"):
+    if legacy and needs_hours:
+        for disk in normalized:
+            if not _disk_needs_power_on_hours(disk):
                 continue
-            detail = by_index.get(u.get("Index"))
-            if detail and detail.get("Temperature"):
-                u["Temperature"] = detail["Temperature"]
+            idx = _disk_slot_index(disk)
+            if idx is not None and idx not in indices_to_fetch:
+                indices_to_fetch.append(idx)
+    elif utility_disks:
+        for u in utility_disks:
+            idx = u.get("Index")
+            if idx is None:
+                continue
+            try:
+                idx_int = int(idx)
+            except (TypeError, ValueError):
+                continue
+            need_detail = False
+            if needs_temp and not u.get("Temperature"):
+                need_detail = True
+            if needs_hours and _disk_needs_power_on_hours(u):
+                need_detail = True
+            if need_detail and idx_int not in indices_to_fetch:
+                indices_to_fetch.append(idx_int)
 
-    return merge_disk_temperatures(normalized, utility_disks, model=device_model)
+    if needs_hours and not legacy and not indices_to_fetch:
+        for disk in normalized:
+            if not _disk_needs_power_on_hours(disk):
+                continue
+            idx = _disk_slot_index(disk)
+            if idx is not None and idx not in indices_to_fetch:
+                indices_to_fetch.append(idx)
+
+    for index in indices_to_fetch[:max_detail_fetches]:
+        detail = await _fetch_diskutility_detail(
+            recorder,
+            credentials,
+            index,
+            device_model=device_model,
+            cgi="recording.cgi",
+            timeout=timeout,
+        )
+        if not detail and legacy:
+            detail = await _fetch_diskutility_detail(
+                recorder,
+                credentials,
+                index,
+                device_model=device_model,
+                cgi="system.cgi",
+                timeout=timeout,
+            )
+        if detail:
+            try:
+                details_by_index[int(detail.get("Index", index))] = detail
+            except (TypeError, ValueError):
+                details_by_index[index] = detail
+            for u in utility_disks:
+                if u.get("Index") == detail.get("Index"):
+                    if detail.get("Temperature"):
+                        u["Temperature"] = detail["Temperature"]
+                    if detail.get("PowerOnDuration"):
+                        u["PowerOnDuration"] = detail["PowerOnDuration"]
+                    break
+
+    with_temp = merge_disk_temperatures(
+        normalized, utility_disks, model=device_model
+    )
+    return merge_disk_power_on_hours(
+        with_temp,
+        utility_disks,
+        details_by_index=details_by_index or None,
+    )
+
+
+async def enrich_storage_temperatures(
+    recorder: Recorder,
+    credentials: Credentials,
+    disks: list[dict],
+    *,
+    device_model: Optional[str] = None,
+    profile: Optional[NvrApiProfile] = None,
+    timeout: float = 20.0,
+    max_detail_fetches: int = 16,
+) -> list[dict]:
+    return await enrich_storage_disk_metrics(
+        recorder,
+        credentials,
+        disks,
+        device_model=device_model,
+        profile=profile,
+        timeout=timeout,
+        max_detail_fetches=max_detail_fetches,
+    )
 
 
 def _fill_storage_aggregate_from_disks(info: StorageInfo) -> None:
@@ -1554,7 +1758,7 @@ async def poll_recorder(
             )
             result.storage.storageinfo_ok = True
             if result.storage.disks:
-                result.storage.disks = await enrich_storage_temperatures(
+                result.storage.disks = await enrich_storage_disk_metrics(
                     recorder,
                     credentials,
                     result.storage.disks,

@@ -164,14 +164,35 @@ def disk_drop_display(disk: dict[str, Any]) -> str:
 
 
 def disk_power_on_hours(disk: dict[str, Any]) -> Optional[str]:
-    raw = disk_field(disk, "PowerOnDuration", "power_on_duration")
+    hours = disk_power_on_hours_raw(disk)
+    if hours is None:
+        return None
+    return f"{hours} ч"
+
+
+def disk_power_on_hours_raw(disk: dict[str, Any]) -> Optional[int]:
+    health = disk.get("Health")
+    if isinstance(health, dict):
+        for key in ("PowerOnHours", "power_on_hours", "PowerOnDuration"):
+            raw = health.get(key)
+            if raw is not None and str(raw).strip():
+                try:
+                    return int(float(str(raw).replace(",", ".")))
+                except (TypeError, ValueError):
+                    pass
+    raw = disk_field(
+        disk,
+        "PowerOnDuration",
+        "power_on_duration",
+        "PowerOnHours",
+        "power_on_hours",
+    )
     if raw is None:
         return None
     try:
-        hours = int(float(str(raw).replace(",", ".")))
+        return int(float(str(raw).replace(",", ".")))
     except (TypeError, ValueError):
-        return str(raw)
-    return f"{hours} ч"
+        return None
 
 
 _MONTH_SHORT_RU = (

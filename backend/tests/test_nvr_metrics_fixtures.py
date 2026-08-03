@@ -84,6 +84,26 @@ def test_fixture_hrx1620_storage_no_drop_fields() -> None:
     assert max_disk_drop_datarate_percent(info.disks) is None
 
 
+def test_fixture_hrx1620_storage_sample_from_nvr_samples() -> None:
+    body = _read("hrx1620_storageinfo.txt")
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="HRX-1620", cgi_version="2.5.6")
+    )
+    info = parse_storage(body, model="HRX-1620", profile=profile)
+    assert len(info.disks) == 1
+    assert disk_power_on_hours(info.disks[0]) is None
+
+
+def test_fixture_xrn2010_storage_sample_from_nvr_samples() -> None:
+    body = _read("xrn2010_storageinfo.txt")
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="XRN-2010A", cgi_version="2.5.4")
+    )
+    info = parse_storage(body, model="XRN-2010A", profile=profile)
+    assert len(info.disks) == 2
+    assert all(disk_power_on_hours(d) is None for d in info.disks)
+
+
 def test_eventstatus_quality_flags_from_fixture() -> None:
     body = _read("hrx1634_eventstatus_snippet.txt")
     body += "Channel.0.LowFps=True\nChannel.0.Tampering=False\n"

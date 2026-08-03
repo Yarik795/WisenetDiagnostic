@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from app.sunapi import DeviceInfo
 from app.sunapi_parsing import (
@@ -14,12 +15,14 @@ from app.sunapi_extended import (
     extract_disk_temperature,
     format_celsius_only_temperature,
     merge_channels,
+    merge_disk_power_on_hours,
     merge_disk_temperatures,
     normalize_disk_record,
     parse_cameraregister,
     parse_diskutility_detail,
     parse_diskutility_list,
     parse_eventstatus,
+    parse_power_on_hours_from_smart,
     parse_recording_period,
     parse_recording_storage,
     parse_storage,
@@ -27,6 +30,8 @@ from app.sunapi_extended import (
     parse_temperature_from_smart,
     parse_videosource_channels,
 )
+
+_FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_parse_videosource_text() -> None:
@@ -209,6 +214,36 @@ Disk.0.SMART=<pre>Temperature : 41&#8451;</pre>
 """
     detail = parse_diskutility_detail(body)
     assert detail["Temperature"] == "41 °C"
+
+
+def test_parse_power_on_hours_from_smart_fixture() -> None:
+    body = (_FIXTURES / "hrx1634_diskutility_index1.txt").read_text(encoding="utf-8")
+    assert parse_power_on_hours_from_smart(body) == 13843
+    detail = parse_diskutility_detail(body)
+    assert detail["PowerOnDuration"] == "13843"
+    assert detail["Temperature"] == "31 °C"
+
+
+def test_merge_disk_power_on_hours_by_slot() -> None:
+    storage = [
+        {"Storage": "1", "SlotNumber": "1", "Model": "WDC WD64PURZ-74B"},
+    ]
+    details = {
+        1: {"Index": 1, "PowerOnDuration": "13843"},
+    }
+    merged = merge_disk_power_on_hours(storage, [], details_by_index=details)
+    assert merged[0]["PowerOnDuration"] == "13843"
+
+
+def test_parse_storage_hrx1620_fixture_no_power_on_duration() -> None:
+    body = (_FIXTURES / "hrx1620_storageinfo.txt").read_text(encoding="utf-8")
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="HRX-1620", cgi_version="2.5.6")
+    )
+    info = parse_storage(body, model="HRX-1620", profile=profile)
+    assert len(info.disks) == 1
+    assert "PowerOnDuration" not in info.disks[0]
+    assert info.disks[0]["Model"] == "WDC WD62PURZ-85"
 
 
 def test_merge_disk_temperatures_by_order() -> None:

@@ -45,7 +45,7 @@ poll_recorder(recorder, credentials, *, include_inventory=True, timeout=20.0) �
 |-------------------------|------------|
 | `online`, `error`, `device` | доступность и deviceinfo |
 | `channels`, `channels_polled` | список каналов (только при `include_inventory=True`) |
-| `storage` | `StorageInfo`: диски, %, worst_status, температура (через diskutility при поддержке) |
+| `storage` | `StorageInfo`: диски, %, worst_status, температура и наработка (`PowerOnDuration`) через `enrich_storage_disk_metrics` (diskutility SMART при необходимости) |
 | `date_time` | `DateTimeInfo`: local/utc, NTP, skew_seconds |
 | `recording_period`, `channel_recording_periods` | глубина архива (глобально и по каналам) |
 | `events`, `system_events` | `eventstatus.cgi` — VideoLoss, connected, системные флаги |
@@ -56,6 +56,12 @@ poll_recorder(recorder, credentials, *, include_inventory=True, timeout=20.0) �
 - `include_inventory=True`: `media.cgi` — `cameraregister`, `videosource`; слияние каналов `merge_channels`.
 - Всегда: `storageinfo`, `date`, `searchrecordingperiod`, `eventstatus` (action=check); при наличии каналов — периоды записи по каналам (`fetch_channel_recording_periods`, детализация архива зависит от `include_inventory`).
 - Условно: при активном `RecordFrameDrop` и отсутствии кэша в БД — `system.cgi?msubmenu=systemlog` по одному дню (`scan_last_record_frame_drop_timestamp`, `resolve_system_event_times` в `monitoring.py`).
+
+**Наработка HDD (отчёт «Диски по времени»):**
+
+- Основной источник — `storageinfo` → `Storage.N.PowerOnDuration` (часы), CGI ≥ 2.6 (HRX-1634, XRN-3210B2, XRN-6410B2 и др.).
+- Если `PowerOnDuration` нет в `storageinfo`, `enrich_storage_disk_metrics` дополняет данные из `diskutility` (SMART attribute 009 `Power_On_Hours`).
+- HRX-1620 / XRN-2010 (CGI 2.5.x): в `storageinfo` наработки нет; `diskutility` на проверенных образцах возвращает NG 600 — при опросе выполняется прямой запрос `diskutility&Index={SlotNumber}` (`recording.cgi`, fallback `system.cgi`). Если API не отвечает, диски остаются в списке «Без наработки» с пометкой CGI 2.5.x.
 
 **NTP:**
 

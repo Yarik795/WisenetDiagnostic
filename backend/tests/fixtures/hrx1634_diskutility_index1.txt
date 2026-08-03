@@ -1,0 +1,3 @@
+Disk.0.Index=1
+Disk.0.Name=WDC WD64PURZ-74B
+Disk.0.SMART=<html><body><pre>009  Power_On_Hours 082 082 000 000000013843 GOOD Temperature : 31&#8451;</pre></body></html>
