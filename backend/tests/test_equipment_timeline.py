@@ -376,6 +376,27 @@ def test_disk_wear_missing_rows() -> None:
     assert filtered[0]["disk_model"] == "ST1000"
 
 
+def test_disk_wear_missing_rows_legacy_reason() -> None:
+    disks_json = '[{"Storage":"1","Model":"WDC WD62PURZ-85","SlotNumber":"2"}]'
+    metrics = _metrics(disks_json=disks_json, model="HRX-1620")
+    items = [RecorderWithMetrics(_recorder(), metrics)]
+    missing = disk_wear_missing_rows(items)
+    assert len(missing) == 1
+    assert missing[0]["metric_value"] == "— (SUNAPI CGI 2.5.x)"
+    assert "CGI 2.5.x" in (missing[0]["wear_unavailable_reason"] or "")
+
+
+def test_explode_disk_rows_power_on_hours_alternate_keys() -> None:
+    disks_json = (
+        '[{"Storage":"1","Model":"WD_RED","PowerOnHours":"4380"},'
+        '{"Storage":"2","Model":"WD_RED","Health":{"PowerOnHours":17520}}]'
+    )
+    items = [RecorderWithMetrics(_recorder(), _metrics(disks_json=disks_json))]
+    exploded = explode_disk_rows(items)
+    assert len(exploded) == 2
+    assert {row.power_on_hours for row in exploded} == {4380, 17520}
+
+
 def test_channels_inventory_columns_migration(tmp_path: Path) -> None:
     state = StateStore(tmp_path / "monitoring.db")
     state.init_db()

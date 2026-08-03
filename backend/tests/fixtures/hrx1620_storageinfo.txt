@@ -1,0 +1,10 @@
+UsedSpace=5.99TB
+TotalSpace=5.99TB
+Storage.1.Model=WDC WD62PURZ-85
+Storage.1.UsedSpace=5.98TB
+Storage.1.TotalSpace=5.98TB
+Storage.1.Usage=InternalHDD
+Storage.1.SlotNumber=2
+Storage.1.Temperature=26°C/78°F
+Storage.1.Status=Normal
+Storage.1.Type=DAS

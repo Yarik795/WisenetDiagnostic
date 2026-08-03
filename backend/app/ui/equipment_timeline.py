@@ -22,6 +22,7 @@ from ..state_store import ChannelRow, RecorderMetricsRow, StateStore
 from .grouping import metrics_map_from_list
 from .metrics_helpers import (
     disk_field,
+    disk_power_on_hours_raw,
     disk_slot,
     format_manufacture_date,
     parse_disks_json,
@@ -45,6 +46,7 @@ _CHART_COLORS = [
 
 _HOURS_PER_YEAR = 8760.0
 _MANUFACTURE_RE = re.compile(r"^(\d{4})-(\d{2})$")
+_LEGACY_WEAR_MODEL_PREFIXES = ("HRX-1620", "XRN-2010")
 
 
 @dataclass(frozen=True)
@@ -298,16 +300,6 @@ def recorder_age_missing_rows(
     return rows
 
 
-def disk_power_on_hours_raw(disk: dict[str, Any]) -> Optional[int]:
-    raw = disk_field(disk, "PowerOnDuration", "power_on_duration")
-    if raw is None:
-        return None
-    try:
-        return int(float(str(raw).replace(",", ".")))
-    except (TypeError, ValueError):
-        return None
-
-
 def explode_disk_rows(items: list[RecorderWithMetrics]) -> list[DiskWearRow]:
     rows: list[DiskWearRow] = []
     for item in items:
@@ -459,6 +451,15 @@ def disk_wear_detail_rows(
     return rows
 
 
+def _legacy_wear_unavailable(nvr_model: Optional[str]) -> bool:
+    if not nvr_model:
+        return False
+    model_upper = nvr_model.strip().upper()
+    return any(
+        model_upper.startswith(prefix) for prefix in _LEGACY_WEAR_MODEL_PREFIXES
+    )
+
+
 def disk_wear_missing_rows(
     items: list[RecorderWithMetrics],
     *,
@@ -476,16 +477,27 @@ def disk_wear_missing_rows(
             disk_model = disk_field(disk, "Model", "model") or "—"
             if model and disk_model != model:
                 continue
+            nvr_model = metrics.model or "—"
+            legacy_unavailable = _legacy_wear_unavailable(metrics.model)
             rows.append(
                 {
                     "object_name": rec.object_name,
                     "recorder_name": rec.name or rec.host,
                     "host": rec.host,
-                    "nvr_model": metrics.model or "—",
+                    "nvr_model": nvr_model,
                     "disk_slot": disk_slot(disk),
                     "disk_model": disk_model,
                     "metric_label": "Наработка",
-                    "metric_value": "—",
+                    "metric_value": (
+                        "— (SUNAPI CGI 2.5.x)"
+                        if legacy_unavailable
+                        else "—"
+                    ),
+                    "wear_unavailable_reason": (
+                        "Наработка недоступна через SUNAPI (CGI 2.5.x)"
+                        if legacy_unavailable
+                        else None
+                    ),
                 }
             )
     rows.sort(
