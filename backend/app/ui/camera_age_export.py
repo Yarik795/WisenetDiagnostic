@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from ..camera_manufacturer_lookup import camera_brand_label
 from ..config_store import ConfigStore
 from ..display_time import format_for_display
 from ..state_store import StateStore
@@ -28,15 +29,7 @@ def _grouping_label(grouping: str) -> str:
 
 
 def _brand_label(brand: str) -> str:
-    return {
-        "dahua": "Dahua",
-        "hanwha": "Hanwha/Samsung",
-        "bosch": "Bosch",
-        "trassir": "Trassir",
-        "analog": "Аналоговая",
-        "other": "Прочие",
-        "unknown": "Неизвестно",
-    }.get(brand, brand)
+    return camera_brand_label(brand)
 
 
 def build_camera_age_export_context(
@@ -60,6 +53,7 @@ def build_camera_age_export_context(
     )
     charts = page_ctx.get("camera_age_charts") or {}
     distribution = charts.get("distribution") or {}
+    manufacturers = charts.get("manufacturers") or {}
     labels = list(distribution.get("labels") or [])
     values = [float(v) for v in (distribution.get("values") or [])]
     keys = list(distribution.get("keys") or [])
@@ -105,6 +99,12 @@ def build_camera_age_export_context(
 
     generated_at = format_for_display(datetime.now(timezone.utc), "%d.%m.%Y %H:%M") or "—"
     total = sum(values) or 1.0
+    mfr_labels = list(manufacturers.get("labels") or [])
+    mfr_values = [float(v) for v in (manufacturers.get("values") or [])]
+    mfr_keys = list(manufacturers.get("keys") or [])
+    mfr_colors_map = manufacturers.get("colors") or {}
+    mfr_bar_colors = [mfr_colors_map.get(k) or "#3b82f6" for k in mfr_keys]
+    mfr_total = sum(mfr_values) or 1.0
 
     return {
         "title": "Камеры по времени",
@@ -115,6 +115,24 @@ def build_camera_age_export_context(
         "filter_label": ", ".join(filter_parts),
         "generated_at": generated_at,
         "kpi": kpi,
+        "manufacturers": {
+            "bar_svg": render_vertical_bar_svg(
+                mfr_labels,
+                mfr_values,
+                mfr_bar_colors,
+                title="Камеры по производителям",
+            )
+            if mfr_labels
+            else "",
+            "table_rows": [
+                {
+                    "label": label,
+                    "count": int(val),
+                    "pct": f"{round(100.0 * val / mfr_total)}%",
+                }
+                for label, val in zip(mfr_labels, mfr_values)
+            ],
+        },
         "distribution": {
             "bar_svg": render_vertical_bar_svg(
                 labels,

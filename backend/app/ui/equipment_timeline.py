@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any, Literal, Optional
 
 from ..camera_manufacturer_lookup import (
+    camera_brand_label,
     is_analog_camera_channel,
     resolve_camera_manufacturer,
     resolve_camera_model_display,
@@ -775,6 +776,30 @@ def distinct_camera_models(items: list[CameraWithContext]) -> list[str]:
 
 def distinct_camera_brands(items: list[CameraWithContext]) -> list[str]:
     return sorted({b for item in items if (b := camera_manufacturer(item))})
+
+
+def aggregate_cameras_by_manufacturer(
+    items: list[CameraWithContext],
+    *,
+    model: str = "",
+    brand: str = "",
+) -> dict[str, Any]:
+    filtered = filter_cameras_by_brand(filter_cameras_by_model(items, model), brand)
+    counter: Counter[str] = Counter()
+    for item in filtered:
+        counter[camera_manufacturer(item) or "unknown"] += 1
+    keys = sorted(counter.keys(), key=lambda k: (-counter[k], k))
+    labels = [camera_brand_label(k) for k in keys]
+    values = [counter[k] for k in keys]
+    colors = {k: chart_color(idx) for idx, k in enumerate(keys)}
+    return {
+        "manufacturers": labels,
+        "labels": labels,
+        "values": values,
+        "keys": keys,
+        "counts": values,
+        "colors": colors,
+    }
 
 
 def camera_age_kpi(

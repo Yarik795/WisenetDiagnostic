@@ -48,6 +48,16 @@
     </p>
   </section>
 
+  {% if camera_age_charts.manufacturers.counts %}
+  <section class="card arsenal-chart-card" style="margin-top:16px;">
+    <h3 class="card-section-title">Производители</h3>
+    <p class="text-secondary" style="margin:0 0 8px;font-size:13px;">
+      Нажмите на столбец, чтобы отфильтровать отчёт по бренду.
+    </p>
+    <div class="arsenal-chart" data-camera-age-chart="manufacturers" style="height:280px;"></div>
+  </section>
+  {% endif %}
+
   {% if camera_age_has_distribution %}
   <script type="application/json" data-camera-age-charts>{{ camera_age_charts | tojson }}</script>
 

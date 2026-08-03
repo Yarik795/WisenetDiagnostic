@@ -11,6 +11,7 @@ from app.state_store import ChannelRow, RecorderMetricsRow, StateStore
 from app.ui.equipment_timeline import (
     CameraWithContext,
     RecorderWithMetrics,
+    aggregate_cameras_by_manufacturer,
     aggregate_cameras_by_period,
     aggregate_disks_by_wear,
     aggregate_recorders_by_period,
@@ -328,6 +329,29 @@ def test_camera_age_analog_channel() -> None:
     analog_row = next(r for r in missing if r["model"] == ANALOG_MODEL_LABEL)
     assert analog_row["manufacturer"] == "analog"
     assert "аналоговая камера" in analog_row["missing_reason"]
+
+
+def test_aggregate_cameras_by_manufacturer() -> None:
+    rec = _recorder()
+    items = [
+        CameraWithContext(_channel(camera_model="DH-IPC-HFW1230"), rec),
+        CameraWithContext(
+            _channel(channel_no=1, camera_model="QND-6070R", camera_ip="10.0.0.11"),
+            rec,
+        ),
+        CameraWithContext(
+            _channel(
+                channel_no=2,
+                camera_ip=None,
+                camera_model="Unknown",
+                source_state="On",
+            ),
+            rec,
+        ),
+    ]
+    chart = aggregate_cameras_by_manufacturer(items)
+    assert chart["keys"] == ["analog", "dahua", "hanwha"]
+    assert chart["values"] == [1, 1, 1]
 
 
 def test_disk_wear_missing_rows() -> None:

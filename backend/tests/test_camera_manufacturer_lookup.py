@@ -40,9 +40,24 @@ def test_manufacturer_from_model_unknown_is_analog() -> None:
     assert manufacturer_from_model("UNKNOWN") == "analog"
 
 
-def test_resolve_manufacturer_prefers_inventory() -> None:
+def test_resolve_manufacturer_model_overrides_inventory() -> None:
     ch = _channel(camera_model="QND-6070R", manufacturer="dahua")
-    assert resolve_camera_manufacturer(ch) == "dahua"
+    assert resolve_camera_manufacturer(ch) == "hanwha"
+
+
+def test_resolve_manufacturer_trassir_overrides_other() -> None:
+    ch = _channel(camera_model="TR-D4D2V2", manufacturer="other")
+    assert resolve_camera_manufacturer(ch) == "trassir"
+
+
+def test_manufacturer_from_model_dh_ipc_prefix() -> None:
+    assert manufacturer_from_model("DH-IPC-HFW1230") == "dahua"
+    assert manufacturer_from_model("dh-ipc-hdw2431tp-as-0280b") == "dahua"
+
+
+def test_manufacturer_from_model_tr_d_prefix() -> None:
+    assert manufacturer_from_model("TR-D4D2V2") == "trassir"
+    assert manufacturer_from_model("TR-D4D2V2-EXTRA") == "trassir"
 
 
 def test_resolve_manufacturer_from_model_when_unknown() -> None:

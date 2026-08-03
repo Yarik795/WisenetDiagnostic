@@ -9,6 +9,7 @@ from ..config_store import ConfigStore
 from ..state_store import StateStore
 from .equipment_timeline import (
     PeriodGrouping,
+    aggregate_cameras_by_manufacturer,
     aggregate_cameras_by_period,
     camera_age_detail_rows,
     camera_age_kpi,
@@ -51,6 +52,7 @@ def camera_age_page_context(
         brand=brand,
     )
     kpi = camera_age_kpi(items, model=model, brand=brand)
+    manufacturers = aggregate_cameras_by_manufacturer(items, model=model, brand=brand)
     has_data = kpi["total_cameras"] > 0
     has_distribution = kpi["with_date"] > 0
 
@@ -77,7 +79,10 @@ def camera_age_page_context(
         "camera_age_model_options": distinct_camera_models(items),
         "camera_age_brand_options": distinct_camera_brands(items),
         "camera_age_kpi": kpi,
-        "camera_age_charts": {"distribution": distribution},
+        "camera_age_charts": {
+            "distribution": distribution,
+            "manufacturers": manufacturers,
+        },
         "camera_age_has_data": has_data,
         "camera_age_has_distribution": has_distribution,
         "camera_age_has_cameras": len(items) > 0,

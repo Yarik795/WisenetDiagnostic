@@ -8,10 +8,17 @@ from .state_store import ChannelRow
 
 ANALOG_MODEL_LABEL = "Аналоговая камера"
 
+CAMERA_BRAND_LABELS: dict[str, str] = {
+    "dahua": "Dahua",
+    "hanwha": "Hanwha/Samsung",
+    "bosch": "Bosch",
+    "trassir": "Trassir",
+    "analog": "Аналоговая",
+    "other": "Прочие",
+    "unknown": "Неизвестно",
+}
+
 _RAW_MODEL_MANUFACTURERS: dict[str, str] = {
-    "DH-IPC-HDBW2241RP-ZS": "dahua",
-    "DH-IPC-HDW2431TP-AS-0280B": "dahua",
-    "DH-IPC-HDW3441TMP-AS-0360B": "dahua",
     "FLEXIDOME IP 4000i IR": "bosch",
     "LND-6012R": "hanwha",
     "PNF-9010R": "hanwha",
@@ -25,6 +32,11 @@ _RAW_MODEL_MANUFACTURERS: dict[str, str] = {
     "Wisenet CAM": "hanwha",
     "XNZ-L6320A": "hanwha",
 }
+
+_MODEL_PREFIX_MANUFACTURERS: tuple[tuple[str, str], ...] = (
+    ("dh-ipc", "dahua"),
+    ("tr-d", "trassir"),
+)
 
 CAMERA_MODEL_MANUFACTURERS: dict[str, str] = {
     key.casefold(): value for key, value in _RAW_MODEL_MANUFACTURERS.items()
@@ -61,16 +73,26 @@ def manufacturer_from_model(model: Optional[str]) -> Optional[str]:
     key = _normalize_model(model)
     if not key:
         return None
-    return CAMERA_MODEL_MANUFACTURERS.get(key)
+    exact = CAMERA_MODEL_MANUFACTURERS.get(key)
+    if exact:
+        return exact
+    for prefix, manufacturer in _MODEL_PREFIX_MANUFACTURERS:
+        if key.startswith(prefix):
+            return manufacturer
+    return None
+
+
+def camera_brand_label(brand: str) -> str:
+    return CAMERA_BRAND_LABELS.get(brand, brand)
 
 
 def resolve_camera_manufacturer(channel: ChannelRow) -> str:
-    stored = (channel.manufacturer or "").strip().lower()
-    if stored and stored != "unknown":
-        return stored
     from_model = manufacturer_from_model(channel.camera_model)
     if from_model:
         return from_model
+    stored = (channel.manufacturer or "").strip().lower()
+    if stored and stored != "unknown":
+        return stored
     return "unknown"
 
 

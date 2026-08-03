@@ -114,6 +114,27 @@
       </div>
     </div>
 
+    <h2>Производители</h2>
+    {% if export.manufacturers.table_rows %}
+    <div class="chart-box">{{ export.manufacturers.bar_svg | safe }}</div>
+    <table>
+      <thead>
+        <tr><th>Производитель</th><th>Кол-во</th><th>Доля</th></tr>
+      </thead>
+      <tbody>
+        {% for row in export.manufacturers.table_rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td>{{ row.count }}</td>
+          <td>{{ row.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="meta">Нет данных о производителях.</p>
+    {% endif %}
+
     <h2>Распределение по дате</h2>
     {% if export.distribution.table_rows %}
     <div class="chart-box">{{ export.distribution.bar_svg | safe }}</div>

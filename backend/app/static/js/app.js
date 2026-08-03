@@ -1451,18 +1451,35 @@ function initCameraAgeCharts(root) {
   }
 
   const el = dashboard.querySelector('[data-camera-age-chart="distribution"]');
-  if (!el) return;
-  const distribution = chartData.distribution || {};
-  const chart = echarts.init(el, null, { renderer: "canvas" });
-  chart.setOption(timelineDistributionBarOption(distribution), true);
-  chart.on("click", (params) => {
-    const periodKey =
-      params?.data?.periodKey ||
-      (distribution.keys || [])[params?.dataIndex];
-    if (!periodKey) return;
-    loadCameraAgeDetail({ period: periodKey });
-  });
-  cameraAgeChartStore.set("distribution", chart);
+  if (el) {
+    const distribution = chartData.distribution || {};
+    const chart = echarts.init(el, null, { renderer: "canvas" });
+    chart.setOption(timelineDistributionBarOption(distribution), true);
+    chart.on("click", (params) => {
+      const periodKey =
+        params?.data?.periodKey ||
+        (distribution.keys || [])[params?.dataIndex];
+      if (!periodKey) return;
+      loadCameraAgeDetail({ period: periodKey });
+    });
+    cameraAgeChartStore.set("distribution", chart);
+  }
+
+  const mfrEl = dashboard.querySelector('[data-camera-age-chart="manufacturers"]');
+  if (mfrEl) {
+    const manufacturers = chartData.manufacturers || {};
+    const mfrChart = echarts.init(mfrEl, null, { renderer: "canvas" });
+    mfrChart.setOption(arsenalManufacturersOption(manufacturers), true);
+    mfrChart.on("click", (params) => {
+      const brandKey = (manufacturers.keys || [])[params?.dataIndex];
+      if (!brandKey) return;
+      const brandSelect = document.querySelector("#camera-age-brand");
+      if (!brandSelect) return;
+      brandSelect.value = brandKey;
+      brandSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    cameraAgeChartStore.set("manufacturers", mfrChart);
+  }
 }
 
 function resizeCameraAgeCharts() {
