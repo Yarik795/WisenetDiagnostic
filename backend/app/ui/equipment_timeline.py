@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal, Optional
 
+from ..camera_manufacturer_lookup import (
+    is_analog_camera_channel,
+    resolve_camera_manufacturer,
+    resolve_camera_model_display,
+)
 from ..config_store import ConfigStore
 from ..device_kinds import recorder_device_kind
 from ..models import Recorder
@@ -593,7 +598,12 @@ def list_tsv_cameras_with_context(
         if recorder_device_kind(r) == "tsv"
     }
     items: list[CameraWithContext] = []
-    for channel in state.list_ip_camera_channels():
+    for channel in state.list_channels():
+        if (channel.source_state or "").strip().lower() == "deactive":
+            continue
+        has_ip = bool((channel.camera_ip or "").strip())
+        if not has_ip and not is_analog_camera_channel(channel):
+            continue
         recorder = recorders.get(channel.recorder_id)
         if recorder is None:
             continue
@@ -602,11 +612,11 @@ def list_tsv_cameras_with_context(
 
 
 def camera_model(item: CameraWithContext) -> Optional[str]:
-    return item.channel.camera_model
+    return resolve_camera_model_display(item.channel)
 
 
 def camera_manufacturer(item: CameraWithContext) -> Optional[str]:
-    return item.channel.manufacturer
+    return resolve_camera_manufacturer(item.channel)
 
 
 def camera_manufacture_date(item: CameraWithContext) -> Optional[str]:
@@ -674,6 +684,8 @@ def _date_source_label(source: Optional[str]) -> str:
 
 def _camera_missing_date_reason(item: CameraWithContext) -> str:
     ch = item.channel
+    if is_analog_camera_channel(ch):
+        return "аналоговая камера — дата производства недоступна"
     if ch.camera_inventory_error:
         return ch.camera_inventory_error
     mfg = camera_manufacture_date(item)

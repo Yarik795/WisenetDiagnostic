@@ -2,7 +2,7 @@
   {% if not camera_age_has_data %}
   <section class="card" style="padding:24px;text-align:center;">
     <p class="text-secondary" style="margin:0;">
-      Нет IP-камер на регистраторах. Убедитесь, что NVR опрошены и в каналах указаны IP-адреса камер.
+      Нет камер на регистраторах. Убедитесь, что NVR опрошены и каналы заполнены.
     </p>
   </section>
   {% else %}
@@ -10,7 +10,7 @@
     <div class="fleet-kpi-grid">
       <div class="fleet-kpi">
         <span class="fleet-kpi-value">{{ camera_age_kpi.total_cameras }}</span>
-        <span class="fleet-kpi-label">IP-камер</span>
+        <span class="fleet-kpi-label">Камер</span>
       </div>
       <div class="fleet-kpi fleet-kpi--ok">
         <span class="fleet-kpi-dot" aria-hidden="true"></span>

@@ -183,7 +183,9 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 
 ## Inventory-опрос IP-камер (`camera_inventory.py`, `camera_inventory_jobs.py`)
 
-Отчёт **«Камеры по времени»** (`/cameras-age`): камеры берутся из `channels` с непустым `camera_ip` (ТСВ-регистраторы). Прямой опрос — фоновый job `CameraInventoryJobManager` (кнопка «Опросить камеры»), concurrency ~12, dedupe по IP.
+Отчёт **«Камеры по времени»** (`/cameras-age`): в выборку попадают IP-камеры и аналоговые каналы ТСВ-регистраторов (активные каналы без IP или с моделью `Unknown`). Прямой inventory-опрос — только IP (`camera_ip`); фоновый job `CameraInventoryJobManager` (кнопка «Опросить камеры»), concurrency ~12, dedupe по IP.
+
+Производитель для отчёта: сначала `channels.manufacturer` с inventory-опроса (если не `unknown`), иначе — справочник `camera_manufacturer_lookup.py` по модели из NVR (QND-*, DH-IPC-*, `Unknown` → `analog` и т.д.). Аналоговые камеры отображаются как «Аналоговая камера», дата производства для них недоступна.
 
 | Этап | Модуль | Данные |
 |------|--------|--------|
@@ -191,6 +193,7 @@ SQLite: таблицы `channels`, `recorder_metrics`, `status_history`.
 | Dahua | `dahua_cgi.py` | `getVendor`, `getSystemInfo`, `getSoftwareVersion` → `manufacturer=dahua`, `manufacture_date` из `build:` (proxy), `manufacture_date_source=firmware_build` |
 | Hanwha | `hanwha_camera.py` | SUNAPI `deviceinfo` → S/N, `serial_manufacture_date.decode_samsung_manufacture_date` |
 | Прочие | `onvif_deviceinfo.py` | ONVIF `GetDeviceInformation` → brand/S/N |
+| Модель NVR | `camera_manufacturer_lookup.py` | Fallback бренда по `camera_model`, если inventory не определил производителя |
 
 Результаты пишутся в `channels` через `update_camera_inventory` (не затрагивает health). HTML-экспорт и ручная email-рассылка: `GET /cameras-age/export.html`, `POST /cameras-age/report/email` (`camera_age_export.py`, `send_report_email`).
 

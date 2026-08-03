@@ -31,6 +31,9 @@ def _brand_label(brand: str) -> str:
     return {
         "dahua": "Dahua",
         "hanwha": "Hanwha/Samsung",
+        "bosch": "Bosch",
+        "trassir": "Trassir",
+        "analog": "Аналоговая",
         "other": "Прочие",
         "unknown": "Неизвестно",
     }.get(brand, brand)
@@ -156,7 +159,7 @@ def render_camera_age_email_body(context: dict[str, Any]) -> str:
         f"<p>Отчёт <strong>Камеры по времени</strong> — {context['filter_label']}.</p>"
         f"<p>{context.get('subtitle', '')}</p>"
         f"<p>Сформирован: {context['generated_at']}</p>"
-        f"<p>IP-камер: <strong>{kpi.get('total_cameras', 0)}</strong>, "
+        f"<p>Камер: <strong>{kpi.get('total_cameras', 0)}</strong>, "
         f"с датой: <strong>{kpi.get('with_date', 0)}</strong>, "
         f"Dahua: <strong>{kpi.get('dahua_count', 0)}</strong>.</p>"
         "<p>Полный отчёт во вложении (HTML).</p>"

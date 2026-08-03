@@ -281,6 +281,55 @@ def test_camera_age_missing_rows() -> None:
     assert len(filtered) == 2
 
 
+def test_camera_manufacturer_from_model_mapping() -> None:
+    from app.ui.equipment_timeline import camera_manufacturer, filter_cameras_by_brand
+
+    rec = _recorder()
+    items = [
+        CameraWithContext(
+            _channel(camera_model="QND-6070R", manufacturer=None),
+            rec,
+        ),
+    ]
+    assert camera_manufacturer(items[0]) == "hanwha"
+    assert len(filter_cameras_by_brand(items, "hanwha")) == 1
+    assert len(filter_cameras_by_brand(items, "dahua")) == 0
+
+
+def test_camera_age_analog_channel() -> None:
+    from app.camera_manufacturer_lookup import ANALOG_MODEL_LABEL
+    from app.ui.equipment_timeline import (
+        camera_age_kpi,
+        camera_age_missing_rows,
+        camera_manufacturer,
+        camera_model,
+    )
+
+    rec = _recorder()
+    analog = CameraWithContext(
+        _channel(
+            channel_no=3,
+            camera_ip=None,
+            camera_model="Unknown",
+            source_state="On",
+            manufacture_date=None,
+            manufacturer=None,
+        ),
+        rec,
+    )
+    assert camera_model(analog) == ANALOG_MODEL_LABEL
+    assert camera_manufacturer(analog) == "analog"
+
+    items = [CameraWithContext(_channel(), rec), analog]
+    kpi = camera_age_kpi(items)
+    assert kpi["total_cameras"] == 2
+
+    missing = camera_age_missing_rows(items)
+    analog_row = next(r for r in missing if r["model"] == ANALOG_MODEL_LABEL)
+    assert analog_row["manufacturer"] == "analog"
+    assert "аналоговая камера" in analog_row["missing_reason"]
+
+
 def test_disk_wear_missing_rows() -> None:
     disks_json = (
         '[{"Storage":"1","Model":"WD_RED","PowerOnDuration":"4380"},'

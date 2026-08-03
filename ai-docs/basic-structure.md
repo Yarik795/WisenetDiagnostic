@@ -76,6 +76,7 @@
 | `dahua_cgi.py` | HTTP CGI Dahua (magicBox): vendor, S/N, firmware build |
 | `onvif_deviceinfo.py` | ONVIF GetDeviceInformation для идентификации камеры |
 | `hanwha_camera.py` | Прямой опрос камеры Hanwha/Samsung по SUNAPI deviceinfo |
+| `camera_manufacturer_lookup.py` | Справочник производителя камеры по модели NVR; признак аналогового канала для отчёта «Камеры по времени» |
 | `camera_inventory.py` | Оркестрация inventory-опроса IP-камер с каналов NVR |
 | `camera_inventory_jobs.py` | Фоновый job inventory-опроса камер с прогрессом для UI |
 
