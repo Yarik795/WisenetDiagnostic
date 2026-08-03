@@ -20,12 +20,32 @@ def parse_disks_json(raw: Optional[str]) -> list[dict[str, Any]]:
     return [d for d in data if isinstance(d, dict)]
 
 
+_SIZE_UNIT_RE = re.compile(
+    r"^([\d.,]+)\s*(TB|GB|MB|КБ|МБ|ТБ|ГБ)?$",
+    re.IGNORECASE,
+)
+
+
 def _disk_mb_value(raw: Any) -> Optional[float]:
     if raw is None:
         return None
     text = str(raw).strip().replace(",", ".")
     if not text:
         return None
+    m = _SIZE_UNIT_RE.match(text)
+    if m:
+        try:
+            number = float(m.group(1))
+        except ValueError:
+            return None
+        unit = (m.group(2) or "").upper()
+        if unit in ("TB", "ТБ"):
+            return number * 1024 * 1024
+        if unit in ("GB", "ГБ"):
+            return number * 1024
+        if unit in ("MB", "МБ", "КБ", "KB"):
+            return number
+        return number
     try:
         return float(text)
     except (TypeError, ValueError):
@@ -173,7 +193,13 @@ def disk_power_on_hours(disk: dict[str, Any]) -> Optional[str]:
 def disk_power_on_hours_raw(disk: dict[str, Any]) -> Optional[int]:
     health = disk.get("Health")
     if isinstance(health, dict):
-        for key in ("PowerOnHours", "power_on_hours", "PowerOnDuration"):
+        for key in (
+            "PowerOnHours",
+            "power_on_hours",
+            "PowerOnDuration",
+            "UseTime",
+            "use_time",
+        ):
             raw = health.get(key)
             if raw is not None and str(raw).strip():
                 try:
@@ -186,6 +212,12 @@ def disk_power_on_hours_raw(disk: dict[str, Any]) -> Optional[int]:
         "power_on_duration",
         "PowerOnHours",
         "power_on_hours",
+        "UseTime",
+        "use_time",
+        "UseDuration",
+        "use_duration",
+        "OperationTime",
+        "operation_time",
     )
     if raw is None:
         return None

@@ -21,6 +21,7 @@ from app.ui.metrics_helpers import (
     any_disk_format_required,
     disk_drop_datarate_percent,
     disk_power_on_hours,
+    disk_power_on_hours_raw,
     max_disk_drop_datarate_percent,
 )
 
@@ -92,6 +93,17 @@ def test_fixture_hrx1620_storage_sample_from_nvr_samples() -> None:
     info = parse_storage(body, model="HRX-1620", profile=profile)
     assert len(info.disks) == 1
     assert disk_power_on_hours(info.disks[0]) is None
+
+
+def test_fixture_hrx1620_storage_use_time_from_device_ui() -> None:
+    body = _read("hrx1620_storageinfo_usetime.txt")
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="HRX-1620", cgi_version="2.5.6")
+    )
+    info = parse_storage(body, model="HRX-1620", profile=profile)
+    assert len(info.disks) == 1
+    assert disk_power_on_hours_raw(info.disks[0]) == 43439
+    assert disk_power_on_hours(info.disks[0]) == "43439 ч"
 
 
 def test_fixture_xrn2010_storage_sample_from_nvr_samples() -> None:

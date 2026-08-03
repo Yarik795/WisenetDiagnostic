@@ -246,6 +246,23 @@ def test_parse_storage_hrx1620_fixture_no_power_on_duration() -> None:
     assert info.disks[0]["Model"] == "WDC WD62PURZ-85"
 
 
+def test_parse_storage_hrx1620_fixture_use_time_normalized() -> None:
+    body = (_FIXTURES / "hrx1620_storageinfo_usetime.txt").read_text(
+        encoding="utf-8"
+    )
+    profile = NvrApiProfile.from_device(
+        DeviceInfo(model="HRX-1620", cgi_version="2.5.6")
+    )
+    info = parse_storage(body, model="HRX-1620", profile=profile)
+    assert len(info.disks) == 1
+    disk = info.disks[0]
+    assert disk["UseTime"] == "43439"
+    assert disk["PowerOnDuration"] == "43439"
+    from app.ui.metrics_helpers import disk_power_on_hours_raw
+
+    assert disk_power_on_hours_raw(disk) == 43439
+
+
 def test_merge_disk_temperatures_by_order() -> None:
     storage = [{"Storage": "1", "Model": "A"}]
     utility = [{"Index": 14, "Name": "X", "Temperature": "38 °C"}]

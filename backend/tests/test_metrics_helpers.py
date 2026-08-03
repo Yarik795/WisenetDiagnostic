@@ -1,4 +1,5 @@
 from app.ui.metrics_helpers import (
+    disk_space_mb,
     format_archive_days_value,
     format_archive_range,
 )
@@ -20,3 +21,16 @@ def test_format_archive_range_collapses_near_equal_display() -> None:
 def test_format_archive_days_value() -> None:
     assert format_archive_days_value(15.0) == "15.0 сут."
     assert format_archive_days_value(None) == "—"
+
+
+def test_disk_space_mb_parses_tb_units() -> None:
+    disk = {
+        "UsedSpace": "5.98TB",
+        "TotalSpace": "5.98TB",
+    }
+    used, total = disk_space_mb(disk)
+    assert used is not None
+    assert total is not None
+    assert abs(used - 5.98 * 1024 * 1024) < 1
+    assert abs(total - 5.98 * 1024 * 1024) < 1
+

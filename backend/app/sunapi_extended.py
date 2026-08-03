@@ -645,6 +645,9 @@ def normalize_disk_record(
     temp = extract_disk_temperature(disk, model=model, profile=profile)
     if temp:
         out["Temperature"] = temp
+    hours = _disk_power_on_hours_value(out)
+    if hours is not None:
+        out["PowerOnDuration"] = str(hours)
     return out
 
 
@@ -728,7 +731,13 @@ def _disk_slot_index(disk: dict) -> Optional[int]:
 def _disk_power_on_hours_value(disk: dict) -> Optional[int]:
     health = disk.get("Health")
     if isinstance(health, dict):
-        for key in ("PowerOnHours", "power_on_hours", "PowerOnDuration"):
+        for key in (
+            "PowerOnHours",
+            "power_on_hours",
+            "PowerOnDuration",
+            "UseTime",
+            "use_time",
+        ):
             raw = health.get(key)
             if raw is not None and str(raw).strip():
                 try:
@@ -740,6 +749,12 @@ def _disk_power_on_hours_value(disk: dict) -> Optional[int]:
         "power_on_duration",
         "PowerOnHours",
         "power_on_hours",
+        "UseTime",
+        "use_time",
+        "UseDuration",
+        "use_duration",
+        "OperationTime",
+        "operation_time",
     ):
         raw = disk.get(key)
         if raw is None or not str(raw).strip():
@@ -749,6 +764,25 @@ def _disk_power_on_hours_value(disk: dict) -> Optional[int]:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _disk_index_candidates(disk: dict, position: int) -> list[int]:
+    """Индексы diskutility для legacy NVR (SlotNumber может ≠ Storage)."""
+    candidates: list[int] = []
+    for key in ("SlotNumber", "slot_number", "Storage", "storage", "Slot", "slot"):
+        raw = disk.get(key)
+        if raw is None:
+            continue
+        try:
+            val = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+        if val not in candidates:
+            candidates.append(val)
+    for val in (position + 1, position):
+        if val >= 0 and val not in candidates:
+            candidates.append(val)
+    return candidates
 
 
 def _disk_needs_power_on_hours(disk: dict) -> bool:
@@ -887,6 +921,11 @@ def merge_disk_power_on_hours(
             continue
         idx = _disk_slot_index(disk)
         source = by_index.get(idx) if idx is not None else None
+        if source is None and idx is not None:
+            for alt_idx, detail in by_index.items():
+                if detail.get("RequestIndex") == idx:
+                    source = detail
+                    break
         if source is None and i < len(utility_disks):
             source = utility_disks[i]
         if not source:
@@ -945,41 +984,13 @@ async def enrich_storage_disk_metrics(
             utility_disks = parse_diskutility_list(body, model=device_model)
 
     details_by_index: dict[int, dict] = {}
-    indices_to_fetch: list[int] = []
+    detail_fetches = 0
 
-    if legacy and needs_hours:
-        for disk in normalized:
-            if not _disk_needs_power_on_hours(disk):
-                continue
-            idx = _disk_slot_index(disk)
-            if idx is not None and idx not in indices_to_fetch:
-                indices_to_fetch.append(idx)
-    elif utility_disks:
-        for u in utility_disks:
-            idx = u.get("Index")
-            if idx is None:
-                continue
-            try:
-                idx_int = int(idx)
-            except (TypeError, ValueError):
-                continue
-            need_detail = False
-            if needs_temp and not u.get("Temperature"):
-                need_detail = True
-            if needs_hours and _disk_needs_power_on_hours(u):
-                need_detail = True
-            if need_detail and idx_int not in indices_to_fetch:
-                indices_to_fetch.append(idx_int)
-
-    if needs_hours and not legacy and not indices_to_fetch:
-        for disk in normalized:
-            if not _disk_needs_power_on_hours(disk):
-                continue
-            idx = _disk_slot_index(disk)
-            if idx is not None and idx not in indices_to_fetch:
-                indices_to_fetch.append(idx)
-
-    for index in indices_to_fetch[:max_detail_fetches]:
+    async def _fetch_hours_detail(index: int) -> dict:
+        nonlocal detail_fetches
+        if detail_fetches >= max_detail_fetches:
+            return {}
+        detail_fetches += 1
         detail = await _fetch_diskutility_detail(
             recorder,
             credentials,
@@ -988,8 +999,9 @@ async def enrich_storage_disk_metrics(
             cgi="recording.cgi",
             timeout=timeout,
         )
-        if not detail and legacy:
-            detail = await _fetch_diskutility_detail(
+        if not _disk_power_on_hours_value(detail) and detail_fetches < max_detail_fetches:
+            detail_fetches += 1
+            alt = await _fetch_diskutility_detail(
                 recorder,
                 credentials,
                 index,
@@ -997,7 +1009,63 @@ async def enrich_storage_disk_metrics(
                 cgi="system.cgi",
                 timeout=timeout,
             )
+            if _disk_power_on_hours_value(alt) or not detail:
+                detail = alt
         if detail:
+            detail["RequestIndex"] = index
+        return detail
+
+    if legacy and needs_hours:
+        for i, disk in enumerate(normalized):
+            if not _disk_needs_power_on_hours(disk):
+                continue
+            for index in _disk_index_candidates(disk, i):
+                if detail_fetches >= max_detail_fetches:
+                    break
+                detail = await _fetch_hours_detail(index)
+                if not detail or not _disk_power_on_hours_value(detail):
+                    continue
+                hours = _disk_power_on_hours_value(detail)
+                assert hours is not None
+                disk["PowerOnDuration"] = str(hours)
+                try:
+                    details_by_index[int(detail.get("Index", index))] = detail
+                except (TypeError, ValueError):
+                    details_by_index[index] = detail
+                break
+    else:
+        indices_to_fetch: list[int] = []
+        if utility_disks:
+            for u in utility_disks:
+                idx = u.get("Index")
+                if idx is None:
+                    continue
+                try:
+                    idx_int = int(idx)
+                except (TypeError, ValueError):
+                    continue
+                need_detail = False
+                if needs_temp and not u.get("Temperature"):
+                    need_detail = True
+                if needs_hours and _disk_needs_power_on_hours(u):
+                    need_detail = True
+                if need_detail and idx_int not in indices_to_fetch:
+                    indices_to_fetch.append(idx_int)
+
+        if needs_hours and not indices_to_fetch:
+            for i, disk in enumerate(normalized):
+                if not _disk_needs_power_on_hours(disk):
+                    continue
+                for index in _disk_index_candidates(disk, i):
+                    if index not in indices_to_fetch:
+                        indices_to_fetch.append(index)
+
+        for index in indices_to_fetch:
+            if detail_fetches >= max_detail_fetches:
+                break
+            detail = await _fetch_hours_detail(index)
+            if not detail:
+                continue
             try:
                 details_by_index[int(detail.get("Index", index))] = detail
             except (TypeError, ValueError):
@@ -1008,6 +1076,15 @@ async def enrich_storage_disk_metrics(
                         u["Temperature"] = detail["Temperature"]
                     if detail.get("PowerOnDuration"):
                         u["PowerOnDuration"] = detail["PowerOnDuration"]
+                    break
+            for i, disk in enumerate(normalized):
+                if not _disk_needs_power_on_hours(disk):
+                    continue
+                if index not in _disk_index_candidates(disk, i):
+                    continue
+                hours = _disk_power_on_hours_value(detail)
+                if hours is not None:
+                    disk["PowerOnDuration"] = str(hours)
                     break
 
     with_temp = merge_disk_temperatures(

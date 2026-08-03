@@ -60,8 +60,9 @@ poll_recorder(recorder, credentials, *, include_inventory=True, timeout=20.0) �
 **Наработка HDD (отчёт «Диски по времени»):**
 
 - Основной источник — `storageinfo` → `Storage.N.PowerOnDuration` (часы), CGI ≥ 2.6 (HRX-1634, XRN-3210B2, XRN-6410B2 и др.).
-- Если `PowerOnDuration` нет в `storageinfo`, `enrich_storage_disk_metrics` дополняет данные из `diskutility` (SMART attribute 009 `Power_On_Hours`).
-- HRX-1620 / XRN-2010 (CGI 2.5.x): в `storageinfo` наработки нет; `diskutility` на проверенных образцах возвращает NG 600 — при опросе выполняется прямой запрос `diskutility&Index={SlotNumber}` (`recording.cgi`, fallback `system.cgi`). Если API не отвечает, диски остаются в списке «Без наработки» с пометкой CGI 2.5.x.
+- HRX-1620 / XRN-2010 (CGI 2.5.x): наработка может приходить в `storageinfo` как `UseTime` (алиасы `UseDuration`, `OperationTime`); при парсинге нормализуется в `PowerOnDuration`.
+- Если `PowerOnDuration` / `UseTime` нет в `storageinfo`, `enrich_storage_disk_metrics` дополняет данные из `diskutility` (SMART attribute 009 `Power_On_Hours`).
+- На legacy NVR `diskutility` list на проверенных образцах возвращает NG 600 — при опросе выполняется прямой запрос `diskutility&Index={SlotNumber|Storage|…}` (`recording.cgi`, fallback `system.cgi`). Если API не отвечает, диски остаются в списке «Без наработки» с пометкой CGI 2.5.x.
 
 **NTP:**
 
