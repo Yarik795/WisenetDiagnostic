@@ -4,7 +4,7 @@
 
 Стек: Python 3.11, FastAPI + Jinja2 + HTMX, SQLite, опрос устройств по SUNAPI (HTTP CGI), ICMP ping для не-NVR устройств.
 
-Запуск: `uvicorn app.main:app` из `backend/` (подробно — `README.md`). Тесты: `cd backend && pytest`.
+Запуск: `uvicorn app.main:app` из `backend/` (подробно — `README.md`, Linux без venv — `ai-docs/deploy-linux.md`). Тесты: `cd backend && pytest`.
 
 ## Маршрутизация задач
 

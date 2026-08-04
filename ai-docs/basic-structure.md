@@ -18,6 +18,7 @@
 | `scripts/` | Утилиты обслуживания и диагностики (CMDB, дампы SUNAPI, тест SMTP) |
 | `docs/` | Требования, инструкция запуска, справочники SUNAPI/Open Platform |
 | `ai-docs/` | Документация для разработки и ИИ-ассистентов |
+| `ai-docs/deploy-linux.md` | Запуск на Linux без venv, systemd, ICMP ping |
 | `ai-docs/roadmap.md` | Перспективы разработки: запланированные, но не реализованные функции |
 | `.cursor/rules/` | Правила для ИИ-агента (поддержание документации) |
 | `create-project-archive.ps1` | Создание ZIP-архива проекта (Windows) |

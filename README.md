@@ -40,7 +40,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## Документация
 
-Подробная документация для разработки — в каталоге `ai-docs/`.
+- Запуск на Linux (системный Python, без venv): [ai-docs/deploy-linux.md](ai-docs/deploy-linux.md)
+- Документация для разработки — в каталоге `ai-docs/`.
 
 ## Тесты
 
