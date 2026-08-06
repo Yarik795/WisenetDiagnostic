@@ -14,8 +14,9 @@ config.json
 logs/
 data/
 
-# Local-only folders (not published to GitHub)
-scripts/
+# Local-only scripts (cmdb_reader required by backend on fresh clone)
+scripts/*
+!scripts/cmdb_reader.py
 docs/
 inputData/
 Пример отчет/
