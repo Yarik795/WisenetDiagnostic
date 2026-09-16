@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 PYTHON_VERSION = "312"
-PLATFORM = "manylinux_2_28_x86_64"
+PLATFORM = "manylinux2014_x86_64"
 PACKAGES_DIRNAME = "python-packages"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
