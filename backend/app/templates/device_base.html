@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block title %}База устройств — Дашборд руководителя ТСО{% endblock %}
+{% block page_title %}База устройств{% endblock %}
+{% block page_actions %}
+<button type="button" class="btn btn-primary"
+  hx-get="/device-base/new" hx-target="#drawer-root" hx-swap="innerHTML"
+>+ Добавить устройство</button>
+{% endblock %}
+{% block content %}
+<p class="page-lead">Справочник устройств объекта. Регистраторы и контроллеры СКУД сразу попадают в мониторинг.</p>
+
+<div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+  <form
+    style="display:contents;"
+    hx-get="/device-base/partials/table"
+    hx-target="#device-base-table-root"
+    hx-swap="outerHTML"
+    hx-trigger="keyup changed delay:300ms from:#device-base-search, change from:#device-base-type, submit"
+  >
+    <input
+      id="device-base-search"
+      type="search"
+      name="search"
+      class="input"
+      value="{{ device_base_search }}"
+      placeholder="Поиск по адресу, IP, типу…"
+      style="min-width:280px;"
+      aria-label="Поиск"
+    />
+    <select id="device-base-type" name="device_type" class="select" style="max-width:220px;" aria-label="Тип устройства">
+      <option value="">Все типы</option>
+      {% for kind in device_types %}
+      <option value="{{ kind }}" {% if device_base_type == kind %}selected{% endif %}>{{ device_type_labels[kind] }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm">Найти</button>
+  </form>
+</div>
+
+{% include "partials/device_base_table.html" %}
+{% endblock %}

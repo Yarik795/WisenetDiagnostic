@@ -133,9 +133,9 @@
     </div>
 
     <div class="legend">
-      <span class="ok">● Совпадает с CMDB</span>
-      <span class="warn">● Нет в CMDB (найдено при опросе)</span>
-      <span class="error">● Числится в CMDB, не найдено при опросе</span>
+      <span class="ok">● Совпадает с базой</span>
+      <span class="warn">● Нет в базе (найдено при опросе)</span>
+      <span class="error">● Числится в базе, не найдено при опросе</span>
     </div>
 
     <div class="summary-grid">
@@ -149,11 +149,11 @@
       </div>
       <div class="summary-card">
         <div class="value">{{ export.kpi.matched_ok }}</div>
-        <div class="label">Совпало с CMDB</div>
+        <div class="label">Совпало с базой</div>
       </div>
       <div class="summary-card">
         <div class="value">{{ export.kpi.extra }}</div>
-        <div class="label">Нет в CMDB</div>
+        <div class="label">Нет в базе</div>
       </div>
       <div class="summary-card">
         <div class="value">{{ export.kpi.analog }}</div>
@@ -161,11 +161,11 @@
       </div>
       <div class="summary-card">
         <div class="value">{{ export.kpi.auxiliary }}</div>
-        <div class="label">Вспомогательное (CMDB)</div>
+        <div class="label">Вспомогательное (база)</div>
       </div>
       <div class="summary-card">
         <div class="value">{{ export.kpi.missing }}</div>
-        <div class="label">В CMDB, не найдено</div>
+        <div class="label">В базе, не найдено</div>
       </div>
     </div>
 

@@ -76,7 +76,7 @@ TOOLS: list[dict[str, Any]] = [
             "name": "count_problems_by_kind",
             "description": (
                 "Подсчитать регистраторы с проблемами (warn/error/offline) "
-                "по видам систем: tsv, skud, bio, sots."
+                "по видам систем: tsv, skud, bio, sots, lockers."
             ),
             "parameters": {"type": "object", "properties": {}},
         },

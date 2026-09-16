@@ -59,13 +59,38 @@ def test_summary_page_renders(client: TestClient) -> None:
     assert r.status_code == 200
     assert "Дашборд руководителя ТСО" in r.text or "Сводка" in r.text
     assert "Биотерминалы" in r.text
+    assert "Локеры" in r.text
 
 
 def test_kind_section_pages(client: TestClient) -> None:
-    for path, label in (("/skud", "СКУД"), ("/bio", "Биотерминалы")):
+    for path, label in (
+        ("/skud", "СКУД"),
+        ("/bio", "Биотерминалы"),
+        ("/lockers", "Локеры"),
+    ):
         r = client.get(path)
         assert r.status_code == 200
         assert label in r.text
+
+
+def test_lockers_screenshot_reboot_404_for_other_kinds(client: TestClient) -> None:
+    created = client.post(
+        "/recorders",
+        data={
+            "object_name": "Obj",
+            "name": "NVR-1",
+            "host": "10.1.1.10",
+            "port": "80",
+            "device_kind": "tsv",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    store = app.dependency_overrides[get_store]()
+    rec_id = store.list_recorders()[0].id
+    assert client.get(f"/lockers/{rec_id}/screenshot").status_code == 404
+    assert client.post(f"/lockers/{rec_id}/reboot").status_code == 404
+    assert client.get("/lockers/missing/screenshot").status_code == 404
 
 
 def test_removed_detail_routes_return_404(client: TestClient) -> None:
@@ -106,8 +131,7 @@ def test_site_devices_ping_zombies_returns_panel(
     client: TestClient,
     tmp_path: Path,
 ) -> None:
-    from app.state_store import CmdbRecordRow
-    from app.ui.site_inventory import CMDB_TYPE_CAMERA
+    from app.state_store import StateStore
 
     store = ConfigStore(path=tmp_path / "config_ping.json")
     store.create_recorder(
@@ -121,25 +145,14 @@ def test_site_devices_ping_zombies_returns_panel(
         )
     )
 
-    from app.state_store import StateStore
-
     state = StateStore(path=tmp_path / "ping.db")
     state.init_db()
-    with state.replace_cmdb_records() as session:
-        session.write_batch(
-            [
-                CmdbRecordRow(
-                    host="10.1.1.30",
-                    functional_type=CMDB_TYPE_CAMERA,
-                    manufacturer="Hanwha",
-                    object_name="Объект 1",
-                    model_name="XNO-6080R",
-                    mac=None,
-                    device_kind=None,
-                    source_row=1,
-                ),
-            ]
-        )
+    state.insert_device_base(
+        address="Объект 1",
+        device_type="camera",
+        model="XNO-6080R",
+        host="10.1.1.30",
+    )
 
     def override_store() -> ConfigStore:
         return store

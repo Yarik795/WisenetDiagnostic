@@ -299,6 +299,7 @@ class RecorderPollData:
     channels_zero_bitrate: int = 0
     channels_poe_off: int = 0
     system_event_times: dict[str, str] = field(default_factory=dict)
+    locker_snapshot: Optional[dict] = None
 
 
 def build_base_url(recorder: Recorder, cgi: str) -> str:

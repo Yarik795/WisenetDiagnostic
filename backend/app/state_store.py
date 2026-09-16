@@ -88,6 +88,7 @@ class RecorderMetricsRow:
     last_poll_attempts: Optional[int] = None
     last_poll_success_attempt: Optional[int] = None
     last_poll_first_try_ok: Optional[bool] = None
+    lockers_json: Optional[str] = None
 
 
 @dataclass
@@ -145,15 +146,15 @@ class NaumenRecordRow:
 
 
 @dataclass(frozen=True)
-class CmdbRecordRow:
+class DeviceBaseRow:
+    id: int
+    address: str
+    device_type: str
+    model: str
     host: str
-    functional_type: str
-    manufacturer: str
-    object_name: str
-    model_name: str
-    mac: Optional[str]
-    device_kind: Optional[str]
-    source_row: int
+    recorder_id: Optional[str]
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -270,42 +271,6 @@ class NaumenReplaceSession:
                     row.cost,
                     row.sberdrug_number,
                     row.description,
-                    row.source_row,
-                    imported_at,
-                )
-                for row in rows
-            ],
-        )
-        self.count += len(rows)
-
-
-class CmdbReplaceSession:
-    def __init__(self, conn: sqlite3.Connection, imported_at: str) -> None:
-        self._conn = conn
-        self._imported_at = imported_at
-        self.count = 0
-
-    def write_batch(self, rows: list[Any]) -> None:
-        if not rows:
-            return
-        conn = self._conn
-        imported_at = self._imported_at
-        conn.executemany(
-            """
-            INSERT OR REPLACE INTO cmdb_records (
-                host, functional_type, manufacturer, object_name, model_name,
-                mac, device_kind, source_row, imported_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    row.host,
-                    row.functional_type,
-                    row.manufacturer,
-                    row.object_name,
-                    row.model_name,
-                    row.mac,
-                    row.device_kind,
                     row.source_row,
                     imported_at,
                 )
@@ -550,10 +515,10 @@ class StateStore:
                     ON recorder_poll_attempts(job_id, recorder_id, attempt);
 
                 -- source_imports: журнал загрузок исходных файлов со страницы /sources
-                -- (CMDB, заявки, Naumen, Арсенал).
+                -- (заявки, Naumen, Арсенал).
                 CREATE TABLE IF NOT EXISTS source_imports (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,    -- PK (автоинкремент)
-                    source_key TEXT NOT NULL,                -- ключ источника: cmdb/requests/naumen
+                    source_key TEXT NOT NULL,                -- ключ источника: requests/naumen/arsenal
                     filename TEXT,                           -- имя исходного файла из inputData/
                     imported_at TEXT NOT NULL,               -- время импорта (ISO 8601, UTC)
                     record_count INTEGER NOT NULL DEFAULT 0, -- число обработанных записей
@@ -576,23 +541,23 @@ class StateStore:
                     imported_at TEXT NOT NULL                -- время импорта (ISO 8601, UTC)
                 );
 
-                -- cmdb_records: выгрузка CMDB (cmdb.xlsx).
-                -- Полностью перезаписывается при каждом импорте (DELETE + batch INSERT).
-                CREATE TABLE IF NOT EXISTS cmdb_records (
-                    host TEXT NOT NULL,                      -- "IP"
-                    functional_type TEXT NOT NULL,           -- "Функциональный тип"
-                    manufacturer TEXT NOT NULL,              -- "Производитель устройства"
-                    object_name TEXT NOT NULL DEFAULT '',    -- "Адрес"
-                    model_name TEXT NOT NULL DEFAULT '',     -- "Модель устройства"
-                    mac TEXT,                                -- "MAC"
-                    device_kind TEXT,                        -- tsv/skud/bio или NULL (камеры, всп. оборудование)
-                    source_row INTEGER,                      -- номер строки в исходном xlsx
-                    imported_at TEXT NOT NULL,               -- время импорта (ISO 8601, UTC)
-                    PRIMARY KEY (host, functional_type, manufacturer)
+                -- device_base: справочник «База устройств» (ручной CRUD).
+                CREATE TABLE IF NOT EXISTS device_base (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    address TEXT NOT NULL,                   -- адрес объекта
+                    device_type TEXT NOT NULL,               -- recorder/locker/skud_controller/camera/server
+                    model TEXT NOT NULL DEFAULT '',          -- модель (для локера: LockerBox/Pridex)
+                    host TEXT NOT NULL,                      -- IPv4
+                    recorder_id TEXT,                        -- связь с config.json, если тип в мониторинге
+                    created_at TEXT NOT NULL,                -- ISO 8601, UTC
+                    updated_at TEXT NOT NULL,                -- ISO 8601, UTC
+                    UNIQUE(host)
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_cmdb_records_device_kind
-                    ON cmdb_records(device_kind);
+                CREATE INDEX IF NOT EXISTS idx_device_base_type
+                    ON device_base(device_type);
+                CREATE INDEX IF NOT EXISTS idx_device_base_address
+                    ON device_base(address);
 
                 -- pp_requests: выгрузка заявок ПП (requests.xlsx).
                 -- Полностью перезаписывается при каждом импорте (DELETE + batch INSERT OR REPLACE).
@@ -714,6 +679,7 @@ class StateStore:
             ("channels_poe_off", "INTEGER"),         # число PoE-портов без питания (резерв; сейчас не заполняется)
             ("serial_number", "TEXT"),               # серийный номер устройства
             ("manufacture_date", "TEXT"),            # дата производства, выведенная из серийника (Samsung/Hanwha date code)
+            ("lockers_json", "TEXT"),                # JSON-снимок панели локеров (шкаф, ячейки, USB, без ПДн)
         ]
         for name, col_type in metrics_additions:
             if name not in metrics_columns:
@@ -788,29 +754,37 @@ class StateStore:
                 """
             )
 
-        if "cmdb_records" not in tables:
+        if "device_base" not in tables:
             conn.execute(
                 """
-                CREATE TABLE cmdb_records (
+                CREATE TABLE device_base (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    address TEXT NOT NULL,
+                    device_type TEXT NOT NULL,
+                    model TEXT NOT NULL DEFAULT '',
                     host TEXT NOT NULL,
-                    functional_type TEXT NOT NULL,
-                    manufacturer TEXT NOT NULL,
-                    object_name TEXT NOT NULL DEFAULT '',
-                    model_name TEXT NOT NULL DEFAULT '',
-                    mac TEXT,
-                    device_kind TEXT,
-                    source_row INTEGER,
-                    imported_at TEXT NOT NULL,
-                    PRIMARY KEY (host, functional_type, manufacturer)
+                    recorder_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(host)
                 )
                 """
             )
             conn.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_cmdb_records_device_kind
-                    ON cmdb_records(device_kind)
+                CREATE INDEX IF NOT EXISTS idx_device_base_type
+                    ON device_base(device_type)
                 """
             )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_device_base_address
+                    ON device_base(address)
+                """
+            )
+
+        if "cmdb_records" in tables:
+            conn.execute("DROP TABLE cmdb_records")
 
         if "pp_requests" not in tables:
             conn.execute(
@@ -964,16 +938,6 @@ class StateStore:
             yield session
 
     @contextmanager
-    def replace_cmdb_records(
-        self, imported_at: Optional[datetime] = None
-    ) -> Iterator[CmdbReplaceSession]:
-        when = _iso(imported_at or datetime.now(timezone.utc))
-        with self._connect() as conn:
-            conn.execute("DELETE FROM cmdb_records")
-            session = CmdbReplaceSession(conn, when)
-            yield session
-
-    @contextmanager
     def replace_pp_requests(
         self, imported_at: Optional[datetime] = None
     ) -> Iterator[PPReplaceSession]:
@@ -988,22 +952,142 @@ class StateStore:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM naumen_records").fetchone()
         return int(row["cnt"]) if row else 0
 
-    def count_cmdb_records(self) -> int:
+    def list_device_base(
+        self,
+        *,
+        device_type: Optional[str] = None,
+    ) -> list[DeviceBaseRow]:
+        sql = """
+            SELECT id, address, device_type, model, host, recorder_id,
+                   created_at, updated_at
+            FROM device_base
+        """
+        params: list[str] = []
+        if device_type:
+            sql += " WHERE device_type = ?"
+            params.append(device_type)
+        sql += " ORDER BY address COLLATE NOCASE, device_type, host"
         with self._connect() as conn:
-            row = conn.execute("SELECT COUNT(*) AS cnt FROM cmdb_records").fetchone()
-        return int(row["cnt"]) if row else 0
+            rows = conn.execute(sql, params).fetchall()
+        return [_device_base_from_row(row) for row in rows]
 
-    def cmdb_records_rows(self) -> list[CmdbRecordRow]:
+    def list_device_base_addresses(self) -> list[str]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT host, functional_type, manufacturer, object_name, model_name,
-                       mac, device_kind, source_row
-                FROM cmdb_records
-                ORDER BY object_name, functional_type, host, source_row
+                SELECT DISTINCT address
+                FROM device_base
+                WHERE TRIM(address) != ''
+                ORDER BY address COLLATE NOCASE
                 """
             ).fetchall()
-        return [_cmdb_record_from_row(row) for row in rows]
+        return [str(row["address"]) for row in rows]
+
+    def get_device_base(self, device_id: int) -> Optional[DeviceBaseRow]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, address, device_type, model, host, recorder_id,
+                       created_at, updated_at
+                FROM device_base
+                WHERE id = ?
+                """,
+                (device_id,),
+            ).fetchone()
+        return _device_base_from_row(row) if row else None
+
+    def get_device_base_by_host(self, host: str) -> Optional[DeviceBaseRow]:
+        needle = host.strip()
+        if not needle:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, address, device_type, model, host, recorder_id,
+                       created_at, updated_at
+                FROM device_base
+                WHERE host = ?
+                """,
+                (needle,),
+            ).fetchone()
+        return _device_base_from_row(row) if row else None
+
+    def insert_device_base(
+        self,
+        *,
+        address: str,
+        device_type: str,
+        model: str = "",
+        host: str,
+        recorder_id: Optional[str] = None,
+    ) -> DeviceBaseRow:
+        when = _iso(datetime.now(timezone.utc))
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO device_base (
+                    address, device_type, model, host, recorder_id,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    address,
+                    device_type,
+                    model,
+                    host,
+                    recorder_id,
+                    when,
+                    when,
+                ),
+            )
+            row_id = int(cur.lastrowid)
+        row = self.get_device_base(row_id)
+        if row is None:
+            raise RuntimeError("Не удалось прочитать созданную запись device_base")
+        return row
+
+    def update_device_base(
+        self,
+        device_id: int,
+        *,
+        address: str,
+        device_type: str,
+        model: str = "",
+        host: str,
+        recorder_id: Optional[str] = None,
+    ) -> Optional[DeviceBaseRow]:
+        when = _iso(datetime.now(timezone.utc))
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                UPDATE device_base
+                SET address = ?, device_type = ?, model = ?, host = ?,
+                    recorder_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    address,
+                    device_type,
+                    model,
+                    host,
+                    recorder_id,
+                    when,
+                    device_id,
+                ),
+            )
+            if cur.rowcount == 0:
+                return None
+        return self.get_device_base(device_id)
+
+    def delete_device_base(self, device_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM device_base WHERE id = ?", (device_id,))
+        return cur.rowcount > 0
+
+    def count_device_base(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS cnt FROM device_base").fetchone()
+        return int(row["cnt"]) if row else 0
 
     def count_pp_requests(self) -> int:
         with self._connect() as conn:
@@ -1460,6 +1544,7 @@ class StateStore:
         channels_poe_off: Optional[int] = None,
         serial_number: Optional[str] = None,
         manufacture_date: Optional[str] = None,
+        lockers_json: Optional[str] = None,
     ) -> None:
         disks_json = json.dumps(disks, ensure_ascii=False) if disks else None
         system_events_json = (
@@ -1486,9 +1571,9 @@ class StateStore:
                     storageinfo_ok, archive_poll_error, recording_storage_enable,
                     recording_storage_overwrite, cpu_usage_max, cpu_usage_avg,
                     data_rate_total_mbps, channels_zero_bitrate, channels_poe_off,
-                    serial_number, manufacture_date
+                    serial_number, manufacture_date, lockers_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(recorder_id) DO UPDATE SET
                     model=excluded.model,
                     firmware_version=excluded.firmware_version,
@@ -1528,7 +1613,8 @@ class StateStore:
                     channels_zero_bitrate=excluded.channels_zero_bitrate,
                     channels_poe_off=excluded.channels_poe_off,
                     serial_number=excluded.serial_number,
-                    manufacture_date=excluded.manufacture_date
+                    manufacture_date=excluded.manufacture_date,
+                    lockers_json=COALESCE(excluded.lockers_json, recorder_metrics.lockers_json)
                 """,
                 (
                     recorder_id,
@@ -1571,6 +1657,7 @@ class StateStore:
                     channels_poe_off,
                     serial_number,
                     manufacture_date,
+                    lockers_json,
                 ),
             )
 
@@ -2012,6 +2099,7 @@ def _metrics_from_row(row: sqlite3.Row) -> RecorderMetricsRow:
             or row["last_poll_first_try_ok"] is None
             else bool(row["last_poll_first_try_ok"])
         ),
+        lockers_json=row["lockers_json"] if "lockers_json" in row.keys() else None,
     )
 
 
@@ -2040,16 +2128,16 @@ def _history_from_row(row: sqlite3.Row) -> HistoryRow:
     )
 
 
-def _cmdb_record_from_row(row: sqlite3.Row) -> CmdbRecordRow:
-    return CmdbRecordRow(
-        host=row["host"],
-        functional_type=row["functional_type"],
-        manufacturer=row["manufacturer"],
-        object_name=row["object_name"] or "",
-        model_name=row["model_name"] or "",
-        mac=row["mac"],
-        device_kind=row["device_kind"],
-        source_row=int(row["source_row"] or 0),
+def _device_base_from_row(row: sqlite3.Row) -> DeviceBaseRow:
+    return DeviceBaseRow(
+        id=int(row["id"]),
+        address=row["address"] or "",
+        device_type=row["device_type"] or "",
+        model=row["model"] or "",
+        host=row["host"] or "",
+        recorder_id=row["recorder_id"] or None,
+        created_at=row["created_at"] or "",
+        updated_at=row["updated_at"] or "",
     )
 
 

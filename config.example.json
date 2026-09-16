@@ -22,7 +22,11 @@
     "display_timezone": "Europe/Moscow",
     "poll_retry_enabled": true,
     "poll_retry_max": 3,
-    "poll_retry_delay_seconds": 5
+    "poll_retry_delay_seconds": 5,
+    "lockers_api_base_url": "",
+    "lockers_cells_error_threshold_percent": 25,
+    "lockers_door_open_warn_minutes": 15,
+    "lockers_adb_enabled": false
   },
   "exclusions": {
     "recorder_ids": []

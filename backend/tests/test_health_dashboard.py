@@ -174,8 +174,10 @@ def test_object_matrix_includes_kind_columns() -> None:
         include_kind_columns=True,
     )
     assert len(rows) == 1
-    assert len(rows[0].cells) == 11
+    assert len(rows[0].cells) == 12
     skud_cell = next(c for c in rows[0].cells if c.column == "skud")
     assert skud_cell.problem_count >= 1
     bio_cell = next(c for c in rows[0].cells if c.column == "bio")
     assert bio_cell.status == "na"
+    lockers_cell = next(c for c in rows[0].cells if c.column == "lockers")
+    assert lockers_cell.status == "na"

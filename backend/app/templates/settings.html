@@ -2,6 +2,7 @@
 {% block title %}Настройки — Wisenet Диагностика{% endblock %}
 {% block page_title %}Настройки{% endblock %}
 {% block content %}
+{% set monitoring = monitoring if monitoring is defined else get_monitoring_settings() %}
 <div class="warning-box">
   <span aria-hidden="true">⚠</span>
   <p>Пароль хранится в локальном <code>config.json</code> на сервере. Не размещайте конфиг в публичных репозиториях.</p>
@@ -26,5 +27,24 @@
   <h2 style="font-size:16px;margin:0 0 8px;">Исключения из мониторинга</h2>
   <p style="font-size:14px;color:var(--text-secondary);margin:0 0 16px;">Управление списком NVR, которые не опрашиваются и не участвуют в отчётах.</p>
   <a href="/settings/exclusions" class="btn btn-outline">Открыть список исключений</a>
+</div>
+<div class="card" style="max-width:480px;padding:24px;margin-top:16px;">
+  <h2 style="font-size:16px;margin:0 0 8px;">Локеры Pridex</h2>
+  <p style="font-size:14px;color:var(--text-secondary);margin:0 0 16px;">URL Lockers Service и опрос панели по ADB (скрин / reboot / USB).</p>
+  <form method="post" action="/settings/lockers">
+    <div class="field">
+      <label class="label" for="lockers_api_base_url">Inex API (entrypoint)</label>
+      <input class="input" id="lockers_api_base_url" name="lockers_api_base_url"
+        value="{{ monitoring.lockers_api_base_url }}"
+        placeholder="https://host/api/lockers/v1">
+      {% if locker_errors and locker_errors.lockers_api_base_url %}<div class="field-error">{{ locker_errors.lockers_api_base_url }}</div>{% endif %}
+    </div>
+    <div class="field toggle-row">
+      <input type="checkbox" id="lockers_adb_enabled" name="lockers_adb_enabled" value="true"
+        {% if monitoring.lockers_adb_enabled %}checked{% endif %}>
+      <label for="lockers_adb_enabled">Снимать USB / киоск по ADB в цикле опроса</label>
+    </div>
+    <button type="submit" class="btn btn-primary">Сохранить</button>
+  </form>
 </div>
 {% endblock %}

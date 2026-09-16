@@ -4,9 +4,10 @@ from app.ui.grouping import build_devices_by_kind
 
 
 def test_device_kinds_labels() -> None:
-    assert len(ALL_DEVICE_KINDS) == 4
+    assert len(ALL_DEVICE_KINDS) == 5
     assert kind_label("tsv") == "ТСВ"
     assert SYSTEM_KIND_LABELS["skud"] == "СКУД"
+    assert SYSTEM_KIND_LABELS["lockers"] == "Локеры"
 
 
 def test_recorder_device_kind_from_model() -> None:

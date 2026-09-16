@@ -1,0 +1,58 @@
+{% set current_type = form.device_type if form else (device.device_type if device else 'recorder') %}
+{% set current_model = form.model if form else (device.model if device else '') %}
+<div class="drawer-backdrop" onclick="document.getElementById('drawer-root').innerHTML=''"></div>
+<aside class="drawer" role="dialog" aria-labelledby="drawer-title">
+  <div class="drawer-header">
+    <h2 id="drawer-title">{% if device %}Изменить устройство{% else %}Добавить устройство{% endif %}</h2>
+    <button type="button" class="btn btn-ghost" onclick="document.getElementById('drawer-root').innerHTML=''" aria-label="Закрыть">✕</button>
+  </div>
+  <form
+    hx-post="{% if device %}/device-base/{{ device.id }}{% else %}/device-base{% endif %}"
+    hx-target="#drawer-root"
+    hx-swap="innerHTML"
+  >
+    <div class="field">
+      <label class="label" for="address">Адрес *</label>
+      <input class="input" id="address" name="address" list="device-addresses"
+        value="{{ form.address if form else (device.address if device else '') }}"
+        placeholder="г. Москва, ул. Примерная, 1" required>
+      <datalist id="device-addresses">
+        {% for n in address_options %}
+        <option value="{{ n }}">
+        {% endfor %}
+      </datalist>
+      {% if errors and errors.address %}<div class="field-error">{{ errors.address }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label class="label" for="device_type">Тип устройства *</label>
+      <select class="input" id="device_type" name="device_type" required
+        onchange="document.getElementById('model-field').hidden = this.value !== 'locker'">
+        {% for kind in device_types %}
+        <option value="{{ kind }}" {% if current_type == kind %}selected{% endif %}>{{ device_type_labels[kind] }}</option>
+        {% endfor %}
+      </select>
+      {% if errors and errors.device_type %}<div class="field-error">{{ errors.device_type }}</div>{% endif %}
+    </div>
+    <div class="field" id="model-field" {% if current_type != 'locker' %}hidden{% endif %}>
+      <label class="label" for="model">Модель *</label>
+      <select class="input" id="model" name="model">
+        <option value="">Выберите модель</option>
+        {% for item in locker_models %}
+        <option value="{{ item }}" {% if current_model == item %}selected{% endif %}>{{ item }}</option>
+        {% endfor %}
+      </select>
+      {% if errors and errors.model %}<div class="field-error">{{ errors.model }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label class="label" for="host">IP-адрес *</label>
+      <input class="input" id="host" name="host"
+        value="{{ form.host if form else (device.host if device else '') }}"
+        placeholder="10.1.2.3" required>
+      {% if errors and errors.host %}<div class="field-error">{{ errors.host }}</div>{% endif %}
+    </div>
+    <div style="display:flex;gap:12px;margin-top:24px;">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('drawer-root').innerHTML=''">Отмена</button>
+    </div>
+  </form>
+</aside>

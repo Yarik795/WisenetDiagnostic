@@ -43,7 +43,7 @@ def render_site_devices_email_body(context: dict[str, Any]) -> str:
         f"<p>Отчёт <strong>Устройства на объекте</strong> — {context['filter_label']}.</p>"
         f"<p>Сформирован: {context['generated_at']}</p>"
         f"<p>Объектов: <strong>{kpi.get('objects', 0)}</strong>, "
-        f"в CMDB не найдено при опросе: <strong>{kpi.get('missing', 0)}</strong>.</p>"
+        f"в базе не найдено при опросе: <strong>{kpi.get('missing', 0)}</strong>.</p>"
         "<p>Полный отчёт во вложении (HTML).</p>"
         "</body></html>"
     )

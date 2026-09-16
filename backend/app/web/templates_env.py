@@ -3,7 +3,11 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from ..config_store import ConfigStore
+from ..device_base import DEVICE_TYPE_LABELS, device_type_label
 from ..device_kinds import ALL_DEVICE_KINDS, SYSTEM_KIND_LABELS, kind_label, source_label
+from ..locker_health import CATEGORY_LABELS as LOCKER_CATEGORY_LABELS
+from ..locker_health import parse_lockers_json
+from ..pridex_adb import adb_available
 from ..exclusions import excluded_ids_set
 from ..ui.grouping import (
     STATUS_LABELS,
@@ -99,8 +103,13 @@ templates.env.globals["object_time_problem_count"] = object_time_problem_count
 templates.env.globals["object_health_problem_count"] = object_health_problem_count
 templates.env.globals["object_category_problem_counts"] = object_category_problem_counts
 templates.env.globals["recorder_problem_badges"] = recorder_problem_badges
-templates.env.globals["category_badge_code"] = lambda c: BADGE_CODES.get(c, c)
 templates.env.globals["category_label"] = lambda c: CATEGORY_LABELS.get(c, c)
+templates.env.globals["category_badge_code"] = lambda c: BADGE_CODES.get(c, c)
+templates.env.globals["parse_lockers"] = parse_lockers_json
+templates.env.globals["locker_category_label"] = (
+    lambda c: LOCKER_CATEGORY_LABELS.get(c, c)
+)
+templates.env.globals["adb_available"] = adb_available
 
 
 def _is_recorder_excluded(recorder_id: str) -> bool:
@@ -112,6 +121,8 @@ templates.env.globals["device_kinds"] = ALL_DEVICE_KINDS
 templates.env.globals["kind_labels"] = SYSTEM_KIND_LABELS
 templates.env.globals["kind_label"] = kind_label
 templates.env.globals["source_label"] = source_label
+templates.env.globals["device_type_label"] = device_type_label
+templates.env.globals["device_type_labels"] = DEVICE_TYPE_LABELS
 
 
 def list_channels_for_recorder(recorder_id: str):

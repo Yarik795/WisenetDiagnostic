@@ -1,4 +1,4 @@
-"""Отчёт «Устройства на объекте»: реальные устройства ТСВ vs CMDB."""
+"""Отчёт «Устройства на объекте»: реальные устройства ТСВ vs база устройств."""
 
 from __future__ import annotations
 
@@ -7,20 +7,21 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 from ..config_store import ConfigStore
+from ..device_base import DEVICE_TYPE_LABELS
 from ..device_kinds import filter_recorders_by_kind
 from ..models import Recorder
-from ..state_store import ChannelRow, CmdbRecordRow, RecorderMetricsRow, StateStore
+from ..state_store import ChannelRow, DeviceBaseRow, RecorderMetricsRow, StateStore
 from .grouping import STATUS_LABELS, metrics_map_from_list
 
 MatchStatus = Literal["ok", "extra", "missing", "info"]
 
-CMDB_TYPE_NVR = "Видеорегистраторы"
-CMDB_TYPE_CAMERA = "Видеокамеры"
-CMDB_TYPE_AUX = "Вспомогательное оборудование"
+CATALOG_TYPE_RECORDER = "recorder"
+CATALOG_TYPE_CAMERA = "camera"
+CATALOG_TYPE_SERVER = "server"
 
 MATCH_LABELS: dict[str, str] = {
-    "ok": "Совпадает с CMDB",
-    "extra": "Нет в CMDB",
+    "ok": "Совпадает с базой",
+    "extra": "Нет в базе",
     "missing": "Не найдено при опросе",
     "info": "Информационно",
 }
@@ -79,16 +80,16 @@ def is_analog_channel(channel: ChannelRow) -> bool:
     return bool((channel.name or "").strip())
 
 
-def _find_cmdb_by_ip(
-    cmdb_rows: list[CmdbRecordRow],
+def _find_catalog_by_ip(
+    catalog_rows: list[DeviceBaseRow],
     host: str,
-    functional_type: str,
-) -> Optional[CmdbRecordRow]:
+    device_type: str,
+) -> Optional[DeviceBaseRow]:
     ip = normalize_ip(host)
     if not ip:
         return None
-    for row in cmdb_rows:
-        if normalize_ip(row.host) == ip and row.functional_type == functional_type:
+    for row in catalog_rows:
+        if normalize_ip(row.host) == ip and row.device_type == device_type:
             return row
     return None
 
@@ -109,8 +110,7 @@ def _device_row(
     health_status: str = "",
     health_label: str = "",
     source_state: str = "",
-    cmdb_model: str = "",
-    cmdb_mac: str = "",
+    catalog_model: str = "",
     note: str = "",
 ) -> dict[str, Any]:
     return {
@@ -129,8 +129,8 @@ def _device_row(
         "health_status": health_status,
         "health_label": health_label,
         "source_state": source_state,
-        "cmdb_model": cmdb_model,
-        "cmdb_mac": cmdb_mac,
+        "cmdb_model": catalog_model,
+        "catalog_model": catalog_model,
         "note": note,
     }
 
@@ -138,9 +138,9 @@ def _device_row(
 def _nvr_row(
     recorder: Recorder,
     metrics: Optional[RecorderMetricsRow],
-    cmdb: Optional[CmdbRecordRow],
+    catalog: Optional[DeviceBaseRow],
 ) -> dict[str, Any]:
-    match_status: MatchStatus = "ok" if cmdb else "extra"
+    match_status: MatchStatus = "ok" if catalog else "extra"
     health = metrics.health_status if metrics and metrics.last_polled_at else "unknown"
     return _device_row(
         device_type="nvr",
@@ -149,21 +149,19 @@ def _nvr_row(
         name=recorder.name or recorder.host,
         host=recorder.host,
         model=(metrics.model if metrics else None) or "",
-        manufacturer=cmdb.manufacturer if cmdb else "",
-        mac=recorder.mac or (cmdb.mac if cmdb else "") or "",
+        mac=recorder.mac or "",
         health_status=health,
         health_label=STATUS_LABELS.get(health, health),
-        cmdb_model=cmdb.model_name if cmdb else "",
-        cmdb_mac=cmdb.mac if cmdb else "",
+        catalog_model=catalog.model if catalog else "",
     )
 
 
 def _ip_camera_row(
     channel: ChannelRow,
     recorder: Recorder,
-    cmdb: Optional[CmdbRecordRow],
+    catalog: Optional[DeviceBaseRow],
 ) -> dict[str, Any]:
-    match_status: MatchStatus = "ok" if cmdb else "extra"
+    match_status: MatchStatus = "ok" if catalog else "extra"
     return _device_row(
         device_type="ip_camera",
         device_type_label="IP-камера",
@@ -171,16 +169,13 @@ def _ip_camera_row(
         name=channel.name or f"Канал {channel.channel_no + 1}",
         host=channel.camera_ip or "",
         model=channel.camera_model or "",
-        manufacturer=cmdb.manufacturer if cmdb else "",
-        mac=cmdb.mac if cmdb else "",
         channel_no=channel.channel_no,
         recorder_name=recorder.name or recorder.host,
         recorder_host=recorder.host,
         health_status=channel.health_status,
         health_label=STATUS_LABELS.get(channel.health_status, channel.health_status),
         source_state=channel.source_state or "",
-        cmdb_model=cmdb.model_name if cmdb else "",
-        cmdb_mac=cmdb.mac if cmdb else "",
+        catalog_model=catalog.model if catalog else "",
     )
 
 
@@ -196,32 +191,24 @@ def _analog_camera_row(channel: ChannelRow, recorder: Recorder) -> dict[str, Any
         health_status=channel.health_status,
         health_label=STATUS_LABELS.get(channel.health_status, channel.health_status),
         source_state=channel.source_state or "",
-        note="Без IP — сопоставление с CMDB недоступно",
+        note="Без IP — сопоставление с базой недоступно",
     )
 
 
-def _cmdb_row(
-    row: CmdbRecordRow,
+def _catalog_row(
+    row: DeviceBaseRow,
     *,
     match_status: MatchStatus,
     note: str = "",
 ) -> dict[str, Any]:
-    type_labels = {
-        CMDB_TYPE_NVR: "Видеорегистратор",
-        CMDB_TYPE_CAMERA: "Видеокамера",
-        CMDB_TYPE_AUX: "Вспомогательное",
-    }
     return _device_row(
-        device_type="cmdb",
-        device_type_label=type_labels.get(row.functional_type, row.functional_type),
+        device_type="catalog",
+        device_type_label=DEVICE_TYPE_LABELS.get(row.device_type, row.device_type),
         match_status=match_status,
-        name=row.model_name or row.host,
+        name=row.model or row.host,
         host=row.host,
-        model=row.model_name,
-        manufacturer=row.manufacturer,
-        mac=row.mac or "",
-        cmdb_model=row.model_name,
-        cmdb_mac=row.mac or "",
+        model=row.model,
+        catalog_model=row.model,
         note=note,
     )
 
@@ -232,7 +219,7 @@ def build_site_object_groups(
 ) -> list[SiteObjectGroup]:
     tsv_recorders = filter_recorders_by_kind(store.list_recorders(), "tsv")
     metrics_map = metrics_map_from_list(state.list_recorder_metrics())
-    cmdb_rows = state.cmdb_records_rows()
+    catalog_rows = state.list_device_base()
 
     channels_by_recorder: dict[str, list[ChannelRow]] = defaultdict(list)
     for channel in state.list_channels():
@@ -255,8 +242,10 @@ def build_site_object_groups(
         host_ip = normalize_ip(recorder.host)
         if host_ip:
             found_nvr_ips.add(host_ip)
-        cmdb = _find_cmdb_by_ip(cmdb_rows, recorder.host, CMDB_TYPE_NVR)
-        group.nvrs.append(_nvr_row(recorder, metrics, cmdb))
+        catalog = _find_catalog_by_ip(
+            catalog_rows, recorder.host, CATALOG_TYPE_RECORDER
+        )
+        group.nvrs.append(_nvr_row(recorder, metrics, catalog))
 
         for channel in channels_by_recorder.get(recorder.id, []):
             if is_channel_deactive(channel):
@@ -264,19 +253,21 @@ def build_site_object_groups(
             if normalize_ip(channel.camera_ip):
                 cam_ip = normalize_ip(channel.camera_ip)
                 found_camera_ips.add(cam_ip)
-                cam_cmdb = _find_cmdb_by_ip(cmdb_rows, channel.camera_ip or "", CMDB_TYPE_CAMERA)
-                group.ip_cameras.append(_ip_camera_row(channel, recorder, cam_cmdb))
+                cam_catalog = _find_catalog_by_ip(
+                    catalog_rows, channel.camera_ip or "", CATALOG_TYPE_CAMERA
+                )
+                group.ip_cameras.append(_ip_camera_row(channel, recorder, cam_catalog))
             elif is_analog_channel(channel):
                 group.analog_cameras.append(_analog_camera_row(channel, recorder))
 
-    for row in cmdb_rows:
-        object_name = normalize_object_name(row.object_name)
+    for row in catalog_rows:
+        object_name = normalize_object_name(row.address)
         group = get_group(object_name)
         host_ip = normalize_ip(row.host)
 
-        if row.functional_type == CMDB_TYPE_AUX:
+        if row.device_type == CATALOG_TYPE_SERVER:
             group.auxiliary.append(
-                _cmdb_row(
+                _catalog_row(
                     row,
                     match_status="info",
                     note="Проверить наличие на объекте",
@@ -284,10 +275,10 @@ def build_site_object_groups(
             )
             continue
 
-        if row.functional_type == CMDB_TYPE_NVR:
+        if row.device_type == CATALOG_TYPE_RECORDER:
             if host_ip and host_ip not in found_nvr_ips:
                 group.missing.append(
-                    _cmdb_row(
+                    _catalog_row(
                         row,
                         match_status="missing",
                         note="Вероятно, не добавлен в мониторинг или недоступен",
@@ -295,10 +286,10 @@ def build_site_object_groups(
                 )
             continue
 
-        if row.functional_type == CMDB_TYPE_CAMERA:
+        if row.device_type == CATALOG_TYPE_CAMERA:
             if host_ip and host_ip not in found_camera_ips:
                 group.missing.append(
-                    _cmdb_row(
+                    _catalog_row(
                         row,
                         match_status="missing",
                         note="Вероятно, не добавлена ни на один регистратор",

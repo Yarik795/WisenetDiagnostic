@@ -1,0 +1,96 @@
+{% set locker = parse_lockers(metrics.lockers_json) if metrics else {} %}
+{% set locker_cats = locker.categories or {} %}
+{% set locker_reasons = locker.category_reasons or {} %}
+{% set can_adb = adb_available() and (locker.locker_model or '')|lower != 'lockerbox' %}
+<div class="locker-card">
+  <div class="locker-passport">
+    <dl class="locker-kv">
+      <dt>Панель Inex</dt><dd>{{ locker.panel_id or recorder.inex_panel_id or "—" }}</dd>
+      <dt>Шкаф</dt><dd>{{ locker.cabinet_name or "—" }}{% if locker.cabinet_id %} (id {{ locker.cabinet_id }}){% endif %}</dd>
+      <dt>Контроллер</dt>
+      <dd>
+        {% if locker.controller_type == 2 %}LockerBox USB{% elif locker.controller_type == 1 %}Kerong TCP{% else %}—{% endif %}
+        {% if locker.controller_ip %} {{ locker.controller_ip }}{% if locker.controller_port %}:{{ locker.controller_port }}{% endif %}{% endif %}
+      </dd>
+      <dt>Модель / Android</dt><dd>{{ locker.model or "—" }}{% if locker.android %} · Android {{ locker.android }}{% endif %}</dd>
+      <dt>Serial</dt><dd>{{ locker.serial or "—" }}</dd>
+      <dt>eth0</dt><dd>{{ locker.eth0_ip or "—" }}{% if locker.eth0_mac %} · {{ locker.eth0_mac }}{% endif %}</dd>
+      <dt>Киоск</dt><dd>{{ locker.wakefulness or "—" }}{% if locker.focus %} · {{ locker.focus }}{% endif %}</dd>
+    </dl>
+  </div>
+
+  {% if locker_cats %}
+  <div class="locker-cats" aria-label="Категории здоровья">
+    {% for key in ['api', 'panel', 'controller', 'kiosk', 'usb', 'cells', 'issues'] %}
+    {% set st = locker_cats.get(key, 'unknown') %}
+    <span class="matrix-cell matrix-cell--{{ st }}" title="{{ locker_reasons.get(key) or locker_category_label(key) }}">{{ locker_category_label(key) }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if locker.cells %}
+  <h4 class="locker-subhead">Ячейки</h4>
+  <div class="locker-grid">
+    {% for cell in locker.cells %}
+    <div class="locker-cell locker-cell--type-{{ cell.type }} locker-cell--lock-{{ cell.status }}{% if cell.is_active == 0 %} locker-cell--inactive{% endif %}">
+      <span class="locker-cell-no">{{ cell.display_no }}</span>
+      <span class="locker-cell-meta">{{ cell.type_label }} · {{ cell.lock_label }} · {{ cell.reserve_label }}</span>
+      {% if cell.opened_at %}<span class="locker-cell-meta">{{ cell.opened_at }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if locker.usb %}
+  <h4 class="locker-subhead">USB на панели</h4>
+  <table class="data-table data-table--compact locker-usb-table">
+    <thead><tr><th>VID:PID</th><th>Что</th><th>Ожидался</th><th>Есть</th></tr></thead>
+    <tbody>
+      {% for row in locker.usb %}
+      <tr class="{% if row.expected and not row.present %}locker-usb-missing{% endif %}">
+        <td class="mono">{{ row.vid }}:{{ row.pid }}</td>
+        <td>{{ row.label }}</td>
+        <td>{% if row.expected %}да{% else %}нет{% endif %}</td>
+        <td>{% if row.present %}да{% else %}нет{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if locker.notifications %}
+  <h4 class="locker-subhead">Оповещения СБ</h4>
+  <ul class="locker-feed">
+    {% for n in locker.notifications %}
+    <li>{{ n.created_at }} — {{ n.text }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if locker.issues %}
+  <h4 class="locker-subhead">Заявки с панели</h4>
+  <ul class="locker-feed">
+    {% for n in locker.issues %}
+    <li>{{ n.created_at }} — {{ n.text }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <div class="locker-actions">
+    {% if can_adb %}
+    <button type="button" class="btn btn-outline" onclick="(function(id){var img=document.getElementById('locker-shot-'+id); img.hidden=false; img.src='/lockers/'+id+'/screenshot?'+Date.now();})('{{ recorder.id }}')">Показать экран</button>
+    <button
+      type="button"
+      class="btn btn-outline"
+      hx-post="/lockers/{{ recorder.id }}/reboot"
+      hx-confirm="Перезагрузить панель {{ display_recorder_name(recorder) }}?"
+      hx-target="#locker-action-{{ recorder.id }}"
+      hx-swap="innerHTML"
+    >Перезагрузить</button>
+    {% else %}
+    <button type="button" class="btn btn-outline" disabled title="Нужен adb в PATH (панели Pridex)">Показать экран</button>
+    <button type="button" class="btn btn-outline" disabled title="Нужен adb в PATH (панели Pridex)">Перезагрузить</button>
+    {% endif %}
+    <span id="locker-action-{{ recorder.id }}" class="muted"></span>
+  </div>
+  <img id="locker-shot-{{ recorder.id }}" class="locker-shot" alt="Скрин панели" hidden>
+</div>

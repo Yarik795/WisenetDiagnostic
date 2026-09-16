@@ -53,7 +53,7 @@ from ..ui.health_classifiers import CATEGORY_LABELS, HealthCategory
 from ..ui.error_report import build_error_report_context
 from ..ui.error_report_render import render_error_report_html
 from ..ui.health_dashboard import health_dashboard_context
-from ..device_kinds import filter_recorders_by_kind
+from ..device_kinds import filter_recorders_by_kind, recorder_device_kind
 from ..ui.kind_dashboard import kind_section_page_context
 from ..ui.summary_dashboard import summary_page_context
 from ..ui.payments import payments_page_context
@@ -65,6 +65,13 @@ from ..ui.payments_export import (
     render_payments_export_html,
 )
 from ..ui.source_imports import sources_page_context
+from ..device_base import (
+    DeviceBaseError,
+    parse_device_base_form,
+    save_device,
+    delete_device as delete_device_base_entry,
+)
+from ..ui.device_base import device_base_form_context, device_base_page_context
 from ..ui.arsenal_dashboard import (
     arsenal_detail_context,
     arsenal_page_context,
@@ -2214,6 +2221,150 @@ def sources_page(
     )
 
 
+@router.get("/device-base", response_class=HTMLResponse)
+def device_base_page(
+    request: Request,
+    search: str = "",
+    device_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "device_base.html",
+        {
+            "active_nav": "device_base",
+            "toast": _toast_from_query(request),
+            **device_base_page_context(
+                state, search=search, device_type=device_type
+            ),
+        },
+    )
+
+
+@router.get("/device-base/partials/table", response_class=HTMLResponse)
+def device_base_table_partial(
+    request: Request,
+    search: str = "",
+    device_type: str = "",
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/device_base_table.html",
+        device_base_page_context(state, search=search, device_type=device_type),
+    )
+
+
+@router.get("/device-base/new", response_class=HTMLResponse)
+def device_base_new_form(
+    request: Request,
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/device_base_form.html",
+        device_base_form_context(state),
+    )
+
+
+@router.get("/device-base/{device_id}/edit", response_class=HTMLResponse)
+def device_base_edit_form(
+    request: Request,
+    device_id: int,
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    device = state.get_device_base(device_id)
+    if not device:
+        return HTMLResponse("Устройство не найдено", status_code=404)
+    return templates.TemplateResponse(
+        request,
+        "partials/device_base_form.html",
+        device_base_form_context(state, device=device),
+    )
+
+
+def _device_base_form_error(
+    request: Request,
+    state: StateStore,
+    *,
+    device=None,
+    form=None,
+    errors: dict[str, str],
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "partials/device_base_form.html",
+        device_base_form_context(state, device=device, form=form, errors=errors),
+        status_code=400,
+    )
+
+
+@router.post("/device-base", response_class=HTMLResponse)
+async def device_base_create(
+    request: Request,
+    address: str = Form(""),
+    device_type: str = Form(""),
+    model: str = Form(""),
+    host: str = Form(""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    data, errors = parse_device_base_form(address, device_type, model, host)
+    if errors or data is None:
+        return _device_base_form_error(request, state, form=data, errors=errors)
+    try:
+        save_device(state, store, data)
+    except DeviceBaseError as exc:
+        field_errors = {exc.field: exc.message} if exc.field else {"host": exc.message}
+        return _device_base_form_error(
+            request, state, form=data, errors=field_errors
+        )
+    return _redirect("/device-base", "success", "Устройство добавлено", request=request)
+
+
+@router.post("/device-base/{device_id}", response_class=HTMLResponse)
+async def device_base_update(
+    request: Request,
+    device_id: int,
+    address: str = Form(""),
+    device_type: str = Form(""),
+    model: str = Form(""),
+    host: str = Form(""),
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    device = state.get_device_base(device_id)
+    if not device:
+        return HTMLResponse("Устройство не найдено", status_code=404)
+    data, errors = parse_device_base_form(address, device_type, model, host)
+    if errors or data is None:
+        return _device_base_form_error(
+            request, state, device=device, form=data, errors=errors
+        )
+    try:
+        save_device(state, store, data, device_id=device_id)
+    except DeviceBaseError as exc:
+        field_errors = {exc.field: exc.message} if exc.field else {"host": exc.message}
+        return _device_base_form_error(
+            request, state, device=device, form=data, errors=field_errors
+        )
+    return _redirect("/device-base", "success", "Устройство сохранено", request=request)
+
+
+@router.post("/device-base/{device_id}/delete", response_class=HTMLResponse)
+def device_base_delete(
+    request: Request,
+    device_id: int,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    try:
+        delete_device_base_entry(state, store, device_id)
+    except DeviceBaseError:
+        return HTMLResponse("Устройство не найдено", status_code=404)
+    return _redirect("/device-base", "success", "Устройство удалено", request=request)
+
+
 def _source_job_panel_response(
     request: Request,
     job: ReportJob,
@@ -2701,19 +2852,6 @@ def objects_page_redirect(
     return RedirectResponse(url=f"/monitoring{qs}", status_code=302)
 
 
-@router.post("/objects/sync-cmdb", response_class=HTMLResponse)
-def objects_sync_cmdb(
-    request: Request,
-    store: ConfigStore = Depends(get_store),
-    state: StateStore = Depends(get_state_store),
-) -> Response:
-    deps = RunnerDeps(store=store, state=state)
-    result = load_source("cmdb", deps)
-    if result.ok:
-        return _redirect("/objects", "success", result.message, request=request)
-    return _redirect("/objects", "error", result.message, request=request)
-
-
 @router.post("/objects/report/email", response_class=HTMLResponse)
 def objects_report_email(
     request: Request,
@@ -3001,6 +3139,93 @@ def bio_groups_partial(
     )
 
 
+@router.get("/lockers", response_class=HTMLResponse)
+def lockers_page(
+    request: Request,
+    sort: SortMode = "status",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+    poll_jobs: PollJobManager = Depends(get_poll_job_manager),
+    scheduler: MonitoringScheduler = Depends(get_monitoring_scheduler),
+) -> HTMLResponse:
+    return _kind_section_response(
+        request,
+        "lockers",
+        sort=sort,
+        store=store,
+        state=state,
+        poll_jobs=poll_jobs,
+        scheduler=scheduler,
+    )
+
+
+@router.get("/lockers/partials/groups", response_class=HTMLResponse)
+def lockers_groups_partial(
+    request: Request,
+    search: str = "",
+    sort: SortMode = "status",
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    return _kind_groups_partial(
+        request, "lockers", search=search, sort=sort, store=store, state=state
+    )
+
+
+def _locker_or_404(store: ConfigStore, recorder_id: str):
+    recorder = store.get_recorder(recorder_id)
+    if not recorder or recorder_device_kind(recorder) != "lockers":
+        return None
+    return recorder
+
+
+@router.get("/lockers/{recorder_id}/screenshot")
+def locker_screenshot(
+    recorder_id: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> Response:
+    from ..pridex_adb import PridexAdb, PridexAdbError, adb_available
+
+    recorder = _locker_or_404(store, recorder_id)
+    if recorder is None:
+        return Response(status_code=404)
+    model = _locker_model_name(state, recorder.host)
+    if model.lower() == "lockerbox" or not adb_available():
+        return Response(status_code=503, content=b"ADB unavailable")
+    try:
+        png = PridexAdb(recorder.host, recorder.port or 5555).screenshot_png()
+    except (PridexAdbError, FileNotFoundError, OSError, TimeoutError) as exc:
+        return Response(status_code=503, content=str(exc).encode("utf-8"))
+    return Response(content=png, media_type="image/png")
+
+
+@router.post("/lockers/{recorder_id}/reboot", response_class=HTMLResponse)
+def locker_reboot(
+    recorder_id: str,
+    store: ConfigStore = Depends(get_store),
+    state: StateStore = Depends(get_state_store),
+) -> HTMLResponse:
+    from ..pridex_adb import PridexAdb, PridexAdbError, adb_available
+
+    recorder = _locker_or_404(store, recorder_id)
+    if recorder is None:
+        return HTMLResponse("Не найден", status_code=404)
+    model = _locker_model_name(state, recorder.host)
+    if model.lower() == "lockerbox" or not adb_available():
+        return HTMLResponse("ADB недоступен", status_code=503)
+    try:
+        PridexAdb(recorder.host, recorder.port or 5555).reboot()
+    except (PridexAdbError, FileNotFoundError, OSError, TimeoutError) as exc:
+        return HTMLResponse(str(exc), status_code=503)
+    return HTMLResponse("Перезагрузка отправлена, ждём связь")
+
+
+def _locker_model_name(state: StateStore, host: str) -> str:
+    row = state.get_device_base_by_host(host)
+    return (row.model if row else "") or ""
+
+
 def _export_errors_html_response(
     store: ConfigStore,
     state: StateStore,
@@ -3172,6 +3397,8 @@ def settings_page(
             "active_nav": "settings",
             "credentials": creds,
             "errors": None,
+            "locker_errors": None,
+            "monitoring": store.load().monitoring,
             "toast": toast,
         },
     )
@@ -3198,6 +3425,8 @@ def settings_save(
                     "active_nav": "settings",
                     "credentials": store.get_credentials(),
                     "errors": errors,
+                    "locker_errors": None,
+                    "monitoring": store.load().monitoring,
                     "toast": None,
                 },
                 status_code=400,
@@ -3209,11 +3438,47 @@ def settings_save(
                 "active_nav": "settings",
                 "credentials": store.get_credentials(),
                 "errors": errors,
+                "locker_errors": None,
+                "monitoring": store.load().monitoring,
                 "toast": None,
             },
             status_code=400,
         )
     store.update_credentials(username.strip(), password)
+    return RedirectResponse(url="/settings?saved=1", status_code=303)
+
+
+@router.post("/settings/lockers", response_class=HTMLResponse)
+def settings_lockers_save(
+    request: Request,
+    lockers_api_base_url: str = Form(""),
+    lockers_adb_enabled: str = Form("false"),
+    store: ConfigStore = Depends(get_store),
+) -> Response:
+    locker_errors: dict[str, str] = {}
+    url = lockers_api_base_url.strip()
+    if url and not (
+        url.startswith("http://") or url.startswith("https://")
+    ):
+        locker_errors["lockers_api_base_url"] = "Укажите http(s) URL"
+    if locker_errors:
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            {
+                "active_nav": "settings",
+                "credentials": store.get_credentials(),
+                "errors": None,
+                "locker_errors": locker_errors,
+                "monitoring": store.load().monitoring,
+                "toast": None,
+            },
+            status_code=400,
+        )
+    store.update_lockers_settings(
+        api_base_url=url,
+        adb_enabled=lockers_adb_enabled.lower() == "true",
+    )
     return RedirectResponse(url="/settings?saved=1", status_code=303)
 
 
@@ -3303,10 +3568,11 @@ async def recorder_create(
     use_https: str = Form("false"),
     mac: str = Form(""),
     device_kind: str = Form("tsv"),
+    inex_panel_id: str = Form(""),
     store: ConfigStore = Depends(get_store),
 ) -> Response:
     data, errors = parse_recorder_form(
-        object_name, name, host, port, use_https, mac, device_kind
+        object_name, name, host, port, use_https, mac, device_kind, inex_panel_id
     )
     if errors or data is None:
         return templates.TemplateResponse(
@@ -3329,6 +3595,7 @@ async def recorder_create(
             use_https=data.use_https,
             mac=data.mac or None,
             device_kind=data.device_kind,  # type: ignore[arg-type]
+            inex_panel_id=data.inex_panel_id,
         )
     except ValidationError as e:
         return _form_validation_error(request, None, store, e)
@@ -3348,6 +3615,7 @@ async def recorder_update(
     use_https: str = Form("false"),
     mac: str = Form(""),
     device_kind: str = Form("tsv"),
+    inex_panel_id: str = Form(""),
     store: ConfigStore = Depends(get_store),
 ) -> Response:
     recorder = store.get_recorder(recorder_id)
@@ -3355,7 +3623,7 @@ async def recorder_update(
         return HTMLResponse("Не найден", status_code=404)
 
     data, errors = parse_recorder_form(
-        object_name, name, host, port, use_https, mac, device_kind
+        object_name, name, host, port, use_https, mac, device_kind, inex_panel_id
     )
     if errors or data is None:
         return templates.TemplateResponse(
@@ -3378,6 +3646,7 @@ async def recorder_update(
             use_https=data.use_https,
             mac=data.mac or None,
             device_kind=data.device_kind,  # type: ignore[arg-type]
+            inex_panel_id=data.inex_panel_id,
         )
     except ValidationError as e:
         return _form_validation_error(request, recorder, store, e)

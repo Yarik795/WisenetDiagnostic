@@ -13,6 +13,11 @@ if TYPE_CHECKING:
 from .config_store import ConfigStore, RecorderStatusUpdate
 from .device_kinds import recorder_device_kind
 from .health import HealthStatus, worst_status
+from .locker_health import (
+    build_locker_snapshot,
+    dump_lockers_json,
+    evaluate_locker_health,
+)
 from .models import CheckStatus, Credentials, MonitoringSettings, Recorder
 from .state_store import ChannelRow, StateStore
 from .sunapi import check_recorder
@@ -424,6 +429,43 @@ def apply_poll_result(
     update_config: bool = True,
 ) -> Optional[RecorderStatusUpdate]:
     kind = recorder_device_kind(recorder)
+    if kind == "lockers":
+        snapshot = poll.locker_snapshot or {}
+        rec_status, rec_reason, snapshot = evaluate_locker_health(
+            snapshot, settings, now=polled_at
+        )
+        discovered_panel = snapshot.get("panel_id")
+        if (
+            discovered_panel
+            and recorder.inex_panel_id is None
+            and isinstance(discovered_panel, int)
+        ):
+            store.update_inex_panel_id(recorder.id, discovered_panel)
+        state.upsert_recorder_metrics(
+            recorder.id,
+            model=snapshot.get("model") or None,
+            firmware_version=snapshot.get("android") or None,
+            serial_number=snapshot.get("serial") or None,
+            device_online=bool(snapshot.get("ping_ok")),
+            health_status=rec_status,
+            health_reason=rec_reason,
+            last_polled_at=polled_at,
+            lockers_json=dump_lockers_json(snapshot),
+        )
+        state.record_history("recorder", recorder.id, rec_status, rec_reason, polled_at)
+        check_status = (
+            CheckStatus.ONLINE if snapshot.get("ping_ok") else CheckStatus.OFFLINE
+        )
+        status_update = RecorderStatusUpdate(
+            recorder_id=recorder.id,
+            status=check_status,
+            checked_at=polled_at,
+            error=rec_reason if rec_status == "error" else None,
+        )
+        if update_config:
+            store.update_recorder_statuses([status_update])
+        return status_update
+
     if kind in ("skud", "bio"):
         rec_status: HealthStatus = "ok" if poll.online else "error"
         rec_reason = None if poll.online else (poll.error or "нет ответа ping")
@@ -655,15 +697,100 @@ class PollCycleStats:
     still_unreachable: int = 0
 
 
+def _locker_model_for_host(state: StateStore, host: str) -> str:
+    row = state.get_device_base_by_host(host)
+    return (row.model if row else "") or ""
+
+
+async def _fetch_inex_snapshot(settings: MonitoringSettings, recorders: list[Recorder] | None = None):
+    from .inex_lockers import (
+        CELL_TYPE_PANEL,
+        InexLockersSnapshot,
+        LockersApiClient,
+        match_panel_cabinet,
+    )
+
+    url = (settings.lockers_api_base_url or "").strip()
+    if not url:
+        return InexLockersSnapshot(api_ok=False, error="не задан URL Inex API")
+    client = LockersApiClient(url)
+    snapshot = await client.fetch_snapshot()
+    if not snapshot.api_ok or not recorders:
+        return snapshot
+    locker_ids: list[int] = []
+    for rec in recorders:
+        _panel, cabinet = match_panel_cabinet(
+            snapshot,
+            panel_id=rec.inex_panel_id,
+            host=rec.host,
+        )
+        if cabinet is None:
+            continue
+        locker_ids.extend(
+            cell.id
+            for cell in snapshot.lockers
+            if cell.cabinet_id == cabinet.id and cell.locker_type != CELL_TYPE_PANEL
+        )
+    await client.enrich_lock_states(snapshot, locker_ids)
+    return snapshot
+
+
 async def _fetch_poll_for_recorder(
     recorder: Recorder,
     credentials: Credentials,
     *,
     include_inventory: bool,
     cached_system_event_times: Optional[dict[str, str]] = None,
+    lockers_snapshot=None,
+    locker_model: str = "",
+    lockers_adb_enabled: bool = False,
 ) -> _WavePollResult:
     start = time.perf_counter()
     kind = recorder_device_kind(recorder)
+    if kind == "lockers":
+        from .inex_lockers import InexLockersSnapshot
+        from .ping_check import ping_host
+        from .pridex_adb import collect_pridex_info
+
+        ping_ok = False
+        ping_error: Optional[str] = None
+        try:
+            ping = await ping_host(recorder.host)
+            ping_ok = ping.reachable
+            ping_error = ping.error
+        except Exception as exc:
+            ping_error = str(exc)
+            logger.exception("locker ping failed for %s", recorder.id)
+
+        adb_info = None
+        ping_only = (locker_model or "").strip().lower() == "lockerbox"
+        if lockers_adb_enabled and not ping_only:
+            adb_info = await asyncio.to_thread(
+                collect_pridex_info, recorder.host, recorder.port or 5555
+            )
+
+        inex: Optional[InexLockersSnapshot] = lockers_snapshot
+        raw = build_locker_snapshot(
+            recorder,
+            locker_model=locker_model,
+            ping_ok=ping_ok,
+            ping_error=ping_error,
+            inex=inex,
+            adb=adb_info,
+        )
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        poll = RecorderPollData(
+            online=ping_ok,
+            error=ping_error,
+            locker_snapshot=raw,
+        )
+        return _WavePollResult(
+            online=True,
+            poll=poll,
+            duration_ms=duration_ms,
+            outcome="success" if ping_ok else "offline",
+        )
+
     if kind in ("skud", "bio"):
         from .ping_check import ping_host
 
@@ -753,6 +880,12 @@ async def poll_single_recorder(
     settings = config.monitoring
     polled_at = datetime.now(timezone.utc)
 
+    lockers_snapshot = None
+    locker_model = ""
+    if recorder_device_kind(recorder) == "lockers":
+        locker_model = _locker_model_for_host(state_store, recorder.host)
+        lockers_snapshot = await _fetch_inex_snapshot(settings, [recorder])
+
     existing = state_store.get_recorder_metrics(recorder.id)
     cached_times = parse_system_event_times_json(
         existing.system_event_times_json if existing else None
@@ -762,6 +895,9 @@ async def poll_single_recorder(
         credentials,
         include_inventory=include_inventory,
         cached_system_event_times=cached_times,
+        lockers_snapshot=lockers_snapshot,
+        locker_model=locker_model,
+        lockers_adb_enabled=settings.lockers_adb_enabled,
     )
     return apply_poll_result(
         config_store,
@@ -826,7 +962,9 @@ async def run_poll_cycle(
     from .device_kinds import recorder_device_kind
 
     ping_total = sum(
-        1 for rec in recorders if recorder_device_kind(rec) in ("skud", "bio")
+        1
+        for rec in recorders
+        if recorder_device_kind(rec) in ("skud", "bio", "lockers")
     )
     if tracker:
         await tracker.set_total(len(recorders), ping_total=ping_total)
@@ -835,6 +973,17 @@ async def run_poll_cycle(
         return stats
     credentials = config.credentials
     settings = config.monitoring
+    lockers_snapshot = None
+    locker_recs = [
+        rec for rec in recorders if recorder_device_kind(rec) == "lockers"
+    ]
+    if locker_recs:
+        lockers_snapshot = await _fetch_inex_snapshot(settings, locker_recs)
+    locker_models = {
+        rec.id: _locker_model_for_host(state_store, rec.host)
+        for rec in recorders
+        if recorder_device_kind(rec) == "lockers"
+    }
     sem = asyncio.Semaphore(config.monitoring.max_concurrent_polls)
     status_updates: list[RecorderStatusUpdate] = []
     poll_states: dict[str, _RecorderPollState] = {
@@ -856,6 +1005,9 @@ async def run_poll_cycle(
                 credentials,
                 include_inventory=include_inventory,
                 cached_system_event_times=cached_times,
+                lockers_snapshot=lockers_snapshot,
+                locker_model=locker_models.get(rec.id, ""),
+                lockers_adb_enabled=settings.lockers_adb_enabled,
             )
         if tracker:
             await tracker.recorder_attempt_finished(rec)
@@ -919,7 +1071,7 @@ async def run_poll_cycle(
                             success=True,
                             after_retry=attempt > 1,
                             is_ping_device=recorder_device_kind(rec)
-                            in ("skud", "bio"),
+                            in ("skud", "bio", "lockers"),
                         )
                 elif attempt >= max_attempts:
                     update = apply_poll_result(
@@ -941,7 +1093,7 @@ async def run_poll_cycle(
                             after_retry=False,
                             error=wave.error,
                             is_ping_device=recorder_device_kind(rec)
-                            in ("skud", "bio"),
+                            in ("skud", "bio", "lockers"),
                         )
                 else:
                     still_pending.append(rec)

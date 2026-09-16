@@ -9,7 +9,7 @@ from ..config_backup import ConfigBackupTarget
 from ..config_store import ConfigStore
 from ..device_kinds import filter_recorders_by_kind
 from ..models import Credentials, Recorder
-from ..state_store import CmdbRecordRow, StateStore
+from ..state_store import DeviceBaseRow, StateStore
 from ..ui.helpers import display_recorder_name
 from .site_inventory import normalize_object_name
 
@@ -79,9 +79,9 @@ def _nvr_row(recorder: Recorder) -> ConfigDeviceRow:
     )
 
 
-def _spd_row(row: CmdbRecordRow) -> ConfigDeviceRow:
-    object_name = normalize_object_name(row.object_name)
-    model = (row.model_name or "").strip()
+def _spd_row(row: DeviceBaseRow) -> ConfigDeviceRow:
+    object_name = normalize_object_name(row.address)
+    model = (row.model or "").strip()
     return ConfigDeviceRow(
         kind="spd",
         kind_label=KIND_LABELS["spd"],
@@ -109,10 +109,8 @@ def build_device_config_groups(
     for recorder in filter_recorders_by_kind(store.list_recorders(), "tsv"):
         get_group(recorder.object_name).nvrs.append(_nvr_row(recorder))
 
-    for row in state.cmdb_records_rows():
-        if not is_spd_model(row.model_name):
-            continue
-        get_group(row.object_name).spd_devices.append(_spd_row(row))
+    for row in state.list_device_base(device_type="server"):
+        get_group(row.address).spd_devices.append(_spd_row(row))
 
     groups = [group for group in groups_map.values() if group.has_content]
     groups.sort(key=lambda group: group.object_name.lower())

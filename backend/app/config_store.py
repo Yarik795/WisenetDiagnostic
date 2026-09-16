@@ -231,6 +231,37 @@ class ConfigStore:
         self.save(config)
         return config.credentials
 
+    def update_lockers_settings(
+        self,
+        *,
+        api_base_url: str,
+        adb_enabled: bool,
+        cells_error_threshold_percent: int | None = None,
+        door_open_warn_minutes: int | None = None,
+    ) -> None:
+        config = self.load()
+        update: dict[str, object] = {
+            "lockers_api_base_url": api_base_url.strip(),
+            "lockers_adb_enabled": adb_enabled,
+        }
+        if cells_error_threshold_percent is not None:
+            update["lockers_cells_error_threshold_percent"] = cells_error_threshold_percent
+        if door_open_warn_minutes is not None:
+            update["lockers_door_open_warn_minutes"] = door_open_warn_minutes
+        config.monitoring = config.monitoring.model_copy(update=update)
+        self.save(config)
+
+    def update_inex_panel_id(self, recorder_id: str, panel_id: int) -> Optional[Recorder]:
+        config = self.load()
+        for i, rec in enumerate(config.recorders):
+            if rec.id != recorder_id:
+                continue
+            updated = rec.model_copy(update={"inex_panel_id": panel_id})
+            config.recorders[i] = updated
+            self.save(config)
+            return updated
+        return None
+
 
 def _new_id(device_kind: str = "tsv") -> str:
     prefix = {
@@ -238,5 +269,6 @@ def _new_id(device_kind: str = "tsv") -> str:
         "skud": "skud",
         "bio": "bio",
         "sots": "sots",
+        "lockers": "lkr",
     }.get(device_kind, "nvr")
     return f"{prefix}-{uuid.uuid4().hex[:8]}"

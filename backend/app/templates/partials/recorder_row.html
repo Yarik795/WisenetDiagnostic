@@ -23,6 +23,9 @@
       {% if recorder.device_kind == 'tsv' %}
       {% include "partials/recorder_metrics_summary.html" %}
       {% endif %}
+      {% if recorder.device_kind == 'lockers' and metrics and metrics.health_reason %}
+      <div class="recorder-row-host" style="font-size:12px;">{{ metrics.health_reason }}</div>
+      {% endif %}
     </div>
     <div class="recorder-row-actions">
       {% include "partials/status_badge.html" %}
@@ -87,6 +90,12 @@
   <details class="metrics-details-toggle">
     <summary>Метрики NVR (диски, архив, NTP)</summary>
     {% include "partials/recorder_metrics_detail.html" %}
+  </details>
+  {% endif %}
+  {% if recorder.device_kind == 'lockers' %}
+  <details class="metrics-details-toggle" open>
+    <summary>Панель локеров</summary>
+    {% include "partials/locker_card.html" %}
   </details>
   {% endif %}
 </div>

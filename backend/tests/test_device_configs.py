@@ -22,7 +22,7 @@ from app.config_backup import (
 from app.config_store import ConfigStore
 from app.main import app
 from app.models import Credentials, RecorderCreate
-from app.state_store import CmdbRecordRow, StateStore
+from app.state_store import StateStore
 from app.ui.dependencies import get_state_store, get_store
 from app.ui.device_configs import (
     build_device_config_groups,
@@ -64,41 +64,24 @@ def config_store(tmp_path: Path) -> ConfigStore:
 def state_store(tmp_path: Path) -> StateStore:
     state = StateStore(path=tmp_path / "monitoring.db")
     state.init_db()
-    with state.replace_cmdb_records() as session:
-        session.write_batch(
-            [
-                CmdbRecordRow(
-                    host="10.1.1.40",
-                    functional_type="Вспомогательное оборудование",
-                    manufacturer="Hanwha",
-                    object_name="Объект 1",
-                    model_name="SPD-151",
-                    mac="AA:BB:CC:DD:EE:04",
-                    device_kind=None,
-                    source_row=1,
-                ),
-                CmdbRecordRow(
-                    host="10.1.1.50",
-                    functional_type="Вспомогательное оборудование",
-                    manufacturer="Hanwha",
-                    object_name="Объект 1",
-                    model_name="Switch-24",
-                    mac="AA:BB:CC:DD:EE:05",
-                    device_kind=None,
-                    source_row=2,
-                ),
-                CmdbRecordRow(
-                    host="10.2.2.40",
-                    functional_type="Вспомогательное оборудование",
-                    manufacturer="Hanwha",
-                    object_name="Объект 2",
-                    model_name="spd-150",
-                    mac="AA:BB:CC:DD:EE:06",
-                    device_kind=None,
-                    source_row=3,
-                ),
-            ]
-        )
+    state.insert_device_base(
+        address="Объект 1",
+        device_type="server",
+        model="SPD-151",
+        host="10.1.1.40",
+    )
+    state.insert_device_base(
+        address="Объект 1",
+        device_type="camera",
+        model="XNO-6080R",
+        host="10.1.1.50",
+    )
+    state.insert_device_base(
+        address="Объект 2",
+        device_type="server",
+        model="spd-150",
+        host="10.2.2.40",
+    )
     return state
 
 

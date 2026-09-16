@@ -34,6 +34,7 @@ class RecorderBase(BaseModel):
     use_https: bool = False
     device_kind: DeviceKind = "tsv"
     mac: Optional[str] = None
+    inex_panel_id: Optional[int] = Field(default=None, ge=1)
 
     @field_validator("object_name", "host")
     @classmethod
@@ -86,6 +87,10 @@ class MonitoringSettings(BaseModel):
     poll_retry_enabled: bool = True
     poll_retry_max: int = Field(default=3, ge=0, le=10)
     poll_retry_delay_seconds: int = Field(default=5, ge=1, le=120)
+    lockers_api_base_url: str = ""
+    lockers_cells_error_threshold_percent: int = Field(default=25, ge=1, le=100)
+    lockers_door_open_warn_minutes: int = Field(default=15, ge=1, le=1440)
+    lockers_adb_enabled: bool = False
 
     @field_validator("cpu_usage_error_percent")
     @classmethod

@@ -9,11 +9,11 @@ import pytest
 
 from app.config_store import ConfigStore
 from app.models import RecorderCreate
-from app.state_store import CmdbRecordRow, StateStore
+from app.state_store import StateStore
 from app.ui.site_inventory import (
-    CMDB_TYPE_AUX,
-    CMDB_TYPE_CAMERA,
-    CMDB_TYPE_NVR,
+    CATALOG_TYPE_CAMERA,
+    CATALOG_TYPE_RECORDER,
+    CATALOG_TYPE_SERVER,
     build_site_object_groups,
     is_analog_channel,
     is_channel_deactive,
@@ -82,9 +82,20 @@ def state_store(tmp_path: Path) -> StateStore:
     return state
 
 
-def _write_cmdb(state: StateStore, rows: list[CmdbRecordRow]) -> None:
-    with state.replace_cmdb_records() as session:
-        session.write_batch(rows)
+def _add_device(
+    state: StateStore,
+    *,
+    host: str,
+    address: str,
+    device_type: str,
+    model: str = "",
+) -> None:
+    state.insert_device_base(
+        address=address,
+        device_type=device_type,
+        model=model,
+        host=host,
+    )
 
 
 def test_build_site_object_groups_match_extra_missing(
@@ -118,50 +129,33 @@ def test_build_site_object_groups_match_extra_missing(
         health_status="ok",
         last_polled_at=now,
     )
-    _write_cmdb(
+    _add_device(
         state_store,
-        [
-            CmdbRecordRow(
-                host="10.1.1.10",
-                functional_type=CMDB_TYPE_NVR,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="PRN-4011",
-                mac="AA:BB:CC:DD:EE:01",
-                device_kind="tsv",
-                source_row=1,
-            ),
-            CmdbRecordRow(
-                host="10.1.1.20",
-                functional_type=CMDB_TYPE_CAMERA,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="XNO-6080R",
-                mac="AA:BB:CC:DD:EE:02",
-                device_kind=None,
-                source_row=2,
-            ),
-            CmdbRecordRow(
-                host="10.1.1.30",
-                functional_type=CMDB_TYPE_CAMERA,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="XNO-6080R",
-                mac="AA:BB:CC:DD:EE:03",
-                device_kind=None,
-                source_row=3,
-            ),
-            CmdbRecordRow(
-                host="10.1.1.40",
-                functional_type=CMDB_TYPE_AUX,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="SPD-151",
-                mac="AA:BB:CC:DD:EE:04",
-                device_kind=None,
-                source_row=4,
-            ),
-        ],
+        host="10.1.1.10",
+        address="Объект 1",
+        device_type=CATALOG_TYPE_RECORDER,
+        model="PRN-4011",
+    )
+    _add_device(
+        state_store,
+        host="10.1.1.20",
+        address="Объект 1",
+        device_type=CATALOG_TYPE_CAMERA,
+        model="XNO-6080R",
+    )
+    _add_device(
+        state_store,
+        host="10.1.1.30",
+        address="Объект 1",
+        device_type=CATALOG_TYPE_CAMERA,
+        model="XNO-6080R",
+    )
+    _add_device(
+        state_store,
+        host="10.1.1.40",
+        address="Объект 1",
+        device_type=CATALOG_TYPE_SERVER,
+        model="SPD-151",
     )
 
     groups = build_site_object_groups(config_store, state_store)
@@ -203,20 +197,12 @@ def test_site_devices_page_context_ping_results(
     config_store: ConfigStore,
     state_store: StateStore,
 ) -> None:
-    _write_cmdb(
+    _add_device(
         state_store,
-        [
-            CmdbRecordRow(
-                host="10.1.1.30",
-                functional_type=CMDB_TYPE_CAMERA,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="XNO-6080R",
-                mac=None,
-                device_kind=None,
-                source_row=1,
-            ),
-        ],
+        host="10.1.1.30",
+        address="Объект 1",
+        device_type=CATALOG_TYPE_CAMERA,
+        model="XNO-6080R",
     )
     ctx = site_devices_page_context(
         config_store,
@@ -239,20 +225,12 @@ def test_site_devices_export_includes_ping_results(
     config_store: ConfigStore,
     state_store: StateStore,
 ) -> None:
-    _write_cmdb(
+    _add_device(
         state_store,
-        [
-            CmdbRecordRow(
-                host="10.1.1.30",
-                functional_type=CMDB_TYPE_CAMERA,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="XNO-6080R",
-                mac=None,
-                device_kind=None,
-                source_row=1,
-            ),
-        ],
+        host="10.1.1.30",
+        address="Объект 1",
+        device_type=CATALOG_TYPE_CAMERA,
+        model="XNO-6080R",
     )
     export_ctx = build_site_devices_export_context(
         config_store,

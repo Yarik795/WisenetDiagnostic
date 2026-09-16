@@ -2,19 +2,21 @@ from __future__ import annotations
 
 from typing import Literal
 
-DeviceKind = Literal["tsv", "skud", "bio", "sots"]
+DeviceKind = Literal["tsv", "skud", "bio", "sots", "lockers"]
 
-ALL_DEVICE_KINDS: tuple[DeviceKind, ...] = ("tsv", "skud", "bio", "sots")
+ALL_DEVICE_KINDS: tuple[DeviceKind, ...] = ("tsv", "skud", "bio", "sots", "lockers")
 
 SYSTEM_KIND_LABELS: dict[DeviceKind, str] = {
     "tsv": "ТСВ",
     "skud": "СКУД",
     "bio": "Биотерминалы",
     "sots": "СОТС",
+    "lockers": "Локеры",
 }
 
+PING_DEVICE_KINDS: frozenset[DeviceKind] = frozenset({"skud", "bio", "lockers"})
+
 SOURCE_KEY_LABELS: dict[str, str] = {
-    "cmdb": "CMDB",
     "requests": "Заявки (статус оплаты)",
     "naumen": "Данные из Naumen",
     "arsenal": "Арсенал",
@@ -29,9 +31,6 @@ def kind_label(kind: str) -> str:
 
 def source_label(source_key: str) -> str:
     return SOURCE_KEY_LABELS.get(source_key, source_key)
-
-
-CMDB_MANAGED_KINDS: tuple[DeviceKind, ...] = ("tsv", "skud", "bio")
 
 
 def recorder_device_kind(recorder: object) -> DeviceKind:

@@ -12,8 +12,8 @@ from app.config_store import ConfigStore
 from app.models import RecorderCreate
 from app.ping_check import PingResult
 from app.ping_jobs import PingJobManager, PingJobStatus
-from app.state_store import CmdbRecordRow, StateStore
-from app.ui.site_inventory import CMDB_TYPE_CAMERA, CMDB_TYPE_NVR
+from app.state_store import StateStore
+from app.ui.site_inventory import CATALOG_TYPE_CAMERA, CATALOG_TYPE_RECORDER
 
 
 @pytest.fixture
@@ -39,11 +39,6 @@ def state_store(tmp_path: Path) -> StateStore:
     return state
 
 
-def _write_cmdb(state: StateStore, rows: list[CmdbRecordRow]) -> None:
-    with state.replace_cmdb_records() as session:
-        session.write_batch(rows)
-
-
 @pytest.mark.asyncio
 async def test_ping_zombies_completes_and_stores_results(
     config_store: ConfigStore,
@@ -58,30 +53,17 @@ async def test_ping_zombies_completes_and_stores_results(
         health_status="ok",
         last_polled_at=now,
     )
-    _write_cmdb(
-        state_store,
-        [
-            CmdbRecordRow(
-                host="10.1.1.10",
-                functional_type=CMDB_TYPE_NVR,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="PRN-4011",
-                mac=None,
-                device_kind="tsv",
-                source_row=1,
-            ),
-            CmdbRecordRow(
-                host="10.1.1.30",
-                functional_type=CMDB_TYPE_CAMERA,
-                manufacturer="Hanwha",
-                object_name="Объект 1",
-                model_name="XNO-6080R",
-                mac=None,
-                device_kind=None,
-                source_row=2,
-            ),
-        ],
+    state_store.insert_device_base(
+        address="Объект 1",
+        device_type=CATALOG_TYPE_RECORDER,
+        model="PRN-4011",
+        host="10.1.1.10",
+    )
+    state_store.insert_device_base(
+        address="Объект 1",
+        device_type=CATALOG_TYPE_CAMERA,
+        model="XNO-6080R",
+        host="10.1.1.30",
     )
 
     mgr = PingJobManager()

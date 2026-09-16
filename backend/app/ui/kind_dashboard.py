@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..device_kinds import DeviceKind, SYSTEM_KIND_LABELS, recorder_device_kind
 from ..exclusions import excluded_ids_set
+from ..locker_health import CATEGORY_LABELS as LOCKER_CATEGORY_LABELS
+from ..locker_health import parse_lockers_json
 from ..models import Recorder
 from ..state_store import RecorderMetricsRow, StateStore
 from ..config_store import ConfigStore
@@ -22,6 +24,7 @@ class KindObjectRow:
     problem_count: int
     aggregate_status: str
     ping_cell: ObjectMatrixCell
+    extra_cells: list[ObjectMatrixCell] = field(default_factory=list)
 
 
 def _ping_problem_status(status: str) -> bool:
@@ -128,11 +131,51 @@ def _ping_cell_for_object(
     )
 
 
+def _locker_category_cell(
+    column: str,
+    recs: list[Recorder],
+    metrics_map: dict[str, RecorderMetricsRow],
+    *,
+    excluded_ids: set[str] | None = None,
+) -> ObjectMatrixCell:
+    excluded = excluded_ids or set()
+    monitored = [r for r in recs if r.id not in excluded]
+    label = LOCKER_CATEGORY_LABELS.get(column, column)
+    if not monitored:
+        return ObjectMatrixCell(
+            column=column,
+            status="excluded",
+            problem_count=0,
+            title=f"{label}: исключено",
+        )
+    statuses: list[str] = []
+    for rec in monitored:
+        metrics = metrics_map.get(rec.id)
+        data = parse_lockers_json(metrics.lockers_json if metrics else None)
+        cats = data.get("categories") or {}
+        statuses.append(str(cats.get(column) or "unknown"))
+    worst = max(statuses, key=_status_rank) if statuses else "unknown"
+    problems = sum(1 for status in statuses if _ping_problem_status(status))
+    if problems:
+        title = f"{label}: {problems} из {len(monitored)} с отклонением"
+    elif worst == "unknown":
+        title = f"{label}: нет данных"
+    else:
+        title = f"{label}: в норме"
+    return ObjectMatrixCell(
+        column=column,
+        status=worst,
+        problem_count=problems,
+        title=title,
+    )
+
+
 def build_kind_object_rows(
     recorders: list[Recorder],
     metrics_map: dict[str, RecorderMetricsRow],
     *,
     excluded_ids: set[str] | None = None,
+    extra_columns: tuple[str, ...] = (),
 ) -> list[KindObjectRow]:
     excluded = excluded_ids or set()
     by_object: dict[str, list[Recorder]] = {}
@@ -149,6 +192,12 @@ def build_kind_object_rows(
                 r, metrics_map.get(r.id), excluded_ids=excluded
             )
         )
+        extra = [
+            _locker_category_cell(
+                col, recs, metrics_map, excluded_ids=excluded
+            )
+            for col in extra_columns
+        ]
         rows.append(
             KindObjectRow(
                 object_name=name,
@@ -158,6 +207,7 @@ def build_kind_object_rows(
                 ping_cell=_ping_cell_for_object(
                     recs, metrics_map, excluded_ids=excluded
                 ),
+                extra_cells=extra,
             )
         )
     rows.sort(
@@ -183,6 +233,17 @@ def kind_fleet_overview_context(
     status_counts = aggregate_fleet_status_counts(
         recorders, metrics_map, excluded_ids=excluded
     )
+    open_issues = 0
+    open_notes = 0
+    if kind == "lockers":
+        for rec in monitored_recs:
+            data = parse_lockers_json(
+                metrics_map[rec.id].lockers_json
+                if rec.id in metrics_map
+                else None
+            )
+            open_issues += len(data.get("issues") or [])
+            open_notes += len(data.get("notifications") or [])
     return {
         "fleet_object_count": len(object_names),
         "fleet_nvr_count": len(recorders),
@@ -201,6 +262,8 @@ def kind_fleet_overview_context(
         "fleet_count_label": f"{SYSTEM_KIND_LABELS[kind]} всего",
         "section_kind": kind,
         "section_kind_label": SYSTEM_KIND_LABELS[kind],
+        "locker_open_issues": open_issues,
+        "locker_open_notifications": open_notes,
     }
 
 
@@ -224,16 +287,23 @@ def kind_section_page_context(
     ctx = kind_fleet_overview_context(
         recorders, metrics, excluded_ids=excluded, kind=kind
     )
+    extra_columns = (
+        ("api", "controller", "cells") if kind == "lockers" else ()
+    )
     ctx.update(
         {
             "groups": groups,
             "kind_object_rows": build_kind_object_rows(
-                recorders, metrics, excluded_ids=excluded
+                recorders,
+                metrics,
+                excluded_ids=excluded,
+                extra_columns=extra_columns,
             ),
             "metrics_map": metrics,
             "excluded_ids": excluded,
             "sort": sort,
             "visible_device_kinds": (kind,),
+            "locker_matrix_columns": extra_columns,
         }
     )
     return ctx

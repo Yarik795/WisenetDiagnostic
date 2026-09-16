@@ -9,12 +9,15 @@
 {% endblock %}
 {% block content %}
 {% include "partials/fleet_overview.html" %}
+{% if section_kind == 'lockers' and (locker_open_issues or locker_open_notifications) %}
+<p class="page-lead">Открытые заявки с панелей: <strong>{{ locker_open_issues }}</strong>. Оповещения СБ: <strong>{{ locker_open_notifications }}</strong>.</p>
+{% endif %}
 
 {% if kind_object_rows %}
 <section class="object-health-matrix card" aria-label="Сводка по объектам">
   <div class="object-health-matrix-header">
     <h2 class="object-health-matrix-title">Объекты</h2>
-    <p class="object-health-matrix-hint">Клик по объекту — переход к списку устройств. Цвет — худший статус Ping.</p>
+    <p class="object-health-matrix-hint">{% if section_kind == 'lockers' %}Клик по объекту — переход к панелям. Цвет — худший статус по колонке.{% else %}Клик по объекту — переход к списку устройств. Цвет — худший статус Ping.{% endif %}</p>
   </div>
   <div class="table-wrap object-health-matrix-wrap">
     <table class="data-table data-table--compact object-health-matrix-table">
@@ -23,6 +26,11 @@
           <th scope="col">Объект</th>
           <th scope="col" class="matrix-col-narrow">Устройств</th>
           <th scope="col" class="matrix-col-narrow" title="Доступность по Ping">Ping</th>
+          {% if section_kind == 'lockers' %}
+          {% for col in locker_matrix_columns|default([]) %}
+          <th scope="col" class="matrix-col-narrow" title="{{ locker_category_label(col) }}">{{ locker_category_label(col) }}</th>
+          {% endfor %}
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -47,6 +55,19 @@
               {% if cell.problem_count > 0 %}{{ cell.problem_count }}{% else %}<span class="matrix-cell-ok" aria-hidden="true">✓</span>{% endif %}
             </span>
           </td>
+          {% if section_kind == 'lockers' %}
+          {% for cell in row.extra_cells %}
+          <td>
+            <span
+              class="matrix-cell matrix-cell--{{ cell.status }}"
+              title="{{ cell.title }}"
+              aria-label="{{ locker_category_label(cell.column) }}: {{ status_label(cell.status) }}{% if cell.problem_count > 0 %}, {{ cell.problem_count }}{% endif %}"
+            >
+              {% if cell.problem_count > 0 %}{{ cell.problem_count }}{% else %}<span class="matrix-cell-ok" aria-hidden="true">✓</span>{% endif %}
+            </span>
+          </td>
+          {% endfor %}
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -77,7 +98,7 @@
 {% else %}
 <div class="empty-state">
   <h2>Нет устройств</h2>
-  <p>Загрузите инвентарь из CMDB в разделе <a href="/sources">Исходные данные</a>.</p>
+  <p>Добавьте устройства в разделе <a href="/device-base">База устройств</a>.</p>
 </div>
 {% endif %}
 {% endblock %}

@@ -10,7 +10,6 @@ from openpyxl import Workbook
 
 from app.config_store import ConfigStore
 from app.data_sources import (
-    CMDB_SOURCE,
     REQUESTS_SOURCE,
     RunnerDeps,
     copy_to_storage,
@@ -28,13 +27,13 @@ def _touch_xlsx(path: Path) -> None:
 
 
 def test_find_latest_source_file_picks_newest(tmp_path: Path) -> None:
-    older = tmp_path / "cmdb-old.xlsx"
-    newer = tmp_path / "export-cmdb-2026.xlsx"
+    older = tmp_path / "заявки-old.xlsx"
+    newer = tmp_path / "export-заявки-2026.xlsx"
     _touch_xlsx(older)
     time.sleep(0.05)
     _touch_xlsx(newer)
 
-    found = find_latest_source_file(CMDB_SOURCE, tmp_path)
+    found = find_latest_source_file(REQUESTS_SOURCE, tmp_path)
     assert found == newer
 
 
@@ -63,7 +62,7 @@ def test_load_source_no_input_folder(tmp_path: Path, monkeypatch: pytest.MonkeyP
     state.init_db()
     deps = RunnerDeps(store=store, state=state)
 
-    result = load_source("cmdb", deps)
+    result = load_source("requests", deps)
     assert not result.ok
     assert "inputData" in result.message
 

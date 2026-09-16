@@ -19,6 +19,7 @@ class RecorderFormData:
     use_https: bool
     mac: str = ""
     device_kind: str = "tsv"
+    inex_panel_id: int | None = None
 
 
 def parse_recorder_form(
@@ -29,6 +30,7 @@ def parse_recorder_form(
     use_https: str,
     mac: str = "",
     device_kind: str = "tsv",
+    inex_panel_id: str = "",
 ) -> tuple[Optional[RecorderFormData], dict[str, str]]:
     errors: dict[str, str] = {}
     obj = object_name.strip()
@@ -48,12 +50,23 @@ def parse_recorder_form(
         errors["port"] = "Укажите корректный порт"
         port_num = 80
 
+    kind = device_kind.strip() if device_kind else "tsv"
+    if kind not in ("tsv", "skud", "bio", "sots", "lockers"):
+        kind = "tsv"
+
+    panel_id: int | None = None
+    raw_panel = (inex_panel_id or "").strip()
+    if raw_panel:
+        try:
+            panel_id = int(raw_panel)
+            if panel_id < 1:
+                errors["inex_panel_id"] = "ID панели должен быть ≥ 1"
+                panel_id = None
+        except ValueError:
+            errors["inex_panel_id"] = "Укажите числовой ID панели Inex"
+
     if errors:
         return None, errors
-
-    kind = device_kind.strip() if device_kind else "tsv"
-    if kind not in ("tsv", "skud", "bio", "sots"):
-        kind = "tsv"
 
     return (
         RecorderFormData(
@@ -64,6 +77,7 @@ def parse_recorder_form(
             use_https=use_https == "true",
             mac=mac.strip(),
             device_kind=kind,
+            inex_panel_id=panel_id,
         ),
         {},
     )

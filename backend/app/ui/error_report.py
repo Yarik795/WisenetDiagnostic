@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from ..device_kinds import ALL_DEVICE_KINDS, DeviceKind, kind_label, recorder_device_kind
+from ..device_kinds import ALL_DEVICE_KINDS, DeviceKind, PING_DEVICE_KINDS, kind_label, recorder_device_kind
 from ..display_time import format_for_display
 from ..models import Credentials, MonitoringSettings, Recorder
 from ..state_store import RecorderMetricsRow
@@ -23,7 +23,6 @@ DeviceAuthMode = Literal["", "userinfo"]
 
 PING_CATEGORY_LABEL = "Доступность (ping)"
 PING_OFFLINE_REASON = "отсутствует Ping"
-PING_DEVICE_KINDS: frozenset[DeviceKind] = frozenset({"skud", "bio"})
 NVR_DEVICE_KINDS: frozenset[DeviceKind] = frozenset({"tsv", "sots"})
 
 _STATUS_SORT_ORDER: dict[str, int] = {

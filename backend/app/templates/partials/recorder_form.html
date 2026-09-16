@@ -58,6 +58,13 @@
         value="{{ form.port if form else (recorder.port if recorder else 80) }}" required>
       {% if errors and errors.port %}<div class="field-error">{{ errors.port }}</div>{% endif %}
     </div>
+    <div class="field">
+      <label class="label" for="inex_panel_id">Inex panel id</label>
+      <input class="input" id="inex_panel_id" name="inex_panel_id" type="number" min="1"
+        value="{{ form.inex_panel_id if form and form.inex_panel_id else (recorder.inex_panel_id if recorder and recorder.inex_panel_id else '') }}"
+        placeholder="для локеров Pridex">
+      {% if errors and errors.inex_panel_id %}<div class="field-error">{{ errors.inex_panel_id }}</div>{% endif %}
+    </div>
     <div class="field toggle-row">
       <input type="hidden" name="use_https" value="false">
       <input type="checkbox" id="use_https" name="use_https" value="true"

@@ -459,11 +459,13 @@ _MATRIX_HEADERS: dict[str, str] = {
     "archive": "ARCH",
     "skud": "СКУД",
     "bio": "Биотерминалы",
+    "lockers": "Локеры",
 }
 
 _MATRIX_KIND_COLUMNS: list[tuple[str, DeviceKind]] = [
     ("skud", "skud"),
     ("bio", "bio"),
+    ("lockers", "lockers"),
 ]
 
 

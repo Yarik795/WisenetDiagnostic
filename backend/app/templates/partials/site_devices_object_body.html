@@ -9,10 +9,10 @@
         <tr>
           <th>Имя / IP</th>
           <th>Модель (опрос)</th>
-          <th>Модель (CMDB)</th>
+          <th>Модель (база)</th>
           <th>MAC</th>
           <th>Статус</th>
-          <th>CMDB</th>
+          <th>База</th>
         </tr>
       </thead>
       <tbody>
@@ -44,9 +44,9 @@
           <th>IP</th>
           <th>Регистратор</th>
           <th>Модель (опрос)</th>
-          <th>Модель (CMDB)</th>
+          <th>Модель (база)</th>
           <th>Статус</th>
-          <th>CMDB</th>
+          <th>База</th>
         </tr>
       </thead>
       <tbody>
@@ -102,7 +102,7 @@
 {% endif %}
 
 {% if group.auxiliary %}
-  <h3 class="text-secondary site-object-section-title">Вспомогательное оборудование (CMDB)</h3>
+  <h3 class="text-secondary site-object-section-title">Вспомогательное оборудование (база)</h3>
   <p class="text-secondary site-object-hint">
     Устройства для вывода камер на мониторы (SPD-151, SPD-152 и др.) — проверить наличие на объекте.
   </p>
@@ -133,14 +133,14 @@
 {% endif %}
 
 {% if group.missing %}
-  <h3 class="text-secondary site-object-section-title">Числится в CMDB, но не найдено при опросе</h3>
+  <h3 class="text-secondary site-object-section-title">Числится в базе, но не найдено при опросе</h3>
   <div class="table-wrap">
     <table class="table table-compact">
       <thead>
         <tr>
           <th>Тип</th>
           <th>IP</th>
-          <th>Модель (CMDB)</th>
+          <th>Модель (база)</th>
           <th>Производитель</th>
           <th>MAC</th>
           <th>Примечание</th>

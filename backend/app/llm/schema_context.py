@@ -9,7 +9,7 @@ CHAT_TABLES = (
     "status_history",
     "category_status_history",
     "recorder_poll_attempts",
-    "cmdb_records",
+    "device_base",
     "naumen_records",
     "pp_requests",
     "source_imports",
