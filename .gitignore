@@ -1,3 +1,13 @@
+# Hidden directories (.cursor, .github, .idea, .vscode, .venv, ...)
+.*/
+
+# Internal documentation
+docs/
+ai-docs/
+
+# Root markdown (README, AGENTS, etc.)
+/*.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -17,7 +27,6 @@ data/
 # Local-only scripts (cmdb_reader required by backend on fresh clone)
 scripts/*
 !scripts/cmdb_reader.py
-docs/
 inputData/
 Пример отчет/
 
@@ -27,10 +36,3 @@ cmdb.xlsx
 
 # Archives
 *.zip
-
-# IDE
-.idea/
-.vscode/
-
-# Локальное описание скрытой LLM-вставки на лендинге (не публиковать)
-landing/AI_JUDGE_INJECTION.md
