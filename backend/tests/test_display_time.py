@@ -34,4 +34,18 @@ def test_get_display_tz_fallback_on_invalid(
 
     display_time._warned_invalid_tz = False
     tz = get_display_tz()
-    assert str(tz) == "Europe/Moscow"
+    utc = datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc)
+    assert utc.astimezone(tz).hour == 15
+
+
+def test_moscow_tz_fixed_offset_without_zoneinfo(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.display_time as display_time
+    from zoneinfo import ZoneInfoNotFoundError
+
+    def missing(_name: str):
+        raise ZoneInfoNotFoundError(_name)
+
+    monkeypatch.setattr(display_time, "ZoneInfo", missing)
+    tz = display_time._load_moscow_tz()
+    utc = datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc)
+    assert utc.astimezone(tz).hour == 15

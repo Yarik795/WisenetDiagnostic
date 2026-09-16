@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config_store import ConfigStore
@@ -9,11 +9,21 @@ from .config_store import ConfigStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_DISPLAY_TZ = "Europe/Moscow"
-_FALLBACK_TZ = ZoneInfo(DEFAULT_DISPLAY_TZ)
+_MSK_FIXED = timezone(timedelta(hours=3))
 _warned_invalid_tz = False
 
 
-def get_display_tz() -> ZoneInfo:
+def _load_moscow_tz() -> tzinfo:
+    try:
+        return ZoneInfo(DEFAULT_DISPLAY_TZ)
+    except ZoneInfoNotFoundError:
+        return _MSK_FIXED
+
+
+_FALLBACK_TZ = _load_moscow_tz()
+
+
+def get_display_tz() -> tzinfo:
     global _warned_invalid_tz
     name = (ConfigStore().load().monitoring.display_timezone or "").strip()
     if not name:
